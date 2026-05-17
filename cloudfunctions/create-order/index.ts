@@ -1,4 +1,4 @@
-import { collection, getMembershipByUserId, getPlanByCode, getUserByOpenId } from '../shared/db';
+import { collection, getMembershipByUserId, getPlanByCode, getUserByOpenId, listPendingOrdersByUserId } from '../shared/db';
 import type { OrderRecord } from '../shared/types';
 import { createOrderNo, ok } from '../shared/utils';
 import { getWxContext } from '../_lib/context';
@@ -21,9 +21,24 @@ export async function main(event: Event) {
   if (!plan) {
     throw new Error('套餐不存在或已下架');
   }
+
   const existingMembership = await getMembershipByUserId(user._id, plan.productCode);
 
   const now = Date.now();
+  const pendingOrders = await listPendingOrdersByUserId(user._id);
+  await Promise.all(
+    pendingOrders.map((pendingOrder) =>
+      collection('orders').doc(pendingOrder._id).update({
+        data: {
+          payStatus: 'closed',
+          closedAt: now,
+          closeReason: 'new_order_created',
+          updatedAt: now,
+        },
+      }),
+    ),
+  );
+
   const orderNo = createOrderNo();
   const order: OrderRecord = {
     orderNo,

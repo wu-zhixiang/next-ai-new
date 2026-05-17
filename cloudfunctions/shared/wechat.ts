@@ -312,6 +312,17 @@ export function verifyWechatPayV2Sign(params: Record<string, string>, apiKey = g
   return signWechatPayV2(params, apiKey) === params.sign;
 }
 
+export class WechatPayV2OrderError extends Error {
+  constructor(
+    message: string,
+    public readonly errCode?: string,
+    public readonly errCodeDes?: string,
+  ) {
+    super(message);
+    this.name = 'WechatPayV2OrderError';
+  }
+}
+
 export async function createWechatPayV2Order(
   order: OrderRecord,
   openid: string,
@@ -359,12 +370,14 @@ export async function createWechatPayV2Order(
   );
 
   if (response.return_code !== 'SUCCESS' || response.result_code !== 'SUCCESS' || !response.prepay_id) {
-    throw new Error(
+    throw new WechatPayV2OrderError(
       `微信支付 V2 统一下单失败: return_code=${response.return_code ?? 'unknown'}; result_code=${
         response.result_code ?? 'unknown'
       }; return_msg=${response.return_msg ?? ''}; err_code=${response.err_code ?? ''}; err_code_des=${
         response.err_code_des ?? ''
       }; http_status=${httpResponse.statusCode ?? 'unknown'}; raw=${rawResponse}`,
+      response.err_code,
+      response.err_code_des,
     );
   }
 

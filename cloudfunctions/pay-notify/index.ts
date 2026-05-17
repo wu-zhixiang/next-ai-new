@@ -1,6 +1,6 @@
-import { collection, getMembershipByUserId, getOrderByNo } from '../shared/db';
-import type { MembershipRecord } from '../shared/types';
-import { calcRemainDays, ok, parseWechatPayTime, toWechatPaymentAmount } from '../shared/utils';
+import { getOrderByNo } from '../shared/db';
+import { markOrderPaidAndOpenMembership } from '../shared/orders';
+import { ok, parseWechatPayTime, toWechatPaymentAmount } from '../shared/utils';
 import {
   buildWechatPayNotifyResponse,
   parseWechatPayXml,
@@ -23,6 +23,7 @@ interface Event {
   result_code?: string;
   total_fee?: string;
   sign?: string;
+  headers?: Record<string, string>;
 }
 
 interface NormalizedNotify {
@@ -66,7 +67,14 @@ export async function main(event: Event) {
     }),
   );
   if (!orderNo) {
-    return notify.callbackMode ? notifyXmlResponse('FAIL', '缺少订单号') : Promise.reject(new Error('缺少订单号'));
+    console.error(
+      JSON.stringify({
+        tag: 'wechatPay.v2.notify.missingOrderNo',
+        callbackMode: notify.callbackMode,
+        keys: Object.keys(notify.raw).sort(),
+      }),
+    );
+    return notifyXmlResponse('FAIL', '缺少订单号');
   }
 
   if (notify.callbackMode) {
@@ -97,7 +105,7 @@ export async function main(event: Event) {
   const order = await getOrderByNo(orderNo);
   if (!order) {
     console.error(JSON.stringify({ tag: 'wechatPay.v2.notify.orderMissing', orderNo }));
-    return notify.callbackMode ? notifyXmlResponse('FAIL', '订单不存在') : Promise.reject(new Error('订单不存在'));
+    return notifyXmlResponse('FAIL', '订单不存在');
   }
 
   if (notify.total_fee && Number(notify.total_fee) !== toWechatPaymentAmount(order.amount)) {
@@ -109,7 +117,7 @@ export async function main(event: Event) {
         orderTotalFee: toWechatPaymentAmount(order.amount),
       }),
     );
-    return notify.callbackMode ? notifyXmlResponse('FAIL', '订单金额不匹配') : Promise.reject(new Error('订单金额不匹配'));
+    return notifyXmlResponse('FAIL', '订单金额不匹配');
   }
 
   if (order.payStatus === 'paid') {
@@ -117,57 +125,18 @@ export async function main(event: Event) {
   }
 
   const now = notify.paidAt ?? parseWechatPayTime(notify.time_end);
-  await collection('orders').doc(order._id).update({
-    data: {
-      payStatus: 'paid',
-      transactionId: notify.transactionId ?? notify.transaction_id ?? '',
-      paidAt: now,
-      updatedAt: now,
-    },
+  await markOrderPaidAndOpenMembership(order, {
+    transactionId: notify.transactionId ?? notify.transaction_id ?? '',
+    paidAt: now,
   });
-
-  const existingMembership = await getMembershipByUserId(order.userId, order.productCode);
-  const startAt = existingMembership && existingMembership.endAt > now ? existingMembership.endAt : now;
-  const endAt = startAt + order.durationDays * 24 * 60 * 60 * 1000;
-
-  if (existingMembership) {
-    await collection('memberships').doc(existingMembership._id).update({
-      data: {
-        productCode: order.productCode,
-        productName: order.productName,
-        planCode: order.planCode,
-        planName: order.planName,
-        status: 'active',
-        startAt: existingMembership.startAt,
-        endAt,
-        remainDays: calcRemainDays(endAt, now),
-        updatedAt: now,
-      },
-    });
-  } else {
-    const membership: MembershipRecord = {
-      userId: order.userId,
-      productCode: order.productCode,
-      productName: order.productName,
-      planCode: order.planCode,
-      planName: order.planName,
-      status: 'active',
-      startAt: now,
-      endAt,
-      remainDays: calcRemainDays(endAt, now),
-      autoRenewStatus: 'off',
-      createdAt: now,
-      updatedAt: now,
-    };
-    await collection('memberships').add({ data: membership });
-  }
 
   console.log(JSON.stringify({ tag: 'wechatPay.v2.notify.applied', orderNo, userId: order.userId, productCode: order.productCode }));
   return notify.callbackMode ? notifyXmlResponse('SUCCESS', 'OK') : ok({ success: true });
 }
 
 function normalizeNotifyEvent(event: Event): NormalizedNotify {
-  const xml = getHttpBody(event);
+  const httpBody = getHttpBody(event);
+  const xml = httpBody.includes('<xml>') ? httpBody : '';
   if (xml) {
     const parsed = parseWechatPayXml(xml) as WechatPayV2Notify & Record<string, string>;
     return {
@@ -183,22 +152,40 @@ function normalizeNotifyEvent(event: Event): NormalizedNotify {
     };
   }
 
+  const jsonBody = parseJsonBody(httpBody);
+  const eventLike = {
+    ...event,
+    ...jsonBody,
+  };
+
   return {
     raw: Object.fromEntries(
-      Object.entries(event)
+      Object.entries(eventLike)
         .filter(([, value]) => typeof value === 'string')
         .map(([key, value]) => [key, value as string]),
     ),
-    callbackMode: Boolean(event.outTradeNo || event.out_trade_no || event.return_code || event.result_code),
-    ...event,
+    callbackMode: Boolean(eventLike.outTradeNo || eventLike.out_trade_no || eventLike.return_code || eventLike.result_code),
+    ...eventLike,
   };
 }
 
 function getHttpBody(event: Event): string {
   const body = event.body ?? event.rawBody ?? '';
-  if (!body || !body.includes('<xml>')) {
+  if (!body) {
     return '';
   }
 
   return event.isBase64Encoded ? Buffer.from(body, 'base64').toString('utf8') : body;
+}
+
+function parseJsonBody(body: string): Partial<Event> {
+  if (!body) {
+    return {};
+  }
+  try {
+    const parsed = JSON.parse(body) as unknown;
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Partial<Event>) : {};
+  } catch {
+    return {};
+  }
 }

@@ -3,6 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.WechatPayV2OrderError = void 0;
 exports.getWechatPayConfig = getWechatPayConfig;
 exports.getWechatPayV2Config = getWechatPayV2Config;
 exports.getWechatPayV2ApiKey = getWechatPayV2ApiKey;
@@ -172,6 +173,15 @@ function verifyWechatPayV2Sign(params, apiKey = getWechatPayV2ApiKey()) {
     }
     return signWechatPayV2(params, apiKey) === params.sign;
 }
+class WechatPayV2OrderError extends Error {
+    constructor(message, errCode, errCodeDes) {
+        super(message);
+        this.errCode = errCode;
+        this.errCodeDes = errCodeDes;
+        this.name = 'WechatPayV2OrderError';
+    }
+}
+exports.WechatPayV2OrderError = WechatPayV2OrderError;
 async function createWechatPayV2Order(order, openid) {
     var _a, _b, _c, _d, _e, _f;
     const config = getWechatPayV2Config();
@@ -213,7 +223,7 @@ async function createWechatPayV2Order(order, openid) {
         rawResponse,
     }));
     if (response.return_code !== 'SUCCESS' || response.result_code !== 'SUCCESS' || !response.prepay_id) {
-        throw new Error(`微信支付 V2 统一下单失败: return_code=${(_a = response.return_code) !== null && _a !== void 0 ? _a : 'unknown'}; result_code=${(_b = response.result_code) !== null && _b !== void 0 ? _b : 'unknown'}; return_msg=${(_c = response.return_msg) !== null && _c !== void 0 ? _c : ''}; err_code=${(_d = response.err_code) !== null && _d !== void 0 ? _d : ''}; err_code_des=${(_e = response.err_code_des) !== null && _e !== void 0 ? _e : ''}; http_status=${(_f = httpResponse.statusCode) !== null && _f !== void 0 ? _f : 'unknown'}; raw=${rawResponse}`);
+        throw new WechatPayV2OrderError(`微信支付 V2 统一下单失败: return_code=${(_a = response.return_code) !== null && _a !== void 0 ? _a : 'unknown'}; result_code=${(_b = response.result_code) !== null && _b !== void 0 ? _b : 'unknown'}; return_msg=${(_c = response.return_msg) !== null && _c !== void 0 ? _c : ''}; err_code=${(_d = response.err_code) !== null && _d !== void 0 ? _d : ''}; err_code_des=${(_e = response.err_code_des) !== null && _e !== void 0 ? _e : ''}; http_status=${(_f = httpResponse.statusCode) !== null && _f !== void 0 ? _f : 'unknown'}; raw=${rawResponse}`, response.err_code, response.err_code_des);
     }
     const timeStamp = Math.floor(Date.now() / 1000).toString();
     const nonceStr = createNonceStr();

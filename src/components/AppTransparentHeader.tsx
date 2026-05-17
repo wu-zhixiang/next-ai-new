@@ -1,6 +1,8 @@
 import { useMemo } from 'react';
-import { Text, View } from '@tarojs/components';
+import { Image, Text, View } from '@tarojs/components';
 import Taro from '@tarojs/taro';
+
+const NAV_BACK_ICON = require('../assets/icons/nav-back.svg') as string;
 
 interface Props {
   title: string;
@@ -67,7 +69,7 @@ export function AppTransparentHeader({ title, showBack = true, onBack }: Props):
         <View className='app-nav__side' style={{ width: `${metrics.sideWidth}px` }}>
           {showBack ? (
             <View className='app-nav__back' onClick={handleBack}>
-              <Text className='app-nav__back-icon'>‹</Text>
+              <Image className='app-nav__back-icon' src={NAV_BACK_ICON} mode='aspectFit' />
             </View>
           ) : null}
         </View>

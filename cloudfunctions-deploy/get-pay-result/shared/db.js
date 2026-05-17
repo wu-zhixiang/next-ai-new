@@ -7,11 +7,16 @@ exports._ = exports.db = exports.app = void 0;
 exports.collection = collection;
 exports.getUserByOpenId = getUserByOpenId;
 exports.getUserById = getUserById;
+exports.getUserByInviteCode = getUserByInviteCode;
 exports.getMembershipByUserId = getMembershipByUserId;
 exports.listMembershipsByUserId = listMembershipsByUserId;
 exports.getDeliveryByUserId = getDeliveryByUserId;
 exports.getPlanByCode = getPlanByCode;
 exports.getOrderByNo = getOrderByNo;
+exports.getLatestPendingOrderByUserId = getLatestPendingOrderByUserId;
+exports.listOrdersByUserId = listOrdersByUserId;
+exports.listPendingOrdersByUserId = listPendingOrdersByUserId;
+exports.listInviteRelationsByInviterId = listInviteRelationsByInviterId;
 const wx_server_sdk_1 = __importDefault(require("wx-server-sdk"));
 const constants_1 = require("./constants");
 wx_server_sdk_1.default.init({
@@ -32,6 +37,11 @@ async function getUserById(userId) {
     var _a;
     const result = await collection('users').doc(userId).get();
     return (_a = result.data) !== null && _a !== void 0 ? _a : null;
+}
+async function getUserByInviteCode(inviteCode) {
+    var _a;
+    const result = await collection('users').where({ inviteCode }).limit(1).get();
+    return (_a = result.data[0]) !== null && _a !== void 0 ? _a : null;
 }
 async function getMembershipByUserId(userId, productCode) {
     var _a;
@@ -57,4 +67,23 @@ async function getOrderByNo(orderNo) {
     var _a;
     const result = await collection('orders').where({ orderNo }).limit(1).get();
     return (_a = result.data[0]) !== null && _a !== void 0 ? _a : null;
+}
+async function getLatestPendingOrderByUserId(userId, productCode) {
+    var _a;
+    const query = productCode ? { userId, productCode, payStatus: 'pending' } : { userId, payStatus: 'pending' };
+    const result = await collection('orders').where(query).get();
+    const orders = result.data;
+    return (_a = orders.sort((left, right) => right.createdAt - left.createdAt)[0]) !== null && _a !== void 0 ? _a : null;
+}
+async function listOrdersByUserId(userId) {
+    const result = await collection('orders').where({ userId }).get();
+    return result.data.sort((left, right) => right.createdAt - left.createdAt);
+}
+async function listPendingOrdersByUserId(userId) {
+    const result = await collection('orders').where({ userId, payStatus: 'pending' }).get();
+    return result.data;
+}
+async function listInviteRelationsByInviterId(inviterUserId) {
+    const result = await collection('inviteRelations').where({ inviterUserId }).get();
+    return result.data.sort((left, right) => right.createdAt - left.createdAt);
 }

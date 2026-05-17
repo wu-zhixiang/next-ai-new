@@ -3,6 +3,8 @@ export const COLLECTIONS = {
   memberPlans: 'member_plans',
   memberships: 'memberships',
   orders: 'orders',
+  inviteRelations: 'invite_relations',
+  pointsLedger: 'points_ledger',
   deliveries: 'deliveries',
   reminderLogs: 'reminder_logs',
   auditLogs: 'audit_logs',

@@ -18,6 +18,11 @@ export interface MembershipView {
   remainDays?: number;
 }
 
+export interface AiAccountView {
+  registered: boolean;
+  email?: string;
+}
+
 export interface PlanView {
   productCode: string;
   productName: string;

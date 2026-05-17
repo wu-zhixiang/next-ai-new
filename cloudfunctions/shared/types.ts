@@ -9,6 +9,12 @@ export interface UserRecord {
   mobile: string;
   nickname?: string;
   avatarUrl?: string;
+  inviteCode?: string;
+  inviterUserId?: string;
+  pointsBalance?: number;
+  aiAccountRegistered?: boolean;
+  aiAccountEmail?: string;
+  aiAccountPasswordEncrypted?: string;
   gender?: number;
   status: 'active' | 'disabled';
   subscribeMsgAuth: boolean;
@@ -87,9 +93,36 @@ export interface OrderRecord {
   payChannel: 'wechat_pay';
   transactionId?: string;
   prepayId?: string;
+  payExpireAt?: number;
   paidAt?: number;
+  closedAt?: number;
+  closeReason?: string;
   createdAt: number;
   updatedAt: number;
+}
+
+export interface InviteRelationRecord {
+  _id?: string;
+  inviterUserId: string;
+  inviteeUserId: string;
+  inviteCode: string;
+  source?: string;
+  status: 'active';
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface PointsLedgerRecord {
+  _id?: string;
+  userId: string;
+  relatedUserId?: string;
+  orderNo?: string;
+  type: 'invite_reward' | 'payment_deduct' | 'adjustment';
+  direction: 'in' | 'out';
+  points: number;
+  balanceAfter?: number;
+  description: string;
+  createdAt: number;
 }
 
 export interface ApiResponse<T> {
@@ -117,4 +150,9 @@ export interface MembershipView {
   startAt?: number;
   endAt?: number;
   remainDays?: number;
+}
+
+export interface AiAccountView {
+  registered: boolean;
+  email?: string;
 }

@@ -2,6 +2,7 @@ import type { ApiResponse, ExpireTag, MembershipRecord, MembershipStatus } from 
 import { SUCCESS_CODE } from './constants';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const PENDING_ORDER_TTL_MS = 30 * 60 * 1000;
 
 export function ok<T>(data: T, message = 'ok'): ApiResponse<T> {
   return {
@@ -113,4 +114,12 @@ export function parseWechatPayTime(value?: string): number {
   const second = Number(value.slice(12, 14));
 
   return new Date(year, month, day, hour, minute, second).getTime();
+}
+
+export function getPendingOrderExpireAt(createdAt: number, payExpireAt?: number, lastPayAttemptAt?: number): number {
+  return payExpireAt ?? (lastPayAttemptAt ? lastPayAttemptAt + PENDING_ORDER_TTL_MS : createdAt + PENDING_ORDER_TTL_MS);
+}
+
+export function isPendingOrderExpired(createdAt: number, now = Date.now(), payExpireAt?: number, lastPayAttemptAt?: number): boolean {
+  return now > getPendingOrderExpireAt(createdAt, payExpireAt, lastPayAttemptAt);
 }

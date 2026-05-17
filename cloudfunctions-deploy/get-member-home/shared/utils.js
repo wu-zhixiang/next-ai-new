@@ -4,14 +4,18 @@ exports.ok = ok;
 exports.calcRemainDays = calcRemainDays;
 exports.calcExpireTag = calcExpireTag;
 exports.normalizeMembership = normalizeMembership;
+exports.getMembershipOpenStatusLabel = getMembershipOpenStatusLabel;
 exports.createOrderNo = createOrderNo;
 exports.maskMobile = maskMobile;
 exports.isValidMainlandMobile = isValidMainlandMobile;
 exports.normalizeMobile = normalizeMobile;
 exports.toWechatPaymentAmount = toWechatPaymentAmount;
 exports.parseWechatPayTime = parseWechatPayTime;
+exports.getPendingOrderExpireAt = getPendingOrderExpireAt;
+exports.isPendingOrderExpired = isPendingOrderExpired;
 const constants_1 = require("./constants");
 const DAY_MS = 24 * 60 * 60 * 1000;
+const PENDING_ORDER_TTL_MS = 30 * 60 * 1000;
 function ok(data, message = 'ok') {
     return {
         code: constants_1.SUCCESS_CODE,
@@ -42,10 +46,12 @@ function normalizeMembership(record) {
     if (!record) {
         return {
             status: 'none',
+            openStatusLabel: getMembershipOpenStatusLabel('none'),
         };
     }
     return {
         status: record.status,
+        openStatusLabel: getMembershipOpenStatusLabel(record.status),
         productCode: record.productCode,
         productName: record.productName,
         planName: record.planName,
@@ -53,6 +59,15 @@ function normalizeMembership(record) {
         endAt: record.endAt,
         remainDays: calcRemainDays(record.endAt),
     };
+}
+function getMembershipOpenStatusLabel(status) {
+    if (status === 'active') {
+        return '已开通';
+    }
+    if (status === 'none') {
+        return '立即开通';
+    }
+    return '开通中';
 }
 function createOrderNo(prefix = 'ORD') {
     const time = Date.now().toString();
@@ -95,4 +110,10 @@ function parseWechatPayTime(value) {
     const minute = Number(value.slice(10, 12));
     const second = Number(value.slice(12, 14));
     return new Date(year, month, day, hour, minute, second).getTime();
+}
+function getPendingOrderExpireAt(createdAt, payExpireAt, lastPayAttemptAt) {
+    return payExpireAt !== null && payExpireAt !== void 0 ? payExpireAt : (lastPayAttemptAt ? lastPayAttemptAt + PENDING_ORDER_TTL_MS : createdAt + PENDING_ORDER_TTL_MS);
+}
+function isPendingOrderExpired(createdAt, now = Date.now(), payExpireAt, lastPayAttemptAt) {
+    return now > getPendingOrderExpireAt(createdAt, payExpireAt, lastPayAttemptAt);
 }

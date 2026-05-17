@@ -5,16 +5,20 @@ import path from 'node:path';
 const projectRoot = process.cwd();
 const sourceRoot = path.join(projectRoot, 'cloudfunctions');
 const compileRoot = path.join('/private/tmp', 'gpt-pay-cloudfunctions-compiled');
-const deployRoot = path.join('/private/tmp', 'gpt-pay-cloudfunctions-deploy');
+const deployRoot = path.join(projectRoot, 'cloudfunctions-deploy');
 const functionNames = [
   'bind-mobile',
   'create-order',
   'get-member-home',
+  'get-ai-account',
+  'get-invite-home',
   'get-pay-result',
   'get-profile',
+  'list-orders',
   'list-member-plans',
   'pay-notify',
   'pay-order',
+  'save-ai-account',
   'save-subscribe-auth',
   'seed-database',
   'user-login',
@@ -45,7 +49,9 @@ execFileSync(
     path.join(sourceRoot, 'shared', 'wx-server-sdk.d.ts'),
     path.join(sourceRoot, '_lib', 'context.ts'),
     path.join(sourceRoot, 'shared', 'constants.ts'),
+    path.join(sourceRoot, 'shared', 'ai-account.ts'),
     path.join(sourceRoot, 'shared', 'db.ts'),
+    path.join(sourceRoot, 'shared', 'orders.ts'),
     path.join(sourceRoot, 'shared', 'types.ts'),
     path.join(sourceRoot, 'shared', 'utils.ts'),
     path.join(sourceRoot, 'shared', 'wechat.ts'),

@@ -6,17 +6,21 @@ const appid = 'wx1bbde9dcd7559d54';
 const envId = 'cloud1-d3gbrpive8611514c';
 const projectPath = process.cwd();
 const privateKeyPath = '/Users/qitmac001343/.codex/private.wx1bbde9dcd7559d54.key';
-const deployRoot = '/private/tmp/gpt-pay-cloudfunctions-deploy';
+const deployRoot = path.join(projectPath, 'cloudfunctions-deploy');
 
 const functions = [
   'bind-mobile',
   'create-order',
   'get-member-home',
+  'get-ai-account',
+  'get-invite-home',
   'get-pay-result',
   'get-profile',
+  'list-orders',
   'list-member-plans',
   'pay-notify',
   'pay-order',
+  'save-ai-account',
   'save-subscribe-auth',
   'seed-database',
   'user-login',

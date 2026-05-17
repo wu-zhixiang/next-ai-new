@@ -4,5 +4,25 @@
   "setting": {
     "compileHotReLoad": true
   },
-  "libVersion": "3.15.2"
+  "libVersion": "3.15.2",
+  "condition": {
+    "miniprogram": {
+      "list": [
+        {
+          "name": "pages/member/index",
+          "pathName": "pages/member/index",
+          "query": "",
+          "launchMode": "default",
+          "scene": null
+        },
+        {
+          "name": "pages/pay-result/index",
+          "pathName": "pages/pay-result/index",
+          "query": "orderNo=ORD177900047375951421",
+          "launchMode": "default",
+          "scene": null
+        }
+      ]
+    }
+  }
 }

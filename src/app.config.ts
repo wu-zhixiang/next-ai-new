@@ -6,6 +6,7 @@ const appConfig = {
     'pages/invite/index',
     'pages/member/index',
     'pages/pay-result/index',
+    'pages/webview/index',
   ],
   tabBar: {
     color: '#5f5e5e',

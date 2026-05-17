@@ -6,10 +6,12 @@ exports.COLLECTIONS = {
     memberPlans: 'member_plans',
     memberships: 'memberships',
     orders: 'orders',
+    inviteRelations: 'invite_relations',
+    pointsLedger: 'points_ledger',
     deliveries: 'deliveries',
     reminderLogs: 'reminder_logs',
     auditLogs: 'audit_logs',
 };
 exports.SUCCESS_CODE = 0;
 exports.DEFAULT_PRODUCT_CODE = 'openai_plus';
-exports.DEFAULT_PRODUCT_NAME = 'AI 会员';
+exports.DEFAULT_PRODUCT_NAME = 'Open AI资讯会员';

@@ -19,6 +19,15 @@ async function main(event) {
     }
     const existingMembership = await (0, db_1.getMembershipByUserId)(user._id, plan.productCode);
     const now = Date.now();
+    const pendingOrders = await (0, db_1.listPendingOrdersByUserId)(user._id);
+    await Promise.all(pendingOrders.map((pendingOrder) => (0, db_1.collection)('orders').doc(pendingOrder._id).update({
+        data: {
+            payStatus: 'closed',
+            closedAt: now,
+            closeReason: 'new_order_created',
+            updatedAt: now,
+        },
+    })));
     const orderNo = (0, utils_1.createOrderNo)();
     const order = {
         orderNo,

@@ -26,7 +26,9 @@ interface BindMobileResult {
 
 interface PayOrderResult {
   orderNo: string;
-  payment: {
+  paid?: boolean;
+  message?: string;
+  payment?: {
     timeStamp: string;
     nonceStr: string;
     package: string;
@@ -139,6 +141,12 @@ export default function PlansPage(): JSX.Element {
     });
 
     const payResult = await callCloudFunction<PayOrderResult>('pay-order', { orderNo: result.orderNo });
+    if (payResult.paid || !payResult.payment) {
+      Taro.navigateTo({
+        url: `/pages/pay-result/index?orderNo=${result.orderNo}`,
+      });
+      return;
+    }
     try {
       await Taro.requestPayment({
         ...payResult.payment,

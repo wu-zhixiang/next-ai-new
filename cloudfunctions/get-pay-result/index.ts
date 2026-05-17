@@ -1,5 +1,5 @@
-import { getMembershipByUserId, getOrderByNo } from '../shared/db';
-import { normalizeMembership, ok } from '../shared/utils';
+import { collection, getMembershipByUserId, getOrderByNo } from '../shared/db';
+import { getPendingOrderExpireAt, isPendingOrderExpired, normalizeMembership, ok } from '../shared/utils';
 
 interface Event {
   orderNo: string;
@@ -11,11 +11,33 @@ export async function main(event: Event) {
     throw new Error('订单不存在');
   }
 
+  const now = Date.now();
+  const lastPayAttemptAt = order.prepayId ? order.updatedAt : undefined;
+  const pendingExpireAt = getPendingOrderExpireAt(order.createdAt, order.payExpireAt, lastPayAttemptAt);
+  const pendingExpired = order.payStatus === 'pending' && isPendingOrderExpired(order.createdAt, now, order.payExpireAt, lastPayAttemptAt);
+  const payStatus = pendingExpired ? 'closed' : order.payStatus;
+  if (pendingExpired) {
+    await collection('orders').doc(order._id).update({
+      data: {
+        payStatus,
+        closedAt: now,
+        closeReason: 'pending_order_expired',
+        updatedAt: now,
+      },
+    });
+  }
+
   const membership = await getMembershipByUserId(order.userId, order.productCode);
   return ok({
     orderNo: order.orderNo,
-    payStatus: order.payStatus,
+    productName: order.productName,
+    planName: order.planName,
+    amount: order.amount,
+    createdAt: order.createdAt,
+    payStatus,
     paidAt: order.paidAt,
+    pendingExpireAt: order.payStatus === 'pending' || pendingExpired ? pendingExpireAt : undefined,
+    canPay: payStatus === 'pending',
     membership:
       membership && membership.status === 'active'
         ? {
