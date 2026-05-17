@@ -1,0 +1,31 @@
+{
+  "miniprogramRoot": "dist/",
+  "cloudfunctionRoot": "cloudfunctions-deploy/",
+  "projectname": "gpt-pay",
+  "description": "Membership mini-program",
+  "appid": "wx1bbde9dcd7559d54",
+  "setting": {
+    "urlCheck": false,
+    "es6": true,
+    "enhance": true,
+    "postcss": true,
+    "minified": false,
+    "babelSetting": {
+      "ignore": [],
+      "disablePlugins": [],
+      "outputPath": ""
+    }
+  },
+  "compileType": "miniprogram",
+  "libVersion": "3.16.0",
+  "srcMiniprogramRoot": "dist/",
+  "packOptions": {
+    "ignore": [],
+    "include": []
+  },
+  "condition": {},
+  "editorSetting": {
+    "tabIndent": "insertSpaces",
+    "tabSize": 2
+  }
+}

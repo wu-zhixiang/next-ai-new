@@ -1,0 +1,44 @@
+{
+  "envId": "cloud1-d3gbrpive8611514c",
+  "functionRoot": "cloudfunctions",
+  "functions": [
+    {
+      "name": "bind-mobile"
+    },
+    {
+      "name": "create-order"
+    },
+    {
+      "name": "get-member-home"
+    },
+    {
+      "name": "get-pay-result"
+    },
+    {
+      "name": "get-profile"
+    },
+    {
+      "name": "list-member-plans"
+    },
+    {
+      "name": "pay-notify"
+    },
+    {
+      "name": "pay-order",
+      "envVariables": {
+        "WX_PAY_ENV_ID": "cloud1-d3gbrpive8611514c",
+        "WX_PAY_NOTIFY_FUNCTION": "pay-notify",
+        "WX_PAY_SPBILL_CREATE_IP": "127.0.0.1"
+      }
+    },
+    {
+      "name": "save-subscribe-auth"
+    },
+    {
+      "name": "seed-database"
+    },
+    {
+      "name": "user-login"
+    }
+  ]
+}

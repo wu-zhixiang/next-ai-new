@@ -1,0 +1,52 @@
+{
+  "name": "gpt-pay-miniapp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Taro mini-program + CloudBase membership management MVP",
+  "scripts": {
+    "dev:weapp": "taro build --type weapp --watch",
+    "build:weapp": "taro build --type weapp",
+    "typecheck": "tsc --noEmit",
+    "test:unit": "node --test tests/mobile-utils.test.ts",
+    "upload:cloudfunctions": "node scripts/upload-cloudfunctions.mjs",
+    "init:cloudenv": "node scripts/init-cloud-env.mjs"
+  },
+  "dependencies": {
+    "@babel/runtime": "^7.24.4",
+    "@tarojs/components": "^4.2.0",
+    "@tarojs/helper": "^4.2.0",
+    "@tarojs/plugin-framework-react": "^4.2.0",
+    "@tarojs/plugin-platform-weapp": "^4.2.0",
+    "@tarojs/react": "^4.2.0",
+    "@tarojs/runtime": "^4.2.0",
+    "@tarojs/shared": "^4.2.0",
+    "@tarojs/taro": "^4.2.0",
+    "@tarojs/webpack5-runner": "^4.2.0",
+    "dayjs": "^1.11.13",
+    "miniprogram-api-typings": "^4.0.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.26.0",
+    "@babel/plugin-transform-class-properties": "7.25.9",
+    "@babel/preset-react": "^7.24.1",
+    "@babel/preset-typescript": "^7.26.0",
+    "@pmmmwh/react-refresh-webpack-plugin": "^0.5.5",
+    "@tarojs/cli": "^4.2.0",
+    "@tarojs/plugin-generator": "^4.2.0",
+    "@tarojs/taro-loader": "^4.2.0",
+    "@types/minimatch": "^5.1.2",
+    "@types/node": "^18.19.76",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@types/webpack-env": "^1.18.5",
+    "babel-preset-taro": "^4.2.0",
+    "miniprogram-ci": "^2.1.31",
+    "postcss": "^8.5.6",
+    "react-refresh": "^0.14.0",
+    "sass": "^1.75.0",
+    "typescript": "^5.6.3",
+    "webpack": "5.91.0"
+  }
+}
