@@ -1525,7 +1525,30 @@ box-shadow:
   color: #ffffff;
   font-size: 92rpx;
   font-weight: 700;
+}
+
+.pay-success__icon--success {
+  background: linear-gradient(135deg, var(--primary-soft), var(--primary-dim));
+  color: #ffffff;
   box-shadow: 0 0 80rpx rgba(181, 238, 223, 0.6);
+}
+
+.pay-success__icon--pending {
+  background: linear-gradient(135deg, #fff4d8 0%, #f2c66d 100%);
+  color: #8a5a08;
+  box-shadow: 0 0 80rpx rgba(242, 198, 109, 0.38);
+}
+
+.pay-success__icon--abandoned {
+  background: linear-gradient(135deg, #f3f4f6 0%, #d1d5db 100%);
+  color: #6b7280;
+  box-shadow: 0 0 80rpx rgba(107, 114, 128, 0.18);
+}
+
+.pay-success__icon-image {
+  width: 192rpx;
+  height: 192rpx;
+  border-radius: 999rpx;
 }
 
 .pay-success__ring {
@@ -1535,6 +1558,14 @@ box-shadow:
   border: 2rpx solid var(--primary-soft);
   opacity: 0.35;
   transform: scale(1.18);
+}
+
+.pay-success__icon--pending .pay-success__ring {
+  border-color: #f2c66d;
+}
+
+.pay-success__icon--abandoned .pay-success__ring {
+  border-color: #cbd5e1;
 }
 
 .pay-success__title {

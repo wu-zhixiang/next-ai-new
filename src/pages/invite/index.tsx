@@ -108,7 +108,7 @@ export default function InvitePage(): JSX.Element {
     try {
       await ensureLogin();
       const result = await callCloudFunction<InviteHomeResult>('get-invite-home');
-      setData(result);
+        setData(result);
     } catch (error) {
       Taro.showToast({
         title: error instanceof Error ? error.message : '邀请信息加载失败',

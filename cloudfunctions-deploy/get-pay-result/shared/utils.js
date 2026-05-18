@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ok = ok;
 exports.calcRemainDays = calcRemainDays;
+exports.calcMembershipRemainDays = calcMembershipRemainDays;
 exports.calcExpireTag = calcExpireTag;
 exports.normalizeMembership = normalizeMembership;
 exports.getMembershipOpenStatusLabel = getMembershipOpenStatusLabel;
@@ -25,6 +26,20 @@ function ok(data, message = 'ok') {
 }
 function calcRemainDays(endAt, now = Date.now()) {
     return Math.max(0, Math.ceil((endAt - now) / DAY_MS));
+}
+function getPlanDurationCap(planCode) {
+    if (planCode === 'monthly')
+        return 30;
+    if (planCode === 'quarterly')
+        return 90;
+    if (planCode === 'annual')
+        return 365;
+    return undefined;
+}
+function calcMembershipRemainDays(record, now = Date.now()) {
+    const remainDays = calcRemainDays(record.endAt, now);
+    const durationCap = getPlanDurationCap(record.planCode);
+    return durationCap ? Math.min(remainDays, durationCap) : remainDays;
 }
 function calcExpireTag(endAt, now = Date.now()) {
     if (endAt < now) {
@@ -57,7 +72,7 @@ function normalizeMembership(record) {
         planName: record.planName,
         startAt: record.startAt,
         endAt: record.endAt,
-        remainDays: calcRemainDays(record.endAt),
+        remainDays: calcMembershipRemainDays(record),
     };
 }
 function getMembershipOpenStatusLabel(status) {

@@ -1,0 +1,17 @@
+<svg width="192" height="192" viewBox="0 0 192 192" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="abandonedBg" x1="42" y1="28" x2="150" y2="164" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F8FAFC"/>
+      <stop offset="1" stop-color="#D1D5DB"/>
+    </linearGradient>
+    <filter id="abandonedShadow" x="6" y="8" width="180" height="180" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#64748B" flood-opacity="0.18"/>
+    </filter>
+  </defs>
+  <circle cx="96" cy="96" r="70" fill="url(#abandonedBg)" filter="url(#abandonedShadow)"/>
+  <rect x="63" y="58" width="66" height="80" rx="18" fill="white" fill-opacity="0.78"/>
+  <path d="M78 81H114" stroke="#64748B" stroke-width="8" stroke-linecap="round"/>
+  <path d="M78 101H105" stroke="#94A3B8" stroke-width="8" stroke-linecap="round"/>
+  <path d="M72 132L132 72" stroke="#6B7280" stroke-width="10" stroke-linecap="round"/>
+  <path d="M132 132L72 72" stroke="#6B7280" stroke-width="10" stroke-linecap="round"/>
+</svg>

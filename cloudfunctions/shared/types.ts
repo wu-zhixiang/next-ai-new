@@ -125,6 +125,20 @@ export interface PointsLedgerRecord {
   createdAt: number;
 }
 
+export interface EmailVerificationCodeRecord {
+  _id?: string;
+  email: string;
+  userId: string;
+  code: string;
+  provider: 'openai' | 'unknown';
+  from: string;
+  subject: string;
+  receivedAt: number;
+  expiresAt: number;
+  usedAt?: number | null;
+  createdAt: number;
+}
+
 export interface ApiResponse<T> {
   code: number;
   message: string;

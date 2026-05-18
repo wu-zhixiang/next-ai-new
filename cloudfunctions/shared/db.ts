@@ -2,6 +2,7 @@ import cloud from 'wx-server-sdk';
 import { COLLECTIONS } from './constants';
 import type {
   DeliveryRecord,
+  EmailVerificationCodeRecord,
   InviteRelationRecord,
   MemberPlanRecord,
   MembershipRecord,
@@ -40,6 +41,11 @@ export async function getUserById(userId: string): Promise<(UserRecord & { _id: 
 
 export async function getUserByInviteCode(inviteCode: string): Promise<(UserRecord & { _id: string }) | null> {
   const result = await collection('users').where({ inviteCode }).limit(1).get();
+  return (result.data[0] as (UserRecord & { _id: string }) | undefined) ?? null;
+}
+
+export async function getUserByAiAccountEmail(email: string): Promise<(UserRecord & { _id: string }) | null> {
+  const result = await collection('users').where({ aiAccountEmail: email.toLowerCase() }).limit(1).get();
   return (result.data[0] as (UserRecord & { _id: string }) | undefined) ?? null;
 }
 
@@ -99,4 +105,49 @@ export async function listInviteRelationsByInviterId(
   return (result.data as Array<InviteRelationRecord & { _id: string }>).sort(
     (left, right) => right.createdAt - left.createdAt,
   );
+}
+
+export async function getLatestEmailVerificationCode(
+  emailOrUserId: string,
+  now = Date.now(),
+): Promise<(EmailVerificationCodeRecord & { _id: string }) | null> {
+  const result = await collection('emailVerificationCodes')
+    .where({
+      userId: emailOrUserId,
+    })
+    .get();
+  const userCodes = result.data as Array<EmailVerificationCodeRecord & { _id: string }>;
+  const fallbackResult = userCodes.length > 0
+    ? { data: userCodes }
+    : await collection('emailVerificationCodes')
+      .where({
+        email: emailOrUserId.trim().toLowerCase(),
+      })
+      .get();
+  const codes = (fallbackResult.data as Array<EmailVerificationCodeRecord & { _id: string }>)
+    .filter((item) => item.expiresAt > now && !item.usedAt)
+    .sort((left, right) => right.receivedAt - left.receivedAt);
+  return codes[0] ?? null;
+}
+
+export async function getLatestUnusedEmailVerificationCode(
+  emailOrUserId: string,
+): Promise<(EmailVerificationCodeRecord & { _id: string }) | null> {
+  const result = await collection('emailVerificationCodes')
+    .where({
+      userId: emailOrUserId,
+    })
+    .get();
+  const userCodes = result.data as Array<EmailVerificationCodeRecord & { _id: string }>;
+  const fallbackResult = userCodes.length > 0
+    ? { data: userCodes }
+    : await collection('emailVerificationCodes')
+      .where({
+        email: emailOrUserId.trim().toLowerCase(),
+      })
+      .get();
+  const codes = (fallbackResult.data as Array<EmailVerificationCodeRecord & { _id: string }>)
+    .filter((item) => !item.usedAt)
+    .sort((left, right) => right.receivedAt - left.receivedAt);
+  return codes[0] ?? null;
 }

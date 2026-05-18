@@ -1,6 +1,6 @@
 import { _, collection, getMembershipByUserId, getUserById } from './db';
 import type { MembershipRecord, OrderRecord, PointsLedgerRecord } from './types';
-import { calcRemainDays } from './utils';
+import { calcMembershipRemainDays } from './utils';
 
 function calcInviteRewardPoints(amount: number): number {
   // 1 元 = 100 积分，邀请奖励为实付金额的 10%，测试 0.01 元订单至少返 1 积分，便于联调验收。
@@ -96,7 +96,7 @@ export async function markOrderPaidAndOpenMembership(
           status: 'active',
           startAt: existingMembership.startAt,
           endAt,
-          remainDays: calcRemainDays(endAt, paidAt),
+          remainDays: calcMembershipRemainDays({ endAt, planCode: order.planCode }, paidAt),
           updatedAt: paidAt,
         },
       });
@@ -110,7 +110,7 @@ export async function markOrderPaidAndOpenMembership(
         status: 'active',
         startAt: paidAt,
         endAt,
-        remainDays: calcRemainDays(endAt, paidAt),
+        remainDays: calcMembershipRemainDays({ endAt, planCode: order.planCode }, paidAt),
         autoRenewStatus: 'off',
         createdAt: paidAt,
         updatedAt: paidAt,

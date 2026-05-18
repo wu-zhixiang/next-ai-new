@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Button, Text, View } from '@tarojs/components';
+import { Button, Image, Text, View } from '@tarojs/components';
 import Taro, { useLoad } from '@tarojs/taro';
 import { PaymentLockOverlay } from '@/components/PaymentLockOverlay';
 import { SaasPageFrame } from '@/components/SaasPageFrame';
@@ -37,6 +37,8 @@ interface PayOrderResult {
 }
 
 type OrderViewStatus = 'completed' | 'pending' | 'abandoned';
+const ORDER_CLOCK_ICON = require('../../assets/icons/order-clock.svg') as string;
+const ORDER_ABANDONED_ICON = require('../../assets/icons/order-abandoned.svg') as string;
 
 export default function PayResultPage(): JSX.Element {
   const [data, setData] = useState<PayResultData>({
@@ -119,6 +121,8 @@ export default function PayResultPage(): JSX.Element {
   const statusText = isPaid ? '已完成' : isPendingPayable ? '待支付' : '已废弃请重新下单';
   const heroTitle = isPaid ? '订单已完成' : isPendingPayable ? '订单待支付' : '订单已废弃';
   const heroDesc = isPaid ? '高级 AI 能力已成功开启' : isPendingPayable ? '请在 30 分钟内完成支付，超时需重新下单' : '该订单已超过支付有效期，请重新选择套餐下单';
+  const heroIconSrc = isPendingPayable ? ORDER_CLOCK_ICON : isAbandoned ? ORDER_ABANDONED_ICON : '';
+  const heroIconClass = isPaid ? 'pay-success__icon--success' : isPendingPayable ? 'pay-success__icon--pending' : 'pay-success__icon--abandoned';
   const orderNo = data.orderNo || 'AI-REG-88291032';
 
   return (
@@ -146,8 +150,12 @@ export default function PayResultPage(): JSX.Element {
         ) : (
         <>
         <View className='pay-success'>
-          <View className='pay-success__icon'>
-            <Text>✓</Text>
+          <View className={`pay-success__icon ${heroIconClass}`}>
+            {heroIconSrc ? (
+              <Image className='pay-success__icon-image' src={heroIconSrc} mode='aspectFit' />
+            ) : (
+              <Text>✓</Text>
+            )}
             <View className='pay-success__ring' />
           </View>
           <Text className='pay-success__title'>{heroTitle}</Text>

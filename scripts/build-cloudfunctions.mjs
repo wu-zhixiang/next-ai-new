@@ -8,10 +8,13 @@ const compileRoot = path.join('/private/tmp', 'gpt-pay-cloudfunctions-compiled')
 const deployRoot = path.join(projectRoot, 'cloudfunctions-deploy');
 const functionNames = [
   'bind-mobile',
+  'clear-email-code',
   'create-order',
+  'email-code-webhook',
   'get-member-home',
   'get-ai-account',
   'get-invite-home',
+  'get-latest-email-code',
   'get-pay-result',
   'get-profile',
   'list-orders',

@@ -16,6 +16,19 @@ export function calcRemainDays(endAt: number, now = Date.now()): number {
   return Math.max(0, Math.ceil((endAt - now) / DAY_MS));
 }
 
+function getPlanDurationCap(planCode?: string): number | undefined {
+  if (planCode === 'monthly') return 30;
+  if (planCode === 'quarterly') return 90;
+  if (planCode === 'annual') return 365;
+  return undefined;
+}
+
+export function calcMembershipRemainDays(record: Pick<MembershipRecord, 'endAt' | 'planCode'>, now = Date.now()): number {
+  const remainDays = calcRemainDays(record.endAt, now);
+  const durationCap = getPlanDurationCap(record.planCode);
+  return durationCap ? Math.min(remainDays, durationCap) : remainDays;
+}
+
 export function calcExpireTag(endAt: number, now = Date.now()): ExpireTag {
   if (endAt < now) {
     return 'expired';
@@ -50,7 +63,7 @@ export function normalizeMembership(record?: MembershipRecord | null) {
     planName: record.planName,
     startAt: record.startAt,
     endAt: record.endAt,
-    remainDays: calcRemainDays(record.endAt),
+    remainDays: calcMembershipRemainDays(record),
   };
 }
 

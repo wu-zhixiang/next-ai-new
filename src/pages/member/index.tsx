@@ -77,6 +77,16 @@ interface AiAccountResult {
   password: string;
 }
 
+interface LatestEmailCodeResult {
+  hasCode: boolean;
+  codeId?: string;
+  email: string;
+  code?: string | number;
+  receivedAt?: number;
+  expiresAt?: number;
+  expired?: boolean;
+}
+
 interface CachedUserInfo {
   userId: string;
   openid?: string;
@@ -149,6 +159,7 @@ const FALLBACK_PLAN_MAP: Record<string, ProductPlanOption[]> = {
 
 const ACCOUNT_INFO_ICON = require('../../assets/member/account-info.svg') as string;
 const CUSTOMER_SUPPORT_ICON = require('../../assets/member/customer-support.svg') as string;
+const VERIFICATION_CODE_ICON = require('../../assets/member/verification-code.svg') as string;
 const CHEVRON_RIGHT_ICON = require('../../assets/icons/chevron-right.svg') as string;
 const CACHE_KEY = 'gpt_pay_user_info';
 const AI_ACCOUNT_DOMAIN = '@mraclpivot.com';
@@ -474,7 +485,7 @@ export default function MemberPage(): JSX.Element {
       const modalResult = await Taro.showModal({
         title: 'AI账号信息',
         content: `账号：\n${result.email}\n\n密码：\n${result.password}`,
-        confirmText: '复制密码',
+        confirmText: '复制',
         cancelText: '关闭',
       });
       if (modalResult.confirm) {
@@ -483,6 +494,57 @@ export default function MemberPage(): JSX.Element {
     } catch (error) {
       Taro.hideLoading();
       Taro.showToast({ title: error instanceof Error ? error.message : '账号信息获取失败', icon: 'none' });
+    }
+  }
+
+  async function handleShowLatestEmailCode(): Promise<void> {
+    let result: LatestEmailCodeResult;
+    try {
+      Taro.showLoading({
+        title: '加载中',
+        mask: true,
+      });
+      result = await callCloudFunction<LatestEmailCodeResult>('get-latest-email-code');
+    } catch (error) {
+      Taro.hideLoading();
+      await Taro.showModal({
+        title: '验证码获取失败',
+        content: error instanceof Error ? error.message : '请稍等几秒后重试',
+        showCancel: false,
+        confirmText: '知道了',
+      });
+      return;
+    }
+
+    Taro.hideLoading();
+    const verificationCode = result.code ? String(result.code).trim() : '';
+    if (!verificationCode) {
+      await Taro.showModal({
+        title: '暂无验证码',
+        content: '暂未获取到最新登录验证码。请确认已在 ChatGPT 登录页点击重新发送，然后稍等几秒后重试。',
+        showCancel: false,
+        confirmText: '知道了',
+      });
+      return;
+    }
+
+    const modalResult = await Taro.showModal({
+      title: '获取验证码',
+      content: `账号：\n${result.email}\n\n验证码：\n${verificationCode}${result.expired ? '\n\n提示：这是最近一次未复制的验证码，可能已过期。如不可用，请在 ChatGPT 登录页重新发送。' : ''}`,
+      confirmText: '复制',
+      cancelText: '关闭',
+    });
+    if (!modalResult.confirm) {
+      return;
+    }
+
+    await Taro.setClipboardData({ data: verificationCode });
+    if (result.codeId) {
+      try {
+        await callCloudFunction<{ success: boolean }>('clear-email-code', { codeId: result.codeId });
+      } catch {
+        // 复制已完成，清除失败不打断用户；下一次仍会受过期时间保护。
+      }
     }
   }
 
@@ -545,6 +607,17 @@ export default function MemberPage(): JSX.Element {
               <View className='member-service-item__copy'>
                 <Text className='member-service-item__title'>账号信息</Text>
                 <Text className='member-service-item__desc'>管理您的账号与安全</Text>
+              </View>
+              <Image className='member-service-item__arrow' src={CHEVRON_RIGHT_ICON} mode='aspectFit' />
+            </View>
+            <View className='member-divider' />
+            <View className='member-service-item' onClick={() => void handleShowLatestEmailCode()}>
+              <View className='member-service-item__icon'>
+                <Image className='member-service-item__image' src={VERIFICATION_CODE_ICON} mode='aspectFit' />
+              </View>
+              <View className='member-service-item__copy'>
+                <Text className='member-service-item__title'>最近验证码</Text>
+                <Text className='member-service-item__desc'>查看登录验证码</Text>
               </View>
               <Image className='member-service-item__arrow' src={CHEVRON_RIGHT_ICON} mode='aspectFit' />
             </View>

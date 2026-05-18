@@ -8,6 +8,7 @@ exports.COLLECTIONS = {
     orders: 'orders',
     inviteRelations: 'invite_relations',
     pointsLedger: 'points_ledger',
+    emailVerificationCodes: 'email_verification_codes',
     deliveries: 'deliveries',
     reminderLogs: 'reminder_logs',
     auditLogs: 'audit_logs',

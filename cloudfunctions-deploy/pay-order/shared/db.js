@@ -8,6 +8,7 @@ exports.collection = collection;
 exports.getUserByOpenId = getUserByOpenId;
 exports.getUserById = getUserById;
 exports.getUserByInviteCode = getUserByInviteCode;
+exports.getUserByAiAccountEmail = getUserByAiAccountEmail;
 exports.getMembershipByUserId = getMembershipByUserId;
 exports.listMembershipsByUserId = listMembershipsByUserId;
 exports.getDeliveryByUserId = getDeliveryByUserId;
@@ -17,6 +18,8 @@ exports.getLatestPendingOrderByUserId = getLatestPendingOrderByUserId;
 exports.listOrdersByUserId = listOrdersByUserId;
 exports.listPendingOrdersByUserId = listPendingOrdersByUserId;
 exports.listInviteRelationsByInviterId = listInviteRelationsByInviterId;
+exports.getLatestEmailVerificationCode = getLatestEmailVerificationCode;
+exports.getLatestUnusedEmailVerificationCode = getLatestUnusedEmailVerificationCode;
 const wx_server_sdk_1 = __importDefault(require("wx-server-sdk"));
 const constants_1 = require("./constants");
 wx_server_sdk_1.default.init({
@@ -41,6 +44,11 @@ async function getUserById(userId) {
 async function getUserByInviteCode(inviteCode) {
     var _a;
     const result = await collection('users').where({ inviteCode }).limit(1).get();
+    return (_a = result.data[0]) !== null && _a !== void 0 ? _a : null;
+}
+async function getUserByAiAccountEmail(email) {
+    var _a;
+    const result = await collection('users').where({ aiAccountEmail: email.toLowerCase() }).limit(1).get();
     return (_a = result.data[0]) !== null && _a !== void 0 ? _a : null;
 }
 async function getMembershipByUserId(userId, productCode) {
@@ -86,4 +94,44 @@ async function listPendingOrdersByUserId(userId) {
 async function listInviteRelationsByInviterId(inviterUserId) {
     const result = await collection('inviteRelations').where({ inviterUserId }).get();
     return result.data.sort((left, right) => right.createdAt - left.createdAt);
+}
+async function getLatestEmailVerificationCode(emailOrUserId, now = Date.now()) {
+    var _a;
+    const result = await collection('emailVerificationCodes')
+        .where({
+        userId: emailOrUserId,
+    })
+        .get();
+    const userCodes = result.data;
+    const fallbackResult = userCodes.length > 0
+        ? { data: userCodes }
+        : await collection('emailVerificationCodes')
+            .where({
+            email: emailOrUserId.trim().toLowerCase(),
+        })
+            .get();
+    const codes = fallbackResult.data
+        .filter((item) => item.expiresAt > now && !item.usedAt)
+        .sort((left, right) => right.receivedAt - left.receivedAt);
+    return (_a = codes[0]) !== null && _a !== void 0 ? _a : null;
+}
+async function getLatestUnusedEmailVerificationCode(emailOrUserId) {
+    var _a;
+    const result = await collection('emailVerificationCodes')
+        .where({
+        userId: emailOrUserId,
+    })
+        .get();
+    const userCodes = result.data;
+    const fallbackResult = userCodes.length > 0
+        ? { data: userCodes }
+        : await collection('emailVerificationCodes')
+            .where({
+            email: emailOrUserId.trim().toLowerCase(),
+        })
+            .get();
+    const codes = fallbackResult.data
+        .filter((item) => !item.usedAt)
+        .sort((left, right) => right.receivedAt - left.receivedAt);
+    return (_a = codes[0]) !== null && _a !== void 0 ? _a : null;
 }

@@ -85,7 +85,7 @@ async function markOrderPaidAndOpenMembership(order, options = {}) {
                     status: 'active',
                     startAt: existingMembership.startAt,
                     endAt,
-                    remainDays: (0, utils_1.calcRemainDays)(endAt, paidAt),
+                    remainDays: (0, utils_1.calcMembershipRemainDays)({ endAt, planCode: order.planCode }, paidAt),
                     updatedAt: paidAt,
                 },
             });
@@ -100,7 +100,7 @@ async function markOrderPaidAndOpenMembership(order, options = {}) {
                 status: 'active',
                 startAt: paidAt,
                 endAt,
-                remainDays: (0, utils_1.calcRemainDays)(endAt, paidAt),
+                remainDays: (0, utils_1.calcMembershipRemainDays)({ endAt, planCode: order.planCode }, paidAt),
                 autoRenewStatus: 'off',
                 createdAt: paidAt,
                 updatedAt: paidAt,
