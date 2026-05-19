@@ -8,6 +8,7 @@ import { callCloudFunction } from '@/services/api';
 import type { MembershipView, PlanView } from '@/types';
 import { formatDate } from '@/utils/format';
 import { isMobileBound } from '@/utils/mobile';
+import { createPayOrderPayload, requestMiniProgramPayment, type PayOrderResult } from '@/utils/payment';
 import { enableReminderSubscription } from '@/utils/subscription';
 
 interface MemberHomeData {
@@ -108,18 +109,6 @@ interface AiAccountFormErrors {
   submit?: string;
 }
 
-interface PayOrderResult {
-  paid?: boolean;
-  message?: string;
-  payment?: {
-    timeStamp: string;
-    nonceStr: string;
-    package: string;
-    signType: 'MD5' | 'RSA';
-    paySign: string;
-  };
-}
-
 interface WechatPhoneEvent {
   detail?: {
     code?: string;
@@ -163,6 +152,8 @@ const VERIFICATION_CODE_ICON = require('../../assets/member/verification-code.sv
 const CHEVRON_RIGHT_ICON = require('../../assets/icons/chevron-right.svg') as string;
 const CACHE_KEY = 'gpt_pay_user_info';
 const AI_ACCOUNT_DOMAIN = '@mraclpivot.com';
+const USER_AGREEMENT_URL = 'https://cloud1-d3gbrpive8611514c-1348953433.tcloudbaseapp.com/cloud-admin/htmls/%E7%94%A8%E6%88%B7%E5%8D%8F%E8%AE%AE.html?sign=55a2a34c2317b48fc09603658d7a64b1&t=1779005578';
+const PRIVACY_AGREEMENT_URL = 'https://cloud1-d3gbrpive8611514c-1348953433.tcloudbaseapp.com/cloud-admin/htmls/%E9%9A%90%E7%A7%81%E5%8D%8F%E8%AE%AE.html?sign=3626cb47334346612df3a4d34746e859&t=1779005613';
 
 function buildPlanOption(plan: PlanView, index: number): ProductPlanOption {
   const periodLabel = plan.durationDays >= 365 ? '年' : plan.durationDays >= 90 ? '季' : '月';
@@ -192,6 +183,7 @@ export default function MemberPage(): JSX.Element {
   const [aiAccountPassword, setAiAccountPassword] = useState('');
   const [aiAccountErrors, setAiAccountErrors] = useState<AiAccountFormErrors>({});
   const [selectedPlanCode, setSelectedPlanCode] = useState('');
+  const [purchaseAgreementAccepted, setPurchaseAgreementAccepted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [paymentLocked, setPaymentLocked] = useState(false);
 
@@ -290,7 +282,19 @@ export default function MemberPage(): JSX.Element {
     const nextPlans = plansByProduct[nextProduct.code] ?? FALLBACK_PLAN_MAP[nextProduct.code] ?? [];
     setActiveProductCode(nextProduct.code);
     setSelectedPlanCode(nextPlans[0]?.planCode ?? '');
+    setPurchaseAgreementAccepted(false);
     setPlanSheetVisible(true);
+  }
+
+  function closePlanSheet(): void {
+    setPlanSheetVisible(false);
+    setPurchaseAgreementAccepted(false);
+  }
+
+  function openAgreement(url: string): void {
+    Taro.navigateTo({
+      url: `/pages/webview/index?url=${encodeURIComponent(url)}`,
+    });
   }
 
   function openSubscriptionFlow(productCode: string): void {
@@ -390,6 +394,10 @@ export default function MemberPage(): JSX.Element {
   }
 
   async function createOrder(): Promise<CreateOrderResult> {
+    if (!purchaseAgreementAccepted) {
+      Taro.showToast({ title: '请先阅读并同意协议', icon: 'none' });
+      throw new Error('未同意协议');
+    }
     if (!selectedPlanCode) {
       Taro.showToast({ title: '请选择会员方案', icon: 'none' });
       throw new Error('未选择会员方案');
@@ -402,16 +410,16 @@ export default function MemberPage(): JSX.Element {
       setPaymentLocked(true);
     }
     try {
-      const result = await callCloudFunction<PayOrderResult>('pay-order', { orderNo });
-      if (result.paid || !result.payment) {
-        setPlanSheetVisible(false);
+      const result = await callCloudFunction<PayOrderResult>('pay-order', await createPayOrderPayload(orderNo));
+      if (result.paid || !result.payment && !result.virtualPayment) {
+        closePlanSheet();
         Taro.navigateTo({ url: `/pages/pay-result/index?orderNo=${orderNo}` });
         return;
       }
       try {
-        await Taro.requestPayment({ ...result.payment });
+        await requestMiniProgramPayment(result);
       } finally {
-        setPlanSheetVisible(false);
+        closePlanSheet();
         Taro.navigateTo({ url: `/pages/pay-result/index?orderNo=${orderNo}` });
       }
     } catch (error) {
@@ -424,6 +432,10 @@ export default function MemberPage(): JSX.Element {
   async function handlePlanPay(): Promise<void> {
     if (!activeProductAvailable) {
       Taro.showToast({ title: '该会员方案即将上线', icon: 'none' });
+      return;
+    }
+    if (!purchaseAgreementAccepted) {
+      Taro.showToast({ title: '请先阅读并同意协议', icon: 'none' });
       return;
     }
     if (submitting) {
@@ -446,6 +458,10 @@ export default function MemberPage(): JSX.Element {
   }
 
   async function handleGetPhoneNumber(event: WechatPhoneEvent): Promise<void> {
+    if (!purchaseAgreementAccepted) {
+      Taro.showToast({ title: '请先阅读并同意协议', icon: 'none' });
+      return;
+    }
     const detail = event.detail;
     if (!detail?.code) {
       Taro.showToast({ title: detail?.errMsg?.includes('deny') ? '你已取消手机号授权' : '未获取到手机号授权', icon: 'none' });
@@ -724,13 +740,13 @@ export default function MemberPage(): JSX.Element {
         </Button>
       </PopLayout>
 
-      <PopLayout visible={planSheetVisible} onClose={() => setPlanSheetVisible(false)} panelClassName='plan-sheet'>
+      <PopLayout visible={planSheetVisible} onClose={closePlanSheet} panelClassName='plan-sheet'>
             <View className='plan-sheet__head'>
               <View>
                 <Text className='plan-sheet__label'>会员方案</Text>
                 <Text className='plan-sheet__title'>{activeProduct.label}</Text>
               </View>
-              <Text className='plan-sheet__close' onClick={() => setPlanSheetVisible(false)}>×</Text>
+              <Text className='plan-sheet__close' onClick={closePlanSheet}>×</Text>
             </View>
             <Text className='plan-sheet__desc'>{activeProduct.description}</Text>
             <View className='plan-sheet__plans'>
@@ -754,12 +770,33 @@ export default function MemberPage(): JSX.Element {
                 );
               })}
             </View>
+            <View className='plan-sheet__agreement'>
+              <View
+                className={`plan-sheet__checkbox ${purchaseAgreementAccepted ? 'plan-sheet__checkbox--checked' : ''}`}
+                onClick={() => setPurchaseAgreementAccepted((accepted) => !accepted)}
+              >
+                {purchaseAgreementAccepted ? <Text className='plan-sheet__checkmark'>✓</Text> : null}
+              </View>
+              <Text className='plan-sheet__agreement-text'>我已阅读并同意</Text>
+              <Text className='plan-sheet__link' onClick={() => openAgreement(USER_AGREEMENT_URL)}>《用户协议》</Text>
+              <Text className='plan-sheet__link' onClick={() => openAgreement(PRIVACY_AGREEMENT_URL)}>《隐私政策》</Text>
+            </View>
             {activeProductAvailable && !mobileBound ? (
-              <Button className='saas-button plan-sheet__button' openType='getPhoneNumber' loading={submitting} onGetPhoneNumber={handleGetPhoneNumber}>
+              <Button
+                className={`saas-button plan-sheet__button ${purchaseAgreementAccepted ? '' : 'saas-button--disabled'}`}
+                openType={purchaseAgreementAccepted ? 'getPhoneNumber' : undefined}
+                loading={submitting}
+                onClick={() => {
+                  if (!purchaseAgreementAccepted) {
+                    Taro.showToast({ title: '请先阅读并同意协议', icon: 'none' });
+                  }
+                }}
+                onGetPhoneNumber={handleGetPhoneNumber}
+              >
                 授权手机号并支付
               </Button>
             ) : (
-              <Button className={`saas-button plan-sheet__button ${activeProductAvailable ? '' : 'saas-button--disabled'}`} loading={submitting} onClick={() => void handlePlanPay()}>
+              <Button className={`saas-button plan-sheet__button ${activeProductAvailable && purchaseAgreementAccepted ? '' : 'saas-button--disabled'}`} loading={submitting} onClick={() => void handlePlanPay()}>
                 {activeProductAvailable ? '确认支付' : '即将上线'}
               </Button>
             )}

@@ -51,14 +51,15 @@ npm install
 
 ## 5. 支付环境配置
 
-- `pay-order` 现已接入微信支付 V2 普通商户直连统一下单。
+- `pay-order` 现已接入小程序官方虚拟支付，会员购买订单默认走 `wx.requestVirtualPayment`。
 - 需要在云函数环境变量中配置：
   - `WX_PAY_APPID`
-  - `WX_PAY_MCH_ID`
-  - `WX_PAY_API_KEY`
-  - `WX_PAY_NOTIFY_URL`
-  - `WX_PAY_SPBILL_CREATE_IP`
-- `WX_PAY_NOTIFY_URL` 可使用 CloudBase HTTP 访问服务指向 `pay-notify`。
+  - `WX_APP_SECRET`
+  - `WX_VIRTUAL_PAY_OFFER_ID`
+  - `WX_VIRTUAL_PAY_APP_KEY`
+  - `WX_VIRTUAL_PAY_ENV`，沙箱填 `1`，现网填 `0`
+  - `WX_VIRTUAL_PAY_PRODUCT_ID`，或按套餐配置 `WX_VIRTUAL_PAY_PRODUCT_ID_MONTHLY` 等
+- 小程序后台虚拟支付回调 URL 指向 `pay-notify` 的 HTTP 访问服务地址。
 
 ## 6. 当前手机号绑定说明
 

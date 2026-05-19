@@ -51,7 +51,7 @@ export async function main(event: Event) {
     amount: plan.price,
     durationDays: plan.durationDays,
     payStatus: 'pending',
-    payChannel: 'wechat_pay',
+    payChannel: 'wechat_virtual_pay',
     createdAt: now,
     updatedAt: now,
   };

@@ -5,6 +5,7 @@ import { AppTransparentHeader } from '@/components/AppTransparentHeader';
 import { callCloudFunction } from '@/services/api';
 import type { PlanView } from '@/types';
 import { isMobileBound } from '@/utils/mobile';
+import { createPayOrderPayload, requestMiniProgramPayment, type PayOrderResult } from '@/utils/payment';
 
 interface PlanListResult {
   plans: PlanView[];
@@ -22,19 +23,6 @@ interface ProfileResult {
 interface BindMobileResult {
   success: boolean;
   mobile?: string;
-}
-
-interface PayOrderResult {
-  orderNo: string;
-  paid?: boolean;
-  message?: string;
-  payment?: {
-    timeStamp: string;
-    nonceStr: string;
-    package: string;
-    signType: 'MD5' | 'RSA';
-    paySign: string;
-  };
 }
 
 interface WechatPhoneEventDetail {
@@ -140,17 +128,15 @@ export default function PlansPage(): JSX.Element {
       planCode: mappedPlanCode,
     });
 
-    const payResult = await callCloudFunction<PayOrderResult>('pay-order', { orderNo: result.orderNo });
-    if (payResult.paid || !payResult.payment) {
+    const payResult = await callCloudFunction<PayOrderResult>('pay-order', await createPayOrderPayload(result.orderNo));
+    if (payResult.paid || !payResult.payment && !payResult.virtualPayment) {
       Taro.navigateTo({
         url: `/pages/pay-result/index?orderNo=${result.orderNo}`,
       });
       return;
     }
     try {
-      await Taro.requestPayment({
-        ...payResult.payment,
-      });
+      await requestMiniProgramPayment(payResult);
     } finally {
       Taro.navigateTo({
         url: `/pages/pay-result/index?orderNo=${result.orderNo}`,

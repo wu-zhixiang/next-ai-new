@@ -90,7 +90,7 @@ export interface OrderRecord {
   amount: number;
   durationDays: number;
   payStatus: PayStatus;
-  payChannel: 'wechat_pay';
+  payChannel: 'wechat_pay' | 'wechat_virtual_pay';
   transactionId?: string;
   prepayId?: string;
   payExpireAt?: number;

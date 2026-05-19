@@ -78,14 +78,56 @@
   box-shadow: 0 16rpx 60rpx rgba(49, 104, 92, 0.3);
 }
 
+.auth-modal__button--disabled {
+  background: #dce2f3;
+  color: #6f7875;
+  box-shadow: none;
+}
+
 .auth-modal__agreement {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4rpx;
   margin-top: 24rpx;
   padding: 12rpx 0;
   color: var(--muted);
   font-size: 22rpx;
   font-weight: 500;
   line-height: 1.5;
-  text-align: center;
+}
+
+.auth-modal__checkbox {
+  flex: 0 0 auto;
+  width: 28rpx;
+  height: 28rpx;
+  margin-top: 2rpx;
+  margin-right: 8rpx;
+  border-radius: 8rpx;
+  border: 2rpx solid #9aa7a2;
+  background: #ffffff;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.auth-modal__checkbox--checked {
+  border-color: #31685c;
+  background: #31685c;
+}
+
+.auth-modal__checkmark {
+  color: #ffffff;
+  font-size: 20rpx;
+  line-height: 1;
+  font-weight: 800;
+}
+
+.auth-modal__agreement-text,
+.auth-modal__link {
+  line-height: 1.5;
 }
 
 .auth-modal__link {

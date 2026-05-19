@@ -29,9 +29,11 @@ interface AuthModalProps {
 
 export default function AuthModal({ visible, inviteCode, onAuthSuccess }: AuthModalProps) {
   const [submitting, setSubmitting] = useState(false);
+  const [agreementAccepted, setAgreementAccepted] = useState(false);
 
   useEffect(() => {
     if (!visible) return;
+    setAgreementAccepted(false);
 
     Taro.hideTabBar({ animation: false });
     return () => {
@@ -43,6 +45,10 @@ export default function AuthModal({ visible, inviteCode, onAuthSuccess }: AuthMo
 
   async function handleWechatLogin() {
     if (submitting) return;
+    if (!agreementAccepted) {
+      Taro.showToast({ title: '请先阅读并同意协议', icon: 'none' });
+      return;
+    }
     setSubmitting(true);
     try {
       const profile = await Taro.getUserProfile({
@@ -91,17 +97,23 @@ export default function AuthModal({ visible, inviteCode, onAuthSuccess }: AuthMo
         <Text className='auth-modal__title'>欢迎进入 AI 资讯会员</Text>
         <Text className='auth-modal__desc'>登录后同步会员状态、邀请积分与服务记录</Text>
         <Button
-          className='auth-modal__button'
+          className={`auth-modal__button ${agreementAccepted ? '' : 'auth-modal__button--disabled'}`}
           loading={submitting}
           onClick={() => void handleWechatLogin()}
         >
           微信授权登录
         </Button>
-        <Text className='auth-modal__agreement'>
-          登录即代表同意
+        <View className='auth-modal__agreement'>
+          <View
+            className={`auth-modal__checkbox ${agreementAccepted ? 'auth-modal__checkbox--checked' : ''}`}
+            onClick={() => setAgreementAccepted((accepted) => !accepted)}
+          >
+            {agreementAccepted ? <Text className='auth-modal__checkmark'>✓</Text> : null}
+          </View>
+          <Text className='auth-modal__agreement-text'>我已阅读并同意</Text>
           <Text className='auth-modal__link' onClick={() => openAgreement(USER_AGREEMENT_URL)}>《用户协议》</Text>
           <Text className='auth-modal__link' onClick={() => openAgreement(PRIVACY_AGREEMENT_URL)}>《隐私政策》</Text>
-        </Text>
+        </View>
       </View>
     </View>
   );

@@ -1,10 +1,11 @@
 import { collection, getOrderByNo, getUserById } from '../shared/db';
 import { markOrderPaidAndOpenMembership } from '../shared/orders';
-import { createWechatPayV2Order, WechatPayV2OrderError } from '../shared/wechat';
+import { createWechatPayV2Order, createWechatVirtualPaymentOrder, WechatPayV2OrderError } from '../shared/wechat';
 import { getPendingOrderExpireAt, isPendingOrderExpired, ok } from '../shared/utils';
 
 interface Event {
   orderNo: string;
+  jsCode?: string;
 }
 
 export async function main(event: Event) {
@@ -33,6 +34,24 @@ export async function main(event: Event) {
   const user = await getUserById(order.userId);
   if (!user?.openid) {
     throw new Error('订单用户缺少 openid，无法发起微信支付');
+  }
+
+  if (order.payChannel === 'wechat_virtual_pay') {
+    const payment = await createWechatVirtualPaymentOrder(order, event.jsCode ?? '');
+    const now = Date.now();
+    await collection('orders').doc(order._id).update({
+      data: {
+        prepayId: `virtual:${order.orderNo}`,
+        payExpireAt: getPendingOrderExpireAt(now),
+        updatedAt: now,
+      },
+    });
+
+    return ok({
+      orderNo: order.orderNo,
+      paymentType: 'virtual' as const,
+      virtualPayment: payment,
+    });
   }
 
   let payment: Awaited<ReturnType<typeof createWechatPayV2Order>>;

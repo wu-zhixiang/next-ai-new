@@ -1110,6 +1110,54 @@ button::after {
   font-size: 22rpx;
 }
 
+.plan-sheet__agreement {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 4rpx;
+  margin-top: 28rpx;
+  color: #5f5e5e;
+  font-size: 23rpx;
+  line-height: 1.5;
+}
+
+.plan-sheet__checkbox {
+  flex: 0 0 auto;
+  width: 30rpx;
+  height: 30rpx;
+  margin-top: 2rpx;
+  margin-right: 8rpx;
+  border-radius: 8rpx;
+  border: 2rpx solid #9aa7a2;
+  background: #ffffff;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.plan-sheet__checkbox--checked {
+  border-color: #31685c;
+  background: #31685c;
+}
+
+.plan-sheet__checkmark {
+  color: #ffffff;
+  font-size: 20rpx;
+  line-height: 1;
+  font-weight: 800;
+}
+
+.plan-sheet__agreement-text,
+.plan-sheet__link {
+  line-height: 1.5;
+}
+
+.plan-sheet__link {
+  color: #31685c;
+  font-weight: 700;
+}
+
 .plan-sheet__button {
   margin-top: 32rpx;
 }

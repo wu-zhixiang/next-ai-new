@@ -6,6 +6,7 @@ import { SaasPageFrame } from '@/components/SaasPageFrame';
 import { SkeletonPayResult } from '@/components/Skeleton';
 import { callCloudFunction } from '@/services/api';
 import { formatDateTime } from '@/utils/format';
+import { createPayOrderPayload, requestMiniProgramPayment, type PayOrderResult } from '@/utils/payment';
 
 interface PayResultData {
   orderNo: string;
@@ -22,18 +23,6 @@ interface PayResultData {
   };
   pendingExpireAt?: number;
   canPay?: boolean;
-}
-
-interface PayOrderResult {
-  paid?: boolean;
-  message?: string;
-  payment?: {
-    timeStamp: string;
-    nonceStr: string;
-    package: string;
-    signType: 'MD5' | 'RSA';
-    paySign: string;
-  };
 }
 
 type OrderViewStatus = 'completed' | 'pending' | 'abandoned';
@@ -95,13 +84,13 @@ export default function PayResultPage(): JSX.Element {
     }
     setPaymentLocked(true);
     try {
-      const result = await callCloudFunction<PayOrderResult>('pay-order', { orderNo: data.orderNo });
-      if (result.paid || !result.payment) {
+      const result = await callCloudFunction<PayOrderResult>('pay-order', await createPayOrderPayload(data.orderNo));
+      if (result.paid || !result.payment && !result.virtualPayment) {
         await loadResult(data.orderNo);
         return;
       }
       try {
-        await Taro.requestPayment({ ...result.payment });
+        await requestMiniProgramPayment(result);
       } finally {
         await loadResult(data.orderNo);
       }

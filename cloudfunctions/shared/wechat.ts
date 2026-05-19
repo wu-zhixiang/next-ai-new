@@ -113,6 +113,42 @@ interface WechatPayHttpResponse {
   body: string;
 }
 
+interface WechatCodeSessionResult {
+  openid?: string;
+  session_key?: string;
+  unionid?: string;
+  errcode?: number;
+  errmsg?: string;
+}
+
+interface WechatVirtualPayConfig {
+  appid: string;
+  appSecret: string;
+  offerId: string;
+  appKey: string;
+  env: 0 | 1;
+  currencyType: 'CNY';
+  mode: 'short_series_goods';
+}
+
+interface WechatVirtualPaymentSignData {
+  offerId: string;
+  buyQuantity: number;
+  env: 0 | 1;
+  currencyType: 'CNY';
+  productId: string;
+  goodsPrice: number;
+  outTradeNo: string;
+  attach: string;
+}
+
+export interface WechatVirtualPaymentParams {
+  signData: string;
+  paySig: string;
+  signature: string;
+  mode: 'short_series_goods';
+}
+
 export interface WechatPayV2Notify {
   return_code?: string;
   return_msg?: string;
@@ -297,6 +333,24 @@ function postWechatPayXml(url: string, xml: string): Promise<WechatPayHttpRespon
   });
 }
 
+function getJson<T>(url: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    https
+      .get(url, (response) => {
+        const chunks: Buffer[] = [];
+        response.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+        response.on('end', () => {
+          try {
+            resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')) as T);
+          } catch (error) {
+            reject(error);
+          }
+        });
+      })
+      .on('error', reject);
+  });
+}
+
 export function buildWechatPayNotifyResponse(returnCode: 'SUCCESS' | 'FAIL', returnMsg: string): string {
   return buildWechatPayXml({
     return_code: returnCode,
@@ -404,6 +458,90 @@ export async function createWechatPayV2Order(
   };
 
   return payment;
+}
+
+function getWechatVirtualPayConfig(): WechatVirtualPayConfig {
+  const appid = process.env.WX_PAY_APPID || process.env.WX_APPID || '';
+  const appSecret = process.env.WX_APP_SECRET || '';
+  const offerId = process.env.WX_VIRTUAL_PAY_OFFER_ID || '';
+  const appKey = process.env.WX_VIRTUAL_PAY_APP_KEY || '';
+  const env = process.env.WX_VIRTUAL_PAY_ENV === '1' ? 1 : 0;
+  const missing = [
+    !appid && 'WX_PAY_APPID 或 WX_APPID',
+    !appSecret && 'WX_APP_SECRET',
+    !offerId && 'WX_VIRTUAL_PAY_OFFER_ID',
+    !appKey && 'WX_VIRTUAL_PAY_APP_KEY',
+  ].filter(Boolean);
+
+  if (missing.length > 0) {
+    throw new Error(`缺少小程序虚拟支付配置：${missing.join(', ')}`);
+  }
+
+  return {
+    appid,
+    appSecret,
+    offerId,
+    appKey,
+    env,
+    currencyType: 'CNY',
+    mode: 'short_series_goods',
+  };
+}
+
+function getVirtualPaymentProductId(order: OrderRecord): string {
+  const key = `WX_VIRTUAL_PAY_PRODUCT_ID_${order.planCode.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase()}`;
+  return process.env[key] || process.env.WX_VIRTUAL_PAY_PRODUCT_ID || order.planCode;
+}
+
+function signVirtualPaymentPayload(key: string, payload: string): string {
+  return crypto.createHmac('sha256', key).update(payload, 'utf8').digest('hex');
+}
+
+async function getWechatSessionKey(jsCode: string, config: WechatVirtualPayConfig): Promise<string> {
+  if (!jsCode) {
+    throw new Error('缺少微信登录 code，无法生成虚拟支付用户签名');
+  }
+
+  const url = `https://api.weixin.qq.com/sns/jscode2session?appid=${encodeURIComponent(config.appid)}&secret=${encodeURIComponent(
+    config.appSecret,
+  )}&js_code=${encodeURIComponent(jsCode)}&grant_type=authorization_code`;
+  const result = await getJson<WechatCodeSessionResult>(url);
+  if (!result.session_key) {
+    throw new Error(`微信登录态换取失败：${result.errcode ?? 'unknown'} ${result.errmsg ?? ''}`.trim());
+  }
+
+  return result.session_key;
+}
+
+export async function createWechatVirtualPaymentOrder(
+  order: OrderRecord,
+  jsCode: string,
+): Promise<WechatVirtualPaymentParams> {
+  const config = getWechatVirtualPayConfig();
+  const sessionKey = await getWechatSessionKey(jsCode, config);
+  const signData: WechatVirtualPaymentSignData = {
+    offerId: config.offerId,
+    buyQuantity: 1,
+    env: config.env,
+    currencyType: config.currencyType,
+    productId: getVirtualPaymentProductId(order),
+    goodsPrice: toWechatPaymentAmount(order.amount),
+    outTradeNo: order.orderNo,
+    attach: JSON.stringify({
+      orderNo: order.orderNo,
+      productCode: order.productCode,
+      planCode: order.planCode,
+      userId: order.userId,
+    }),
+  };
+  const signDataString = JSON.stringify(signData);
+
+  return {
+    signData: signDataString,
+    paySig: signVirtualPaymentPayload(config.appKey, `requestVirtualPayment&${signDataString}`),
+    signature: signVirtualPaymentPayload(sessionKey, signDataString),
+    mode: config.mode,
+  };
 }
 
 export async function getWechatPhoneNumber(code: string): Promise<string> {
