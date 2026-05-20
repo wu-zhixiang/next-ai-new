@@ -25,7 +25,7 @@ export async function main() {
 
   const membership =
     (await getMembershipByUserId(user._id, DEFAULT_PRODUCT_CODE)) ??
-    (await listMembershipsByUserId(user._id)).find((item) => item.status === 'active') ??
+    (await listMembershipsByUserId(user._id)).find((item) => item.status === 'active' || item.status === 'opening') ??
     null;
   const delivery = await getDeliveryByUserId(user._id);
   const aiAccountRegistered = Boolean(user.aiAccountRegistered || user.aiAccountEmail);

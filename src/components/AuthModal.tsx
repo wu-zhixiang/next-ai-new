@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Button, Text, View } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import { callCloudFunction } from '@/services/api';
+import { hideTabBarSafely, showTabBarSafely } from '@/utils/tabbar';
 import './AuthModal.scss';
 
 const CACHE_KEY = 'gpt_pay_user_info';
@@ -21,10 +22,23 @@ interface LoginResult {
   aiAccountRegistered?: boolean;
 }
 
+export interface AuthUserInfo {
+  userId: string;
+  openid?: string;
+  openId?: string;
+  nickname?: string;
+  avatarUrl?: string;
+  inviterUserId?: string;
+  inviteCode?: string;
+  pointsBalance?: number;
+  aiAccountRegistered?: boolean;
+  profileAuthed?: boolean;
+}
+
 interface AuthModalProps {
   visible: boolean;
   inviteCode?: string;
-  onAuthSuccess: (info: { userId: string; openid?: string; openId?: string; nickname?: string; avatarUrl?: string; inviterUserId?: string; inviteCode?: string; pointsBalance?: number; aiAccountRegistered?: boolean }) => void;
+  onAuthSuccess: (info: AuthUserInfo) => void;
 }
 
 export default function AuthModal({ visible, inviteCode, onAuthSuccess }: AuthModalProps) {
@@ -35,9 +49,9 @@ export default function AuthModal({ visible, inviteCode, onAuthSuccess }: AuthMo
     if (!visible) return;
     setAgreementAccepted(false);
 
-    Taro.hideTabBar({ animation: false });
+    hideTabBarSafely();
     return () => {
-      Taro.showTabBar({ animation: false });
+      showTabBarSafely();
     };
   }, [visible]);
 
@@ -70,6 +84,7 @@ export default function AuthModal({ visible, inviteCode, onAuthSuccess }: AuthMo
         inviteCode: loginResult.inviteCode,
         pointsBalance: loginResult.pointsBalance,
         aiAccountRegistered: loginResult.aiAccountRegistered,
+        profileAuthed: Boolean(loginResult.nickname || loginResult.avatarUrl),
       };
       Taro.setStorageSync(CACHE_KEY, JSON.stringify(cachedInfo));
       onAuthSuccess(cachedInfo);
@@ -94,7 +109,7 @@ export default function AuthModal({ visible, inviteCode, onAuthSuccess }: AuthMo
       <View className='auth-modal__mask' />
       <View className='auth-modal__card'>
         <View className='auth-modal__icon'>AI</View>
-        <Text className='auth-modal__title'>欢迎进入 AI 资讯会员</Text>
+        <Text className='auth-modal__title'>欢迎进入 Open AI 资讯会员</Text>
         <Text className='auth-modal__desc'>登录后同步会员状态、邀请积分与服务记录</Text>
         <Button
           className={`auth-modal__button ${agreementAccepted ? '' : 'auth-modal__button--disabled'}`}

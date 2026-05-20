@@ -28,6 +28,10 @@ function calcRemainDays(endAt, now = Date.now()) {
     return Math.max(0, Math.ceil((endAt - now) / DAY_MS));
 }
 function getPlanDurationCap(planCode) {
+    if (planCode === 'go')
+        return 30;
+    if (planCode === 'plus')
+        return 30;
     if (planCode === 'monthly')
         return 30;
     if (planCode === 'quarterly')
@@ -78,6 +82,9 @@ function normalizeMembership(record) {
 function getMembershipOpenStatusLabel(status) {
     if (status === 'active') {
         return '已开通';
+    }
+    if (status === 'opening') {
+        return '开通中';
     }
     if (status === 'none') {
         return '立即开通';

@@ -10,12 +10,14 @@ import { formatDate } from '@/utils/format';
 import { isMobileBound } from '@/utils/mobile';
 import { createPayOrderPayload, requestMiniProgramPayment, type PayOrderResult } from '@/utils/payment';
 import { enableReminderSubscription } from '@/utils/subscription';
+import { hideTabBarSafely, showTabBarSafely } from '@/utils/tabbar';
 
 interface MemberHomeData {
   userInfo?: {
     mobile?: string;
     nickname?: string;
     avatarUrl?: string;
+    pointsBalance?: number;
     aiAccount?: {
       registered: boolean;
       email?: string;
@@ -61,6 +63,10 @@ interface ProfileResult {
 
 interface CreateOrderResult {
   orderNo: string;
+  amount?: number;
+  originalAmount?: number;
+  pointsDeducted?: number;
+  pointsDeductAmount?: number;
 }
 
 interface BindMobileResult {
@@ -97,6 +103,7 @@ interface CachedUserInfo {
   inviteCode?: string;
   pointsBalance?: number;
   aiAccountRegistered?: boolean;
+  profileAuthed?: boolean;
 }
 
 interface LoginResult extends CachedUserInfo {
@@ -120,8 +127,8 @@ interface WechatPhoneEvent {
 
 const PRODUCT_OPTIONS: ProductOption[] = [
   {
-    code: 'openai_plus',
-    label: 'Open AI资讯会员',
+    code: 'ai_news',
+    label: 'Open AI 资讯会员',
     tag: '已上线',
     available: true,
     description: '适合 Open AI 资讯订阅、精选内容与会员权益场景。',
@@ -136,10 +143,9 @@ const PRODUCT_OPTIONS: ProductOption[] = [
 ];
 
 const FALLBACK_PLAN_MAP: Record<string, ProductPlanOption[]> = {
-  openai_plus: [
-    { planCode: 'annual', displayName: '年度会员', price: 0.01, priceLabel: '¥0.01', durationLabel: '365 天', periodLabel: '年', recommended: true },
-    { planCode: 'quarterly', displayName: '季度会员', price: 0.01, priceLabel: '¥0.01', durationLabel: '90 天', periodLabel: '季' },
-    { planCode: 'monthly', displayName: '月度会员', price: 0.01, priceLabel: '¥0.01', durationLabel: '30 天', periodLabel: '月' },
+  ai_news: [
+    { planCode: 'plus', displayName: 'AI资讯PLUS会员', price: 0.01, priceLabel: '¥0.01', durationLabel: '30 天', periodLabel: '月', recommended: true },
+    { planCode: 'go', displayName: 'AI资讯GO会员', price: 0.01, priceLabel: '¥0.01', durationLabel: '30 天', periodLabel: '月' },
   ],
   claude_pro: [
     { planCode: 'claude_waitlist', displayName: 'Anthropic资讯会员', price: 0, priceLabel: '即将上线', durationLabel: '敬请期待' },
@@ -175,19 +181,24 @@ export default function MemberPage(): JSX.Element {
     deliverySummary: { hasDeliveryInfo: false },
   });
   const [backendPlans, setBackendPlans] = useState<PlanView[]>([]);
-  const [activeProductCode, setActiveProductCode] = useState('openai_plus');
+  const [activeProductCode, setActiveProductCode] = useState('ai_news');
   const [planSheetVisible, setPlanSheetVisible] = useState(false);
+  const [productIntroVisible, setProductIntroVisible] = useState(false);
+  const [introProductCode, setIntroProductCode] = useState('ai_news');
   const [aiAccountSheetVisible, setAiAccountSheetVisible] = useState(false);
-  const [pendingProductCode, setPendingProductCode] = useState('openai_plus');
+  const [pendingProductCode, setPendingProductCode] = useState('ai_news');
   const [aiAccountName, setAiAccountName] = useState('');
   const [aiAccountPassword, setAiAccountPassword] = useState('');
   const [aiAccountErrors, setAiAccountErrors] = useState<AiAccountFormErrors>({});
   const [selectedPlanCode, setSelectedPlanCode] = useState('');
   const [purchaseAgreementAccepted, setPurchaseAgreementAccepted] = useState(false);
+  const [usePointsDeduction, setUsePointsDeduction] = useState(false);
+  const [memberLoading, setMemberLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [paymentLocked, setPaymentLocked] = useState(false);
 
   useDidShow(() => {
+    showTabBarSafely();
     loadCachedUserInfo();
     void loadData();
     void loadPlans();
@@ -196,9 +207,9 @@ export default function MemberPage(): JSX.Element {
   useEffect(() => {
     if (!paymentLocked) return;
 
-    Taro.hideTabBar({ animation: false });
+    hideTabBarSafely();
     return () => {
-      Taro.showTabBar({ animation: false });
+      showTabBarSafely();
     };
   }, [paymentLocked]);
 
@@ -230,6 +241,7 @@ export default function MemberPage(): JSX.Element {
         ...loginResult,
         openid: loginResult.openid ?? loginResult.openId,
         openId: loginResult.openId ?? loginResult.openid,
+        profileAuthed: Boolean(loginResult.nickname || loginResult.avatarUrl),
       };
       Taro.setStorageSync(CACHE_KEY, JSON.stringify(nextInfo));
       setCachedUserInfo(nextInfo);
@@ -239,8 +251,13 @@ export default function MemberPage(): JSX.Element {
   }
 
   async function loadData(): Promise<void> {
-    const result = await callCloudFunction<MemberHomeData>('get-member-home');
-    setData(result);
+    setMemberLoading(true);
+    try {
+      const result = await callCloudFunction<MemberHomeData>('get-member-home');
+      setData(result);
+    } finally {
+      setMemberLoading(false);
+    }
   }
 
   async function loadPlans(): Promise<void> {
@@ -254,16 +271,18 @@ export default function MemberPage(): JSX.Element {
   }
 
   const isActive = data.membership.status === 'active';
+  const isOpening = data.membership.status === 'opening';
   const memberStatusLabel = data.membership.status === 'none' ? '立即开通' : data.membership.openStatusLabel ?? '立即开通';
-  const planLabel = isActive ? data.membership.planName ?? '会员套餐' : '普通会员';
+  const planLabel = isActive || isOpening ? data.membership.planName ?? '会员套餐' : '普通会员';
   const remainDays = data.membership.remainDays ?? 0;
   const progress = Math.max(8, Math.min(100, isActive ? Math.round((remainDays / 30) * 100) : 8));
-  const expiryLabel = data.membership.status === 'none' ? '购买后开始计时' : formatDate(data.membership.endAt);
-  const currentProductCode = data.membership.productCode ?? 'openai_plus';
+  const expiryLabel = data.membership.status === 'none' ? '购买后开始计时' : isOpening ? '人工开通中' : formatDate(data.membership.endAt);
+  const currentProductCode = data.membership.productCode ?? 'ai_news';
   const mobileBound = isMobileBound(data.userInfo?.mobile);
-  const nickname = data.userInfo?.nickname ?? cachedUserInfo?.nickname ?? 'Alex Thompson';
-  const avatarUrl = "https://cloud1-d3gbrpive8611514c-1348953433.tcloudbaseapp.com/cloud-admin/images/next_ai_logo.webp?sign=243391e96631f3efe2ef49bd8cc4d1eb&t=1779023145";
+  const nickname = data.userInfo?.nickname ?? cachedUserInfo?.nickname ?? '微信用户';
+  const avatarUrl = data.userInfo?.avatarUrl ?? cachedUserInfo?.avatarUrl ?? '';
   const activeProduct = PRODUCT_OPTIONS.find((item) => item.code === activeProductCode) ?? PRODUCT_OPTIONS[0];
+  const introProduct = PRODUCT_OPTIONS.find((item) => item.code === introProductCode) ?? PRODUCT_OPTIONS[0];
   const plansByProduct = useMemo(() => {
     const nextMap: Record<string, ProductPlanOption[]> = {};
     backendPlans.forEach((plan) => {
@@ -275,6 +294,12 @@ export default function MemberPage(): JSX.Element {
   }, [backendPlans]);
   const activePlans = plansByProduct[activeProductCode] ?? FALLBACK_PLAN_MAP[activeProductCode] ?? [];
   const activeProductAvailable = activeProduct.available && activePlans.some((plan) => plan.price > 0);
+  const selectedPlan = activePlans.find((plan) => plan.planCode === selectedPlanCode) ?? activePlans[0];
+  const pointsBalance = Math.max(0, Math.floor(data.userInfo?.pointsBalance ?? cachedUserInfo?.pointsBalance ?? 0));
+  const maxPointsDeducted = selectedPlan ? Math.min(pointsBalance, Math.floor(selectedPlan.price)) : 0;
+  const pointsDeductAmount = maxPointsDeducted;
+  const finalPayAmount = selectedPlan ? Math.max(0, Number((selectedPlan.price - (usePointsDeduction ? pointsDeductAmount : 0)).toFixed(2))) : 0;
+  const pointsDeductionAvailable = activeProductAvailable && maxPointsDeducted > 0;
   const aiAccountRegistered = Boolean(data.userInfo?.aiAccount?.registered || data.userInfo?.aiAccount?.email || cachedUserInfo?.aiAccountRegistered);
 
   function openPlanSheet(productCode: string): void {
@@ -283,12 +308,23 @@ export default function MemberPage(): JSX.Element {
     setActiveProductCode(nextProduct.code);
     setSelectedPlanCode(nextPlans[0]?.planCode ?? '');
     setPurchaseAgreementAccepted(false);
+    setUsePointsDeduction(false);
     setPlanSheetVisible(true);
+  }
+
+  function openProductIntro(productCode: string): void {
+    setIntroProductCode(productCode);
+    setProductIntroVisible(true);
+  }
+
+  function closeProductIntro(): void {
+    setProductIntroVisible(false);
   }
 
   function closePlanSheet(): void {
     setPlanSheetVisible(false);
     setPurchaseAgreementAccepted(false);
+    setUsePointsDeduction(false);
   }
 
   function openAgreement(url: string): void {
@@ -298,12 +334,26 @@ export default function MemberPage(): JSX.Element {
   }
 
   function openSubscriptionFlow(productCode: string): void {
+    const product = PRODUCT_OPTIONS.find((item) => item.code === productCode);
+    if (!product?.available) {
+      Taro.showToast({ title: product?.tag || '暂不支持购买', icon: 'none' });
+      return;
+    }
     setPendingProductCode(productCode);
     if (!aiAccountRegistered) {
       setAiAccountSheetVisible(true);
       return;
     }
     openPlanSheet(productCode);
+  }
+
+  function continueFromProductIntro(): void {
+    if (!introProduct.available) {
+      Taro.showToast({ title: introProduct.tag || '暂不支持购买', icon: 'none' });
+      return;
+    }
+    setProductIntroVisible(false);
+    openSubscriptionFlow(introProduct.code);
   }
 
   async function handleSaveAiAccount(): Promise<void> {
@@ -402,7 +452,10 @@ export default function MemberPage(): JSX.Element {
       Taro.showToast({ title: '请选择会员方案', icon: 'none' });
       throw new Error('未选择会员方案');
     }
-    return callCloudFunction<CreateOrderResult>('create-order', { planCode: selectedPlanCode });
+    return callCloudFunction<CreateOrderResult>('create-order', {
+      planCode: selectedPlanCode,
+      usePointsDeduction,
+    });
   }
 
   async function payOrder(orderNo: string, lockAlreadyEnabled = false): Promise<void> {
@@ -577,40 +630,55 @@ export default function MemberPage(): JSX.Element {
       <View className='member-page'>
       <View className='saas-shell member-shell'>
         <View className='member-premium-card'>
-          <View className='member-profile'>
-            <View className='member-profile__avatar'>
-              {avatarUrl ? (
-                <Image className='member-profile__avatar-image' src={avatarUrl} mode='aspectFill' />
-              ) : (
-                <Text>{nickname.slice(0, 1).toUpperCase()}</Text>
-              )}
-              <Text className='member-profile__ai'>AI</Text>
+          {memberLoading ? (
+            <View className='member-card-skeleton'>
+              <View className='member-card-skeleton__head'>
+                <View className='member-card-skeleton__avatar' />
+                <View className='member-card-skeleton__pill' />
+              </View>
+              <View className='member-card-skeleton__label' />
+              <View className='member-card-skeleton__title' />
+              <View className='member-card-skeleton__days' />
+              <View className='member-card-skeleton__bar' />
             </View>
-            <View className='member-profile__copy'>
-              <Text
-                className={`member-plan-title__status member-plan-title__status--${data.membership.status}`}
-                onClick={() => data.membership.status === 'none' && openSubscriptionFlow(currentProductCode)}
-              >
-                {memberStatusLabel}
-              </Text>
-            </View>
-          </View>
-          <View className='member-plan-title'>
-            <Text className='member-plan-title__label'>当前方案</Text>
-            <View className='member-plan-title__row'>
-              <Text className='member-plan-title__name'>{planLabel}</Text>
-            </View>
-          </View>
-          <View className='member-days'>
-            <View>
-              <Text className='member-days__value'>{remainDays}</Text>
-              <Text className='member-days__label'>剩余天数</Text>
-            </View>
-            <Text className='member-days__expiry'>到期时间 {expiryLabel}</Text>
-          </View>
-          <View className='member-progress'>
-            <View className='member-progress__bar' style={{ width: `${progress}%` }} />
-          </View>
+          ) : (
+            <>
+              <View className='member-profile'>
+                <View className='member-profile__avatar'>
+                  {avatarUrl ? (
+                    <Image className='member-profile__avatar-image' src={avatarUrl} mode='aspectFill' />
+                  ) : (
+                    <Text>{nickname.slice(0, 1).toUpperCase()}</Text>
+                  )}
+                  <Text className='member-profile__ai'>AI</Text>
+                </View>
+                <View className='member-profile__copy'>
+                  <Text
+                    className={`member-plan-title__status member-plan-title__status--${data.membership.status}`}
+                    onClick={() => data.membership.status === 'none' && openSubscriptionFlow(currentProductCode)}
+                  >
+                    {memberStatusLabel}
+                  </Text>
+                </View>
+              </View>
+              <View className='member-plan-title'>
+                <Text className='member-plan-title__label'>当前方案</Text>
+                <View className='member-plan-title__row'>
+                  <Text className='member-plan-title__name'>{planLabel}</Text>
+                </View>
+              </View>
+              <View className='member-days'>
+                <View>
+                  <Text className='member-days__value'>{remainDays}</Text>
+                  <Text className='member-days__label'>剩余天数</Text>
+                </View>
+                <Text className='member-days__expiry'>到期时间 {expiryLabel}</Text>
+              </View>
+              <View className='member-progress'>
+                <View className='member-progress__bar' style={{ width: `${progress}%` }} />
+              </View>
+            </>
+          )}
         </View>
 
         <View className='member-section'>
@@ -655,7 +723,11 @@ export default function MemberPage(): JSX.Element {
           <Text className='member-section__title'>我的权益</Text>
           <View className='member-list-card'>
             {PRODUCT_OPTIONS.map((product) => (
-              <View key={product.code} className='member-right-item' onClick={() => openSubscriptionFlow(product.code)}>
+              <View
+                key={product.code}
+                className={`member-right-item ${product.available ? '' : 'member-right-item--disabled'}`}
+                onClick={() => openProductIntro(product.code)}
+              >
                 <View>
                   <Text className='member-right-item__title'>{product.label}</Text>
                   <Text className='member-right-item__desc'>
@@ -693,6 +765,37 @@ export default function MemberPage(): JSX.Element {
           升级服务
         </Button> */}
       </View>
+
+      <PopLayout visible={productIntroVisible} onClose={closeProductIntro} panelClassName='product-intro-sheet'>
+        <View className='plan-sheet__head'>
+          <View>
+            <Text className='plan-sheet__label'>商品介绍</Text>
+            <Text className='plan-sheet__title'>{introProduct.label}</Text>
+          </View>
+          <Text className='plan-sheet__close' onClick={closeProductIntro}>×</Text>
+        </View>
+        <Text className='plan-sheet__desc'>{introProduct.description}</Text>
+        <View className='product-intro-list'>
+          <View className='product-intro-item'>
+            <Text className='product-intro-item__title'>精选资讯</Text>
+            <Text className='product-intro-item__desc'>聚合前沿 AI 动态、产品更新与应用案例。</Text>
+          </View>
+          <View className='product-intro-item'>
+            <Text className='product-intro-item__title'>会员权益</Text>
+            <Text className='product-intro-item__desc'>开通后进入人工处理流程，完成后展示会员有效期。</Text>
+          </View>
+          <View className='product-intro-item'>
+            <Text className='product-intro-item__title'>当前状态</Text>
+            <Text className='product-intro-item__desc'>{introProduct.available ? '支持购买' : introProduct.tag}</Text>
+          </View>
+        </View>
+        <Button
+          className={`saas-button plan-sheet__button ${introProduct.available ? '' : 'saas-button--disabled'}`}
+          onClick={continueFromProductIntro}
+        >
+          {introProduct.available ? '查看套餐' : introProduct.tag}
+        </Button>
+      </PopLayout>
 
       <PopLayout visible={aiAccountSheetVisible} onClose={() => setAiAccountSheetVisible(false)} panelClassName='ai-account-sheet'>
         <View className='plan-sheet__head'>
@@ -769,6 +872,31 @@ export default function MemberPage(): JSX.Element {
                   </View>
                 );
               })}
+            </View>
+            <View className={`plan-sheet__points ${usePointsDeduction ? 'plan-sheet__points--active' : ''} ${pointsDeductionAvailable ? '' : 'plan-sheet__points--disabled'}`}>
+              <View>
+                <Text className='plan-sheet__points-title'>使用积分抵扣</Text>
+                <Text className='plan-sheet__points-desc'>
+                  {pointsDeductionAvailable
+                    ? `可用 ${pointsBalance} 积分，本次抵扣 ¥${pointsDeductAmount.toFixed(2)}`
+                    : `可用 ${pointsBalance} 积分，满 1 积分可抵 ¥1`}
+                </Text>
+                {selectedPlan ? (
+                  <Text className='plan-sheet__points-pay'>预计支付 ¥{finalPayAmount.toFixed(2)}</Text>
+                ) : null}
+              </View>
+              <View
+                className={`ios-switch ${usePointsDeduction ? 'ios-switch--on' : ''}`}
+                onClick={() => {
+                  if (!pointsDeductionAvailable) {
+                    Taro.showToast({ title: '暂无可抵扣积分', icon: 'none' });
+                    return;
+                  }
+                  setUsePointsDeduction((enabled) => !enabled);
+                }}
+              >
+                <Text className='ios-switch__thumb' />
+              </View>
             </View>
             <View className='plan-sheet__agreement'>
               <View

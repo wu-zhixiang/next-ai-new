@@ -14,5 +14,5 @@ exports.COLLECTIONS = {
     auditLogs: 'audit_logs',
 };
 exports.SUCCESS_CODE = 0;
-exports.DEFAULT_PRODUCT_CODE = 'openai_plus';
-exports.DEFAULT_PRODUCT_NAME = 'Open AI资讯会员';
+exports.DEFAULT_PRODUCT_CODE = 'ai_news';
+exports.DEFAULT_PRODUCT_NAME = 'Open AI 资讯会员';

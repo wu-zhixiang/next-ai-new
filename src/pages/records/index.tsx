@@ -5,6 +5,7 @@ import { SaasPageFrame } from '@/components/SaasPageFrame';
 import { SkeletonOrderList } from '@/components/Skeleton';
 import { callCloudFunction } from '@/services/api';
 import { formatDateTime } from '@/utils/format';
+import { showTabBarSafely } from '@/utils/tabbar';
 
 const CHEVRON_RIGHT_ICON = require('../../assets/icons/chevron-right.svg') as string;
 
@@ -17,6 +18,7 @@ interface OrderItem {
   amount: number;
   durationDays: number;
   payStatus: PayStatus;
+  fulfillmentStatus?: 'pending' | 'opening' | 'fulfilled' | 'failed';
   createdAt: number;
   paidAt?: number;
   pendingExpireAt?: number;
@@ -36,6 +38,9 @@ const STATUS_LABEL: Record<PayStatus, string> = {
 };
 
 function getOrderStatusLabel(order: OrderItem): string {
+  if (order.fulfillmentStatus === 'opening') {
+    return '开通中';
+  }
   if (order.payStatus === 'pending' && !order.canPay) {
     return '已废弃请重新下单';
   }
@@ -47,6 +52,7 @@ export default function RecordsPage(): JSX.Element {
   const [loading, setLoading] = useState(true);
 
   useDidShow(() => {
+    showTabBarSafely();
     void loadOrders();
   });
 
@@ -83,7 +89,7 @@ export default function RecordsPage(): JSX.Element {
                     <Text className='record-card__tier'>{item.productName}</Text>
                     <Text className='record-card__title'>{item.planName}</Text>
                   </View>
-                  <View className={`status-pill status-pill--${item.payStatus}`}>
+                  <View className={`status-pill status-pill--${item.fulfillmentStatus === 'opening' ? 'opening' : item.payStatus}`}>
                     <Text className='status-pill__dot' />
                     <Text>{getOrderStatusLabel(item)}</Text>
                   </View>

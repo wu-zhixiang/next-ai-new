@@ -4,7 +4,11 @@ exports.main = main;
 const db_1 = require("./shared/db");
 const utils_1 = require("./shared/utils");
 const context_1 = require("./_lib/context");
+function normalizeAmount(amount) {
+    return Number(amount.toFixed(2));
+}
 async function main(event) {
+    var _a;
     const { OPENID } = (0, context_1.getWxContext)();
     const user = await (0, db_1.getUserByOpenId)(OPENID);
     if (!user) {
@@ -29,6 +33,10 @@ async function main(event) {
         },
     })));
     const orderNo = (0, utils_1.createOrderNo)();
+    const availablePoints = Math.max(0, Math.floor((_a = user.pointsBalance) !== null && _a !== void 0 ? _a : 0));
+    const maxDeductiblePoints = Math.floor(plan.price);
+    const pointsDeducted = event.usePointsDeduction ? Math.min(availablePoints, maxDeductiblePoints) : 0;
+    const payableAmount = normalizeAmount(Math.max(0, plan.price - pointsDeducted));
     const order = {
         orderNo,
         userId: user._id,
@@ -37,9 +45,14 @@ async function main(event) {
         planCode: plan.planCode,
         planName: plan.planName,
         orderType: existingMembership ? 'renew' : 'purchase',
-        amount: plan.price,
+        amount: payableAmount,
+        originalAmount: normalizeAmount(plan.price),
+        pointsDeductionEnabled: Boolean(event.usePointsDeduction),
+        pointsDeducted,
+        pointsDeductAmount: pointsDeducted,
         durationDays: plan.durationDays,
         payStatus: 'pending',
+        fulfillmentStatus: 'pending',
         payChannel: 'wechat_virtual_pay',
         createdAt: now,
         updatedAt: now,
@@ -49,7 +62,10 @@ async function main(event) {
         orderNo,
         productCode: plan.productCode,
         productName: plan.productName,
-        amount: plan.price,
+        amount: payableAmount,
+        originalAmount: normalizeAmount(plan.price),
+        pointsDeducted,
+        pointsDeductAmount: pointsDeducted,
         planName: plan.planName,
         durationDays: plan.durationDays,
     });

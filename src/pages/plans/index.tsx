@@ -50,29 +50,20 @@ interface MockPlan {
 
 const MOCK_PLANS: MockPlan[] = [
   {
-    productCode: 'openai_plus',
-    planCode: 'annual',
-    planName: '年度会员',
-    displayName: '年度会员',
+    productCode: 'ai_news',
+    planCode: 'plus',
+    planName: 'AI资讯PLUS会员',
+    displayName: 'AI资讯PLUS会员',
     price: 0.01,
-    periodLabel: '年',
-    durationDays: 365,
+    periodLabel: '月',
+    durationDays: 30,
     isBestValue: true,
   },
   {
-    productCode: 'openai_plus',
-    planCode: 'quarterly',
-    planName: '季度会员',
-    displayName: '季度会员',
-    price: 0.01,
-    periodLabel: '季',
-    durationDays: 90,
-  },
-  {
-    productCode: 'openai_plus',
-    planCode: 'monthly',
-    planName: '月度会员',
-    displayName: '月度会员',
+    productCode: 'ai_news',
+    planCode: 'go',
+    planName: 'AI资讯GO会员',
+    displayName: 'AI资讯GO会员',
     price: 0.01,
     periodLabel: '月',
     durationDays: 30,
@@ -82,7 +73,7 @@ const MOCK_PLANS: MockPlan[] = [
 export default function PlansPage(): JSX.Element {
   const router = useRouter();
   const [backendPlans, setBackendPlans] = useState<PlanView[]>([]);
-  const productCode = router.params.product ?? 'openai_plus';
+  const productCode = router.params.product ?? 'ai_news';
   const visiblePlans = MOCK_PLANS.filter((plan) => plan.productCode === productCode);
   const defaultPlanCode = router.params.planCode && visiblePlans.some((plan) => plan.planCode === router.params.planCode)
     ? router.params.planCode

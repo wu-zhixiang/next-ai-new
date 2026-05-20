@@ -3,8 +3,60 @@ import type { MembershipRecord, OrderRecord, PointsLedgerRecord } from './types'
 import { calcMembershipRemainDays } from './utils';
 
 function calcInviteRewardPoints(amount: number): number {
-  // 1 元 = 100 积分，邀请奖励为实付金额的 10%，测试 0.01 元订单至少返 1 积分，便于联调验收。
-  return Math.max(1, Math.floor(amount * 100 * 0.1));
+  // 1 积分 = 1 元；邀请奖励按被邀请人实付金额的 10% 向下取整。
+  if (amount <= 0) {
+    return 0;
+  }
+  return Math.floor(amount * 0.1);
+}
+
+async function deductPaymentPointsOnce(order: OrderRecord & { _id: string }, paidAt: number): Promise<void> {
+  const points = Math.max(0, Math.floor(order.pointsDeducted ?? 0));
+  if (points <= 0) {
+    return;
+  }
+
+  const existing = await collection('pointsLedger')
+    .where({
+      type: 'payment_deduct',
+      orderNo: order.orderNo,
+      userId: order.userId,
+    })
+    .limit(1)
+    .get();
+  if (existing.data[0]) {
+    console.info('points.deduct.skipped', {
+      reason: 'ledger_exists',
+      orderNo: order.orderNo,
+      userId: order.userId,
+    });
+    return;
+  }
+
+  await collection('users').doc(order.userId).update({
+    data: {
+      pointsBalance: _.inc(-points),
+      updatedAt: paidAt,
+    },
+  });
+
+  const user = await getUserById(order.userId);
+  const ledger: PointsLedgerRecord = {
+    userId: order.userId,
+    orderNo: order.orderNo,
+    type: 'payment_deduct',
+    direction: 'out',
+    points,
+    balanceAfter: user?.pointsBalance,
+    description: `订阅 ${order.planName} 抵扣积分`,
+    createdAt: paidAt,
+  };
+  await collection('pointsLedger').add({ data: ledger });
+  console.info('points.deduct.created', {
+    orderNo: order.orderNo,
+    userId: order.userId,
+    points,
+  });
 }
 
 async function rewardInviterOnce(order: OrderRecord & { _id: string }, paidAt: number): Promise<void> {
@@ -36,6 +88,14 @@ async function rewardInviterOnce(order: OrderRecord & { _id: string }, paidAt: n
   }
 
   const rewardPoints = calcInviteRewardPoints(order.amount);
+  if (rewardPoints <= 0) {
+    console.info('invite.reward.skipped', {
+      reason: 'zero_paid_amount',
+      orderNo: order.orderNo,
+      inviterUserId: invitee.inviterUserId,
+    });
+    return;
+  }
   await collection('users').doc(invitee.inviterUserId).update({
     data: {
       pointsBalance: _.inc(rewardPoints),
@@ -64,7 +124,7 @@ async function rewardInviterOnce(order: OrderRecord & { _id: string }, paidAt: n
   });
 }
 
-export async function markOrderPaidAndOpenMembership(
+export async function markOrderPaidAndStartOpening(
   order: OrderRecord & { _id: string },
   options: {
     transactionId?: string;
@@ -76,6 +136,7 @@ export async function markOrderPaidAndOpenMembership(
     await collection('orders').doc(order._id).update({
       data: {
         payStatus: 'paid',
+        fulfillmentStatus: 'opening',
         transactionId: options.transactionId ?? order.transactionId ?? '',
         paidAt,
         updatedAt: paidAt,
@@ -83,8 +144,8 @@ export async function markOrderPaidAndOpenMembership(
     });
 
     const existingMembership = await getMembershipByUserId(order.userId, order.productCode);
-    const startAt = existingMembership && existingMembership.endAt > paidAt ? existingMembership.endAt : paidAt;
-    const endAt = startAt + order.durationDays * 24 * 60 * 60 * 1000;
+    const startAt = existingMembership?.startAt ?? paidAt;
+    const endAt = existingMembership?.endAt ?? paidAt;
 
     if (existingMembership) {
       await collection('memberships').doc(existingMembership._id).update({
@@ -93,10 +154,10 @@ export async function markOrderPaidAndOpenMembership(
           productName: order.productName,
           planCode: order.planCode,
           planName: order.planName,
-          status: 'active',
-          startAt: existingMembership.startAt,
+          status: 'opening',
+          startAt,
           endAt,
-          remainDays: calcMembershipRemainDays({ endAt, planCode: order.planCode }, paidAt),
+          remainDays: existingMembership.status === 'active' ? calcMembershipRemainDays(existingMembership, paidAt) : 0,
           updatedAt: paidAt,
         },
       });
@@ -107,10 +168,10 @@ export async function markOrderPaidAndOpenMembership(
         productName: order.productName,
         planCode: order.planCode,
         planName: order.planName,
-        status: 'active',
+        status: 'opening',
         startAt: paidAt,
-        endAt,
-        remainDays: calcMembershipRemainDays({ endAt, planCode: order.planCode }, paidAt),
+        endAt: paidAt,
+        remainDays: 0,
         autoRenewStatus: 'off',
         createdAt: paidAt,
         updatedAt: paidAt,
@@ -119,5 +180,68 @@ export async function markOrderPaidAndOpenMembership(
     }
   }
 
-  await rewardInviterOnce(order, options.paidAt ?? order.paidAt ?? Date.now());
+  const finalizedAt = options.paidAt ?? order.paidAt ?? Date.now();
+  await deductPaymentPointsOnce(order, finalizedAt);
+  await rewardInviterOnce(order, finalizedAt);
+}
+
+export async function fulfillPaidOrderMembership(
+  order: OrderRecord & { _id: string },
+  options: {
+    fulfilledAt?: number;
+  } = {},
+): Promise<void> {
+  if (order.payStatus !== 'paid') {
+    throw new Error('订单未支付，不能确认开通');
+  }
+  if (order.fulfillmentStatus === 'fulfilled') {
+    return;
+  }
+
+  const fulfilledAt = options.fulfilledAt ?? Date.now();
+  const existingMembership = await getMembershipByUserId(order.userId, order.productCode);
+  const startAt = existingMembership && existingMembership.status === 'active' && existingMembership.endAt > fulfilledAt
+    ? existingMembership.endAt
+    : fulfilledAt;
+  const endAt = startAt + order.durationDays * 24 * 60 * 60 * 1000;
+
+  if (existingMembership) {
+    await collection('memberships').doc(existingMembership._id).update({
+      data: {
+        productCode: order.productCode,
+        productName: order.productName,
+        planCode: order.planCode,
+        planName: order.planName,
+        status: 'active',
+        startAt,
+        endAt,
+        remainDays: calcMembershipRemainDays({ endAt, planCode: order.planCode }, fulfilledAt),
+        updatedAt: fulfilledAt,
+      },
+    });
+  } else {
+    const membership: MembershipRecord = {
+      userId: order.userId,
+      productCode: order.productCode,
+      productName: order.productName,
+      planCode: order.planCode,
+      planName: order.planName,
+      status: 'active',
+      startAt,
+      endAt,
+      remainDays: calcMembershipRemainDays({ endAt, planCode: order.planCode }, fulfilledAt),
+      autoRenewStatus: 'off',
+      createdAt: fulfilledAt,
+      updatedAt: fulfilledAt,
+    };
+    await collection('memberships').add({ data: membership });
+  }
+
+  await collection('orders').doc(order._id).update({
+    data: {
+      fulfillmentStatus: 'fulfilled',
+      fulfilledAt,
+      updatedAt: fulfilledAt,
+    },
+  });
 }

@@ -4,7 +4,7 @@ exports.main = main;
 const db_1 = require("./shared/db");
 const utils_1 = require("./shared/utils");
 async function main(event) {
-    var _a;
+    var _a, _b;
     const order = await (0, db_1.getOrderByNo)(event.orderNo);
     if (!order) {
         throw new Error('订单不存在');
@@ -30,17 +30,22 @@ async function main(event) {
         productName: order.productName,
         planName: order.planName,
         amount: order.amount,
+        originalAmount: order.originalAmount,
+        pointsDeducted: order.pointsDeducted,
+        pointsDeductAmount: order.pointsDeductAmount,
         createdAt: order.createdAt,
         payStatus,
+        fulfillmentStatus: (_a = order.fulfillmentStatus) !== null && _a !== void 0 ? _a : (payStatus === 'paid' ? 'fulfilled' : 'pending'),
         paidAt: order.paidAt,
+        fulfilledAt: order.fulfilledAt,
         pendingExpireAt: order.payStatus === 'pending' || pendingExpired ? pendingExpireAt : undefined,
         canPay: payStatus === 'pending',
-        membership: membership && membership.status === 'active'
+        membership: membership && (membership.status === 'active' || membership.status === 'opening')
             ? {
-                status: 'active',
+                status: membership.status,
                 startAt: membership.startAt,
                 endAt: membership.endAt,
-                remainDays: (_a = (0, utils_1.normalizeMembership)(membership).remainDays) !== null && _a !== void 0 ? _a : 0,
+                remainDays: (_b = (0, utils_1.normalizeMembership)(membership).remainDays) !== null && _b !== void 0 ? _b : 0,
             }
             : undefined,
     });

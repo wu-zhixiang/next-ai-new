@@ -12,5 +12,5 @@ export const COLLECTIONS = {
 } as const;
 
 export const SUCCESS_CODE = 0;
-export const DEFAULT_PRODUCT_CODE = 'openai_plus';
-export const DEFAULT_PRODUCT_NAME = 'Open AI资讯会员';
+export const DEFAULT_PRODUCT_CODE = 'ai_news';
+export const DEFAULT_PRODUCT_NAME = 'Open AI 资讯会员';

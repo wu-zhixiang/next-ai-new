@@ -1,5 +1,5 @@
 import { getOrderByNo } from '../shared/db';
-import { markOrderPaidAndOpenMembership } from '../shared/orders';
+import { markOrderPaidAndStartOpening } from '../shared/orders';
 import { ok, parseWechatPayTime, toWechatPaymentAmount } from '../shared/utils';
 import {
   buildWechatPayNotifyResponse,
@@ -41,6 +41,9 @@ interface Event {
     Attach?: string;
   };
   Env?: number;
+  EventType?: string;
+  Payload?: string;
+  PayEventSig?: string;
 }
 
 interface NormalizedNotify {
@@ -63,6 +66,9 @@ interface NormalizedNotify {
   WeChatPayInfo?: Event['WeChatPayInfo'];
   GoodsInfo?: Event['GoodsInfo'];
   Env?: number;
+  EventType?: string;
+  Payload?: string;
+  PayEventSig?: string;
 }
 
 function notifyXmlResponse(returnCode: 'SUCCESS' | 'FAIL', returnMsg: string) {
@@ -76,13 +82,7 @@ function notifyXmlResponse(returnCode: 'SUCCESS' | 'FAIL', returnMsg: string) {
 }
 
 function notifyTextResponse(body: string) {
-  return {
-    statusCode: 200,
-    headers: {
-      'content-type': 'text/plain',
-    },
-    body,
-  };
+  return body;
 }
 
 export async function main(event: Event) {
@@ -167,7 +167,7 @@ export async function main(event: Event) {
   }
 
   const now = notify.paidAt ?? parseWechatPayTime(notify.time_end);
-  await markOrderPaidAndOpenMembership(order, {
+  await markOrderPaidAndStartOpening(order, {
     transactionId: notify.transactionId ?? notify.transaction_id ?? '',
     paidAt: now,
   });
@@ -221,7 +221,7 @@ async function handleVirtualPaymentNotify(notify: NormalizedNotify) {
     return notifyTextResponse('success');
   }
 
-  await markOrderPaidAndOpenMembership(order, {
+  await markOrderPaidAndStartOpening(order, {
     transactionId: notify.WeChatPayInfo?.TransactionId ?? notify.transactionId ?? '',
     paidAt: notify.WeChatPayInfo?.PaidTime ? notify.WeChatPayInfo.PaidTime * 1000 : Date.now(),
   });
@@ -268,9 +268,11 @@ function normalizeNotifyEvent(event: Event): NormalizedNotify {
   }
 
   const jsonBody = parseJsonBody(httpBody);
+  const payload = parsePayload(event.Payload ?? jsonBody.Payload);
   const eventLike = {
     ...event,
     ...jsonBody,
+    ...payload,
   };
 
   return {
@@ -299,6 +301,18 @@ function parseJsonBody(body: string): Partial<Event> {
   }
   try {
     const parsed = JSON.parse(body) as unknown;
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Partial<Event>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function parsePayload(payload?: unknown): Partial<Event> {
+  if (typeof payload !== 'string' || !payload) {
+    return {};
+  }
+  try {
+    const parsed = JSON.parse(payload) as unknown;
     return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Partial<Event>) : {};
   } catch {
     return {};

@@ -8,6 +8,7 @@ interface Props {
 
 export function MemberStatusCard({ membership }: Props): JSX.Element {
   const isActive = membership.status === 'active';
+  const isOpening = membership.status === 'opening';
 
   if (membership.status === 'none') {
     return (
@@ -28,11 +29,11 @@ export function MemberStatusCard({ membership }: Props): JSX.Element {
         <Text className='hero-unit'>天可用</Text>
       </View>
       <View className='hero-meta'>
-        <Text>{isActive ? '状态正常' : '已到期'}</Text>
-        <Text>到期 {formatDate(membership.endAt)}</Text>
+        <Text>{isActive ? '状态正常' : isOpening ? '人工开通中' : '已到期'}</Text>
+        <Text>{isOpening ? '支付成功后开始处理' : `到期 ${formatDate(membership.endAt)}`}</Text>
       </View>
       <View className='chip-row'>
-        <Text className={`chip ${isActive ? 'chip-success' : 'chip-danger'}`}>{isActive ? '会员有效' : '需要续费'}</Text>
+        <Text className={`chip ${isActive ? 'chip-success' : isOpening ? 'chip-warning' : 'chip-danger'}`}>{isActive ? '会员有效' : isOpening ? '开通中' : '需要续费'}</Text>
       </View>
     </View>
   );

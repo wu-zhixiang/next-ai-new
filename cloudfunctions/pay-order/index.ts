@@ -1,5 +1,5 @@
 import { collection, getOrderByNo, getUserById } from '../shared/db';
-import { markOrderPaidAndOpenMembership } from '../shared/orders';
+import { markOrderPaidAndStartOpening } from '../shared/orders';
 import { createWechatPayV2Order, createWechatVirtualPaymentOrder, WechatPayV2OrderError } from '../shared/wechat';
 import { getPendingOrderExpireAt, isPendingOrderExpired, ok } from '../shared/utils';
 
@@ -31,6 +31,16 @@ export async function main(event: Event) {
     throw new Error('订单已超过 30 分钟有效期，请重新下单');
   }
 
+  if (order.amount <= 0) {
+    await markOrderPaidAndStartOpening(order);
+    return ok({
+      orderNo: order.orderNo,
+      paid: true,
+      paymentType: 'points' as const,
+      message: '积分已全额抵扣，服务开通中',
+    });
+  }
+
   const user = await getUserById(order.userId);
   if (!user?.openid) {
     throw new Error('订单用户缺少 openid，无法发起微信支付');
@@ -59,7 +69,7 @@ export async function main(event: Event) {
     payment = await createWechatPayV2Order(order, user.openid);
   } catch (error) {
     if (error instanceof WechatPayV2OrderError && error.errCode === 'ORDERPAID') {
-      await markOrderPaidAndOpenMembership(order);
+      await markOrderPaidAndStartOpening(order);
       return ok({
         orderNo: order.orderNo,
         paid: true,

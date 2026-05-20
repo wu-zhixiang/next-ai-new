@@ -1,4 +1,4 @@
-export type MembershipStatus = 'active' | 'expired' | 'cancelled' | 'none';
+export type MembershipStatus = 'opening' | 'active' | 'expired' | 'cancelled' | 'none';
 export type ExpireTag = 'normal' | 'within_30d' | 'within_7d' | 'within_3d' | 'expired';
 
 export interface ApiResponse<T> {

@@ -6,26 +6,37 @@ import { SaasPageFrame } from '@/components/SaasPageFrame';
 import { SkeletonPayResult } from '@/components/Skeleton';
 import { callCloudFunction } from '@/services/api';
 import { formatDateTime } from '@/utils/format';
-import { createPayOrderPayload, requestMiniProgramPayment, type PayOrderResult } from '@/utils/payment';
+import { createPayOrderPayload, MiniProgramPaymentError, requestMiniProgramPayment, type PayOrderResult } from '@/utils/payment';
+import { hideTabBarSafely, showTabBarSafely } from '@/utils/tabbar';
 
 interface PayResultData {
   orderNo: string;
   productName?: string;
   planName?: string;
   amount?: number;
+  originalAmount?: number;
+  pointsDeducted?: number;
+  pointsDeductAmount?: number;
   createdAt?: number;
   payStatus: 'pending' | 'paid' | 'failed' | 'closed';
+  fulfillmentStatus?: 'pending' | 'opening' | 'fulfilled' | 'failed';
+  paidAt?: number;
+  fulfilledAt?: number;
   membership?: {
-    status: 'active' | 'expired';
-    startAt: number;
-    endAt: number;
-    remainDays: number;
+    status: 'opening' | 'active' | 'expired' | 'cancelled';
+    startAt?: number;
+    endAt?: number;
+    remainDays?: number;
   };
   pendingExpireAt?: number;
   canPay?: boolean;
 }
 
-type OrderViewStatus = 'completed' | 'pending' | 'abandoned';
+interface RetryOrderResult {
+  orderNo: string;
+}
+
+type OrderViewStatus = 'completed' | 'opening' | 'pending' | 'abandoned';
 const ORDER_CLOCK_ICON = require('../../assets/icons/order-clock.svg') as string;
 const ORDER_ABANDONED_ICON = require('../../assets/icons/order-abandoned.svg') as string;
 
@@ -49,9 +60,9 @@ export default function PayResultPage(): JSX.Element {
   useEffect(() => {
     if (!paymentLocked) return;
 
-    Taro.hideTabBar({ animation: false });
+    hideTabBarSafely();
     return () => {
-      Taro.showTabBar({ animation: false });
+      showTabBarSafely();
     };
   }, [paymentLocked]);
 
@@ -84,34 +95,48 @@ export default function PayResultPage(): JSX.Element {
     }
     setPaymentLocked(true);
     try {
-      const result = await callCloudFunction<PayOrderResult>('pay-order', await createPayOrderPayload(data.orderNo));
+      const retry = await callCloudFunction<RetryOrderResult>('retry-order', { orderNo: data.orderNo });
+      const nextOrderNo = retry.orderNo;
+      const result = await callCloudFunction<PayOrderResult>('pay-order', await createPayOrderPayload(nextOrderNo));
       if (result.paid || !result.payment && !result.virtualPayment) {
-        await loadResult(data.orderNo);
+        await loadResult(nextOrderNo);
         return;
       }
       try {
         await requestMiniProgramPayment(result);
       } finally {
-        await loadResult(data.orderNo);
+        await loadResult(nextOrderNo);
       }
     } catch (error) {
+      if (error instanceof MiniProgramPaymentError && error.code === 'ORDER_CLOSED') {
+        await loadResult(data.orderNo);
+      }
       Taro.showToast({ title: error instanceof Error ? error.message : '支付失败，请稍后再试', icon: 'none' });
     } finally {
       setPaymentLocked(false);
     }
   }
 
-  const orderViewStatus: OrderViewStatus = data.payStatus === 'paid' || data.membership?.status === 'active' ? 'completed' : data.payStatus === 'pending' && data.canPay ? 'pending' : 'abandoned';
+  const orderViewStatus: OrderViewStatus = data.payStatus === 'pending' && data.canPay
+    ? 'pending'
+    : data.payStatus === 'pending'
+      ? 'abandoned'
+      : data.membership?.status === 'active' || data.fulfillmentStatus === 'fulfilled'
+        ? 'completed'
+        : data.fulfillmentStatus === 'opening'
+          ? 'opening'
+          : 'abandoned';
   const isPaid = orderViewStatus === 'completed';
+  const isOpening = orderViewStatus === 'opening';
   const isPendingPayable = orderViewStatus === 'pending';
   const isAbandoned = orderViewStatus === 'abandoned';
   const remainDays = data.membership?.remainDays ?? (isPaid ? 30 : 0);
   const expiryLabel = formatDateTime(data.membership?.endAt);
-  const statusText = isPaid ? '已完成' : isPendingPayable ? '待支付' : '已废弃请重新下单';
-  const heroTitle = isPaid ? '订单已完成' : isPendingPayable ? '订单待支付' : '订单已废弃';
-  const heroDesc = isPaid ? '高级 AI 能力已成功开启' : isPendingPayable ? '请在 30 分钟内完成支付，超时需重新下单' : '该订单已超过支付有效期，请重新选择套餐下单';
-  const heroIconSrc = isPendingPayable ? ORDER_CLOCK_ICON : isAbandoned ? ORDER_ABANDONED_ICON : '';
-  const heroIconClass = isPaid ? 'pay-success__icon--success' : isPendingPayable ? 'pay-success__icon--pending' : 'pay-success__icon--abandoned';
+  const statusText = isPaid ? '已完成' : isOpening ? '开通中' : isPendingPayable ? '待支付' : '已废弃请重新下单';
+  const heroTitle = isPaid ? '订单已完成' : isOpening ? '服务开通中' : isPendingPayable ? '订单待支付' : '订单已废弃';
+  const heroDesc = isPaid ? '会员服务已完成开通' : isOpening ? '已支付成功，人工正在处理会员开通' : isPendingPayable ? '请在 30 分钟内完成支付，超时需重新下单' : '该订单已超过支付有效期，请重新选择套餐下单';
+  const heroIconSrc = isPendingPayable || isOpening ? ORDER_CLOCK_ICON : isAbandoned ? ORDER_ABANDONED_ICON : '';
+  const heroIconClass = isPaid ? 'pay-success__icon--success' : isPendingPayable || isOpening ? 'pay-success__icon--pending' : 'pay-success__icon--abandoned';
   const orderNo = data.orderNo || 'AI-REG-88291032';
 
   return (
@@ -159,12 +184,26 @@ export default function PayResultPage(): JSX.Element {
               <Text className='info-row__value'>{orderNo}</Text>
             </View>
             <View className='info-row'>
-              <Text className='info-row__label'>开通时间</Text>
-              <Text className='info-row__value'>{isPaid ? formatDateTime(data.membership?.startAt) : formatDateTime(data.createdAt)}</Text>
+              <Text className='info-row__label'>{isOpening ? '支付时间' : '开通时间'}</Text>
+              <Text className='info-row__value'>{isPaid ? formatDateTime(data.membership?.startAt) : formatDateTime(data.paidAt ?? data.createdAt)}</Text>
             </View>
             <View className='info-row'>
-              <Text className='info-row__label'>{isPendingPayable ? '支付有效期' : isAbandoned ? '废弃时间' : '到期时间'}</Text>
-              <Text className='info-row__value'>{isPendingPayable || isAbandoned ? formatDateTime(data.pendingExpireAt) : expiryLabel}</Text>
+              <Text className='info-row__label'>{isPendingPayable ? '支付有效期' : isAbandoned ? '废弃时间' : isOpening ? '服务状态' : '到期时间'}</Text>
+              <Text className='info-row__value'>{isPendingPayable || isAbandoned ? formatDateTime(data.pendingExpireAt) : isOpening ? '人工开通中' : expiryLabel}</Text>
+            </View>
+            <View className='info-row'>
+              <Text className='info-row__label'>支付金额</Text>
+              <Text className='info-row__value'>¥{(data.amount ?? 0).toFixed(2)}</Text>
+            </View>
+            {data.pointsDeducted ? (
+              <View className='info-row'>
+                <Text className='info-row__label'>积分抵扣</Text>
+                <Text className='info-row__value'>-{data.pointsDeducted} 积分</Text>
+              </View>
+            ) : null}
+            <View className='info-row'>
+              <Text className='info-row__label'>支付状态</Text>
+              <Text className='info-row__value'>{data.payStatus === 'paid' ? '已支付' : data.payStatus === 'pending' ? '待支付' : '已关闭'}</Text>
             </View>
             <View className='info-row'>
               <Text className='info-row__label'>当前状态</Text>

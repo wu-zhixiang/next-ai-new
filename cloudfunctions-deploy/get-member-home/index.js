@@ -19,7 +19,7 @@ async function main() {
             subscribeMsgAuth: false,
         });
     }
-    const membership = (_b = (_a = (await (0, db_1.getMembershipByUserId)(user._id, constants_1.DEFAULT_PRODUCT_CODE))) !== null && _a !== void 0 ? _a : (await (0, db_1.listMembershipsByUserId)(user._id)).find((item) => item.status === 'active')) !== null && _b !== void 0 ? _b : null;
+    const membership = (_b = (_a = (await (0, db_1.getMembershipByUserId)(user._id, constants_1.DEFAULT_PRODUCT_CODE))) !== null && _a !== void 0 ? _a : (await (0, db_1.listMembershipsByUserId)(user._id)).find((item) => item.status === 'active' || item.status === 'opening')) !== null && _b !== void 0 ? _b : null;
     const delivery = await (0, db_1.getDeliveryByUserId)(user._id);
     const aiAccountRegistered = Boolean(user.aiAccountRegistered || user.aiAccountEmail);
     return (0, utils_1.ok)({

@@ -15,13 +15,7 @@ function notifyXmlResponse(returnCode, returnMsg) {
     };
 }
 function notifyTextResponse(body) {
-    return {
-        statusCode: 200,
-        headers: {
-            'content-type': 'text/plain',
-        },
-        body,
-    };
+    return body;
 }
 async function main(event) {
     var _a, _b, _c;
@@ -90,7 +84,7 @@ async function main(event) {
         return notify.callbackMode ? notifyXmlResponse('SUCCESS', 'OK') : (0, utils_1.ok)({ success: true, duplicated: true });
     }
     const now = (_a = notify.paidAt) !== null && _a !== void 0 ? _a : (0, utils_1.parseWechatPayTime)(notify.time_end);
-    await (0, orders_1.markOrderPaidAndOpenMembership)(order, {
+    await (0, orders_1.markOrderPaidAndStartOpening)(order, {
         transactionId: (_c = (_b = notify.transactionId) !== null && _b !== void 0 ? _b : notify.transaction_id) !== null && _c !== void 0 ? _c : '',
         paidAt: now,
     });
@@ -132,7 +126,7 @@ async function handleVirtualPaymentNotify(notify) {
     if (order.payStatus === 'paid') {
         return notifyTextResponse('success');
     }
-    await (0, orders_1.markOrderPaidAndOpenMembership)(order, {
+    await (0, orders_1.markOrderPaidAndStartOpening)(order, {
         transactionId: (_h = (_g = (_f = notify.WeChatPayInfo) === null || _f === void 0 ? void 0 : _f.TransactionId) !== null && _g !== void 0 ? _g : notify.transactionId) !== null && _h !== void 0 ? _h : '',
         paidAt: ((_j = notify.WeChatPayInfo) === null || _j === void 0 ? void 0 : _j.PaidTime) ? notify.WeChatPayInfo.PaidTime * 1000 : Date.now(),
     });
@@ -143,6 +137,7 @@ function isVirtualPaymentNotify(notify) {
     return notify.Event === 'xpay_goods_deliver_notify' || notify.Event === 'xpay_coin_pay_notify';
 }
 function normalizeNotifyEvent(event) {
+    var _a;
     const httpBody = getHttpBody(event);
     const xml = httpBody.includes('<xml>') ? httpBody : '';
     if (xml) {
@@ -175,9 +170,11 @@ function normalizeNotifyEvent(event) {
         };
     }
     const jsonBody = parseJsonBody(httpBody);
+    const payload = parsePayload((_a = event.Payload) !== null && _a !== void 0 ? _a : jsonBody.Payload);
     const eventLike = {
         ...event,
         ...jsonBody,
+        ...payload,
     };
     return {
         raw: Object.fromEntries(Object.entries(eventLike)
@@ -201,6 +198,18 @@ function parseJsonBody(body) {
     }
     try {
         const parsed = JSON.parse(body);
+        return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    }
+    catch (_a) {
+        return {};
+    }
+}
+function parsePayload(payload) {
+    if (typeof payload !== 'string' || !payload) {
+        return {};
+    }
+    try {
+        const parsed = JSON.parse(payload);
         return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
     }
     catch (_a) {

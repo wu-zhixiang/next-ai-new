@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { Text, View } from '@tarojs/components';
 import Taro, { useDidShow, useRouter } from '@tarojs/taro';
 import { AppTransparentHeader } from '@/components/AppTransparentHeader';
-import AuthModal from '@/components/AuthModal';
+import AuthModal, { type AuthUserInfo } from '@/components/AuthModal';
 import { callCloudFunction } from '@/services/api';
 import { clearStoredInviteCode, resolveInviteCode } from '@/utils/invite';
+import { showTabBarSafely } from '@/utils/tabbar';
 
 const CACHE_KEY = 'gpt_pay_user_info';
 
@@ -18,6 +19,7 @@ interface CachedUserInfo {
   inviteCode?: string;
   pointsBalance?: number;
   aiAccountRegistered?: boolean;
+  profileAuthed?: boolean;
 }
 
 interface LoginResult extends CachedUserInfo {
@@ -63,6 +65,7 @@ export default function NewsPage() {
   const router = useRouter();
 
   useDidShow((options) => {
+    showTabBarSafely();
     const inviteCode = resolveInviteCode(router.params, options);
     setActiveInviteCode(inviteCode);
     checkAuth(inviteCode);
@@ -76,6 +79,9 @@ export default function NewsPage() {
         if (cached.userId) {
           if (inviteCode || !cached.openId && !cached.openid) {
             void syncLoginState(cached, inviteCode);
+          }
+          if (!hasUserProfile(cached)) {
+            setShowAuthModal(true);
           }
           return;
         }
@@ -98,8 +104,12 @@ export default function NewsPage() {
         ...loginResult,
         openid: loginResult.openid ?? loginResult.openId,
         openId: loginResult.openId ?? loginResult.openid,
+        profileAuthed: Boolean(loginResult.nickname || loginResult.avatarUrl),
       };
       saveToCache(nextInfo);
+      if (!hasUserProfile(nextInfo)) {
+        setShowAuthModal(true);
+      }
       if (inviteCode && loginResult.inviterUserId) {
         clearStoredInviteCode();
       }
@@ -112,7 +122,11 @@ export default function NewsPage() {
     Taro.setStorageSync(CACHE_KEY, JSON.stringify(info));
   }
 
-  function handleAuthSuccess(info: CachedUserInfo) {
+  function hasUserProfile(info: Pick<CachedUserInfo, 'nickname' | 'avatarUrl' | 'profileAuthed'>): boolean {
+    return Boolean(info.profileAuthed && (info.nickname || info.avatarUrl));
+  }
+
+  function handleAuthSuccess(info: AuthUserInfo) {
     saveToCache(info);
     if (activeInviteCode && info.inviterUserId) {
       clearStoredInviteCode();

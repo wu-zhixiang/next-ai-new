@@ -18,9 +18,19 @@ export interface WechatVirtualPaymentParams {
 export interface PayOrderResult {
   paid?: boolean;
   message?: string;
-  paymentType?: 'wechat' | 'virtual';
+  paymentType?: 'wechat' | 'virtual' | 'points';
   payment?: WechatPaymentParams;
   virtualPayment?: WechatVirtualPaymentParams;
+}
+
+export class MiniProgramPaymentError extends Error {
+  code?: string;
+
+  constructor(message: string, code?: string) {
+    super(message);
+    this.name = 'MiniProgramPaymentError';
+    this.code = code;
+  }
 }
 
 export async function createPayOrderPayload(orderNo: string): Promise<{ orderNo: string; jsCode?: string }> {
@@ -51,7 +61,15 @@ export function requestVirtualPayment(params: WechatVirtualPaymentParams): Promi
       success: () => resolve(),
       fail: (error) => {
         const errMsg = error.errMsg || '虚拟支付失败';
-        reject(new Error(errMsg));
+        if (errMsg.includes('ORDER_CLOSED')) {
+          reject(new MiniProgramPaymentError('订单已关闭，请重新下单', 'ORDER_CLOSED'));
+          return;
+        }
+        if (errMsg.includes('cancel')) {
+          reject(new MiniProgramPaymentError('支付已取消', 'PAY_CANCEL'));
+          return;
+        }
+        reject(new MiniProgramPaymentError(errMsg));
       },
     });
   });

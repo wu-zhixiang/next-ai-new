@@ -17,6 +17,8 @@ export function calcRemainDays(endAt: number, now = Date.now()): number {
 }
 
 function getPlanDurationCap(planCode?: string): number | undefined {
+  if (planCode === 'go') return 30;
+  if (planCode === 'plus') return 30;
   if (planCode === 'monthly') return 30;
   if (planCode === 'quarterly') return 90;
   if (planCode === 'annual') return 365;
@@ -70,6 +72,9 @@ export function normalizeMembership(record?: MembershipRecord | null) {
 export function getMembershipOpenStatusLabel(status: MembershipStatus): '立即开通' | '开通中' | '已开通' {
   if (status === 'active') {
     return '已开通';
+  }
+  if (status === 'opening') {
+    return '开通中';
   }
   if (status === 'none') {
     return '立即开通';

@@ -13,7 +13,7 @@
 - `WX_VIRTUAL_PAY_ENV`
   `0` 为现网，`1` 为沙箱；不配置时默认 `0`。
 - `WX_VIRTUAL_PAY_PRODUCT_ID`
-  默认虚拟商品/道具 ID。也可按套餐覆盖：`WX_VIRTUAL_PAY_PRODUCT_ID_MONTHLY`、`WX_VIRTUAL_PAY_PRODUCT_ID_QUARTERLY`、`WX_VIRTUAL_PAY_PRODUCT_ID_ANNUAL`。
+  默认虚拟商品/道具 ID。也可按套餐覆盖：`WX_VIRTUAL_PAY_PRODUCT_ID_GO`、`WX_VIRTUAL_PAY_PRODUCT_ID_PLUS`。
 
 > 旧的 `WX_PAY_MCH_ID`、`WX_PAY_API_KEY`、`WX_PAY_NOTIFY_URL` 只用于普通微信支付 V2 兜底链路。审核版会员购买订单已改为 `wechat_virtual_pay`，不会再走普通 `wx.requestPayment`。
 

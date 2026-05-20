@@ -1,6 +1,7 @@
-export type MembershipStatus = 'active' | 'expired' | 'cancelled' | 'none';
+export type MembershipStatus = 'opening' | 'active' | 'expired' | 'cancelled' | 'none';
 export type ExpireTag = 'normal' | 'within_30d' | 'within_7d' | 'within_3d' | 'expired';
 export type PayStatus = 'pending' | 'paid' | 'failed' | 'closed' | 'refunded';
+export type FulfillmentStatus = 'pending' | 'opening' | 'fulfilled' | 'failed';
 
 export interface UserRecord {
   _id?: string;
@@ -88,13 +89,19 @@ export interface OrderRecord {
   planName: string;
   orderType: 'purchase' | 'renew';
   amount: number;
+  originalAmount?: number;
+  pointsDeductionEnabled?: boolean;
+  pointsDeducted?: number;
+  pointsDeductAmount?: number;
   durationDays: number;
   payStatus: PayStatus;
+  fulfillmentStatus?: FulfillmentStatus;
   payChannel: 'wechat_pay' | 'wechat_virtual_pay';
   transactionId?: string;
   prepayId?: string;
   payExpireAt?: number;
   paidAt?: number;
+  fulfilledAt?: number;
   closedAt?: number;
   closeReason?: string;
   createdAt: number;

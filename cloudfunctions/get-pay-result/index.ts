@@ -33,15 +33,20 @@ export async function main(event: Event) {
     productName: order.productName,
     planName: order.planName,
     amount: order.amount,
+    originalAmount: order.originalAmount,
+    pointsDeducted: order.pointsDeducted,
+    pointsDeductAmount: order.pointsDeductAmount,
     createdAt: order.createdAt,
     payStatus,
+    fulfillmentStatus: order.fulfillmentStatus ?? (payStatus === 'paid' ? 'fulfilled' : 'pending'),
     paidAt: order.paidAt,
+    fulfilledAt: order.fulfilledAt,
     pendingExpireAt: order.payStatus === 'pending' || pendingExpired ? pendingExpireAt : undefined,
     canPay: payStatus === 'pending',
     membership:
-      membership && membership.status === 'active'
+      membership && (membership.status === 'active' || membership.status === 'opening')
         ? {
-            status: 'active' as const,
+            status: membership.status,
             startAt: membership.startAt,
             endAt: membership.endAt,
             remainDays: normalizeMembership(membership).remainDays ?? 0,

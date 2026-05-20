@@ -57,19 +57,7 @@ export function SkeletonOrderList({ count = 3, className = '' }: SkeletonGroupPr
 export function SkeletonInvitePage(): JSX.Element {
   return (
     <View>
-      <View className='invite-hero skeleton-invite-hero'>
-        <View className='invite-stats'>
-          <View className='invite-stat glass-card'>
-            <Skeleton width='120rpx' height='24rpx' radius='10rpx' />
-            <Skeleton className='skeleton-card__title' width='96rpx' height='56rpx' radius='16rpx' />
-          </View>
-          <View className='invite-stat glass-card'>
-            <Skeleton width='120rpx' height='24rpx' radius='10rpx' />
-            <Skeleton className='skeleton-card__title' width='150rpx' height='56rpx' radius='16rpx' />
-          </View>
-        </View>
-        <Skeleton className='skeleton-invite__button' width='100%' height='104rpx' radius='34rpx' />
-      </View>
+      <Skeleton className='invite-hero skeleton-invite-hero' height='530rpx' radius='64rpx' />
       <View className='section-head'>
         <Skeleton width='150rpx' height='34rpx' radius='12rpx' />
         <Skeleton width='96rpx' height='28rpx' radius='12rpx' />
@@ -97,19 +85,21 @@ export function SkeletonInvitePage(): JSX.Element {
 
 export function SkeletonPayResult(): JSX.Element {
   return (
-    <View>
-      <View className='pay-success'>
-        <Skeleton width='132rpx' height='132rpx' />
-        <Skeleton className='skeleton-card__title' width='240rpx' height='40rpx' radius='14rpx' />
-        <Skeleton className='skeleton-card__title' width='420rpx' height='28rpx' radius='12rpx' />
+    <View className='pay-detail-skeleton'>
+      <View className='pay-success pay-detail-skeleton__hero'>
+        <Skeleton className='pay-detail-skeleton__icon' width='192rpx' height='192rpx' />
+        <Skeleton className='pay-detail-skeleton__title' width='260rpx' height='48rpx' radius='16rpx' />
+        <Skeleton className='pay-detail-skeleton__desc' width='440rpx' height='30rpx' radius='12rpx' />
       </View>
-      <View className='pay-info-card glass-card'>
-        <Skeleton width='150rpx' height='34rpx' radius='12rpx' />
+      <View className='pay-info-card glass-card pay-detail-skeleton__card'>
+        <Skeleton className='pay-detail-skeleton__section-title' width='150rpx' height='34rpx' radius='12rpx' />
         <View className='pay-info-card__rows'>
-          <Skeleton width='100%' height='34rpx' radius='12rpx' />
-          <Skeleton width='92%' height='34rpx' radius='12rpx' />
-          <Skeleton width='86%' height='34rpx' radius='12rpx' />
-          <Skeleton width='74%' height='34rpx' radius='12rpx' />
+          {Array.from({ length: 6 }).map((_, index) => (
+            <View key={index} className='pay-detail-skeleton__row'>
+              <Skeleton width={index === 0 ? '128rpx' : '112rpx'} height='28rpx' radius='10rpx' />
+              <Skeleton width={index === 0 ? '260rpx' : index === 2 ? '132rpx' : '190rpx'} height='30rpx' radius='10rpx' />
+            </View>
+          ))}
         </View>
       </View>
     </View>

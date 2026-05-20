@@ -5,6 +5,7 @@ import { SaasPageFrame } from '@/components/SaasPageFrame';
 import { SkeletonInvitePage } from '@/components/Skeleton';
 import { callCloudFunction } from '@/services/api';
 import { formatDateTime } from '@/utils/format';
+import { showTabBarSafely } from '@/utils/tabbar';
 
 const CACHE_KEY = 'gpt_pay_user_info';
 
@@ -47,6 +48,8 @@ function getInitial(name: string): string {
   return name.trim().slice(0, 1).toUpperCase() || 'AI';
 }
 
+const FREE_SUBSCRIPTION_INVITE_TARGET = 10;
+
 export default function InvitePage(): JSX.Element {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<InviteHomeResult>({
@@ -63,6 +66,7 @@ export default function InvitePage(): JSX.Element {
   }, []);
 
   useDidShow(() => {
+    showTabBarSafely();
     void loadInviteHome();
   });
 
@@ -119,6 +123,9 @@ export default function InvitePage(): JSX.Element {
     }
   }
 
+  const inviteProgress = Math.min(data.inviteCount, FREE_SUBSCRIPTION_INVITE_TARGET);
+  const inviteProgressPercent = Math.min(100, Math.round((inviteProgress / FREE_SUBSCRIPTION_INVITE_TARGET) * 100));
+
   return (
     <SaasPageFrame title='邀请有礼' showBack={false}>
       <View className='invite-page'>
@@ -131,19 +138,29 @@ export default function InvitePage(): JSX.Element {
                 <View className='invite-hero__glow invite-hero__glow--right' />
                 <View className='invite-hero__glow invite-hero__glow--left' />
                 <View className='invite-stats'>
-                  <View className='invite-stat glass-card'>
+                  <View className='invite-stat'>
                     <Text className='invite-stat__label'>累计邀请</Text>
                     <View className='invite-stat__line'>
                       <Text className='invite-stat__value'>{formatNumber(data.inviteCount)}</Text>
                       <Text className='invite-stat__unit'>人</Text>
                     </View>
                   </View>
-                  <View className='invite-stat glass-card'>
+                  <View className='invite-stat'>
                     <Text className='invite-stat__label'>当前积分</Text>
                     <View className='invite-stat__line'>
                       <Text className='invite-stat__value'>{formatNumber(data.pointsBalance)}</Text>
                     </View>
                   </View>
+                </View>
+                <View className='invite-progress'>
+                  <View className='invite-progress__labels'>
+                    <Text>0</Text>
+                    <Text>{FREE_SUBSCRIPTION_INVITE_TARGET}</Text>
+                  </View>
+                  <View className='invite-progress__track'>
+                    <View className='invite-progress__bar' style={{ width: `${inviteProgressPercent}%` }} />
+                  </View>
+                  <Text className='invite-progress__hint'>累计邀请10人，进入免费订阅期</Text>
                 </View>
                 <Button className='saas-button invite-hero__button' openType='share'>立即邀请好友</Button>
               </View>

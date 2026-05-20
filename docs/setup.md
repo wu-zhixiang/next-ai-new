@@ -47,6 +47,8 @@ npm install
 - `pay-order`
 - `get-pay-result`
 - `pay-notify`
+- `fulfill-membership`
+- `retry-order`
 - `seed-database`
 
 ## 5. 支付环境配置
@@ -58,7 +60,7 @@ npm install
   - `WX_VIRTUAL_PAY_OFFER_ID`
   - `WX_VIRTUAL_PAY_APP_KEY`
   - `WX_VIRTUAL_PAY_ENV`，沙箱填 `1`，现网填 `0`
-  - `WX_VIRTUAL_PAY_PRODUCT_ID`，或按套餐配置 `WX_VIRTUAL_PAY_PRODUCT_ID_MONTHLY` 等
+  - `WX_VIRTUAL_PAY_PRODUCT_ID`，或按套餐配置 `WX_VIRTUAL_PAY_PRODUCT_ID_GO`、`WX_VIRTUAL_PAY_PRODUCT_ID_PLUS`
 - 小程序后台虚拟支付回调 URL 指向 `pay-notify` 的 HTTP 访问服务地址。
 
 ## 6. 当前手机号绑定说明

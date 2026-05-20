@@ -27,14 +27,15 @@ export default function IndexPage(): JSX.Element {
   }
 
   const isActive = membership.status === 'active';
+  const isOpening = membership.status === 'opening';
   const remainDays = membership.remainDays ?? 0;
-  const statusLabel = membership.status === 'none' ? '未开通' : isActive ? '已激活' : '待续费';
-  const planLabel = membership.planName ?? 'Open AI资讯会员';
-  const expiryLabel = membership.status === 'none' ? '购买后自动开始计时' : `到期日 ${formatDate(membership.endAt)}`;
+  const statusLabel = membership.status === 'none' ? '未开通' : isActive ? '已激活' : isOpening ? '开通中' : '待续费';
+  const planLabel = membership.planName ?? 'Open AI 资讯会员';
+  const expiryLabel = membership.status === 'none' ? '购买后自动开始计时' : isOpening ? '人工开通中' : `到期日 ${formatDate(membership.endAt)}`;
 
   return (
     <View className='page home-page'>
-      <AppTransparentHeader title='Open AI资讯会员' showBack={false} />
+      <AppTransparentHeader title='Open AI 资讯会员' showBack={false} />
       <View className='home-grid' />
       <View className='home-orb home-orb--cyan' />
       <View className='home-orb home-orb--blue' />

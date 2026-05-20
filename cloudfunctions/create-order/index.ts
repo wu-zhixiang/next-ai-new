@@ -5,6 +5,11 @@ import { getWxContext } from '../_lib/context';
 
 interface Event {
   planCode: string;
+  usePointsDeduction?: boolean;
+}
+
+function normalizeAmount(amount: number): number {
+  return Number(amount.toFixed(2));
 }
 
 export async function main(event: Event) {
@@ -40,6 +45,10 @@ export async function main(event: Event) {
   );
 
   const orderNo = createOrderNo();
+  const availablePoints = Math.max(0, Math.floor(user.pointsBalance ?? 0));
+  const maxDeductiblePoints = Math.floor(plan.price);
+  const pointsDeducted = event.usePointsDeduction ? Math.min(availablePoints, maxDeductiblePoints) : 0;
+  const payableAmount = normalizeAmount(Math.max(0, plan.price - pointsDeducted));
   const order: OrderRecord = {
     orderNo,
     userId: user._id,
@@ -48,9 +57,14 @@ export async function main(event: Event) {
     planCode: plan.planCode,
     planName: plan.planName,
     orderType: existingMembership ? 'renew' : 'purchase',
-    amount: plan.price,
+    amount: payableAmount,
+    originalAmount: normalizeAmount(plan.price),
+    pointsDeductionEnabled: Boolean(event.usePointsDeduction),
+    pointsDeducted,
+    pointsDeductAmount: pointsDeducted,
     durationDays: plan.durationDays,
     payStatus: 'pending',
+    fulfillmentStatus: 'pending',
     payChannel: 'wechat_virtual_pay',
     createdAt: now,
     updatedAt: now,
@@ -62,7 +76,10 @@ export async function main(event: Event) {
     orderNo,
     productCode: plan.productCode,
     productName: plan.productName,
-    amount: plan.price,
+    amount: payableAmount,
+    originalAmount: normalizeAmount(plan.price),
+    pointsDeducted,
+    pointsDeductAmount: pointsDeducted,
     planName: plan.planName,
     durationDays: plan.durationDays,
   });

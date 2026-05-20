@@ -9,6 +9,20 @@
     "miniprogram": {
       "list": [
         {
+          "name": "pages/pay-result/index",
+          "pathName": "pages/pay-result/index",
+          "query": "orderNo=ORD177929024340992016",
+          "launchMode": "default",
+          "scene": null
+        },
+        {
+          "name": "pages/member/index",
+          "pathName": "pages/member/index",
+          "query": "",
+          "launchMode": "default",
+          "scene": null
+        },
+        {
           "name": "pages/member/index",
           "pathName": "pages/member/index",
           "query": "",
