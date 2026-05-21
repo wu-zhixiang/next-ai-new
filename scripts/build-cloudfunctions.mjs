@@ -56,6 +56,7 @@ execFileSync(
     path.join(sourceRoot, 'shared', 'constants.ts'),
     path.join(sourceRoot, 'shared', 'ai-account.ts'),
     path.join(sourceRoot, 'shared', 'db.ts'),
+    path.join(sourceRoot, 'shared', 'operator-notify.ts'),
     path.join(sourceRoot, 'shared', 'orders.ts'),
     path.join(sourceRoot, 'shared', 'types.ts'),
     path.join(sourceRoot, 'shared', 'utils.ts'),

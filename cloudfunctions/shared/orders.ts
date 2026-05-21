@@ -1,4 +1,5 @@
 import { _, collection, getMembershipByUserId, getUserById } from './db';
+import { notifyOperatorPaidOrderOnce } from './operator-notify';
 import type { MembershipRecord, OrderRecord, PointsLedgerRecord } from './types';
 import { calcMembershipRemainDays } from './utils';
 
@@ -183,6 +184,13 @@ export async function markOrderPaidAndStartOpening(
   const finalizedAt = options.paidAt ?? order.paidAt ?? Date.now();
   await deductPaymentPointsOnce(order, finalizedAt);
   await rewardInviterOnce(order, finalizedAt);
+  await notifyOperatorPaidOrderOnce({
+    ...order,
+    payStatus: 'paid',
+    fulfillmentStatus: 'opening',
+    transactionId: options.transactionId ?? order.transactionId,
+    paidAt: finalizedAt,
+  });
 }
 
 export async function fulfillPaidOrderMembership(

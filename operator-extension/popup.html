@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>运营助手</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Open AI 资讯会员</p>
+          <h1>待开通</h1>
+        </div>
+        <button id="refreshBtn" class="icon-button" title="刷新" type="button">↻</button>
+      </header>
+
+      <section id="setupNotice" class="notice hidden">
+        <strong>需要先配置接口</strong>
+        <span>填写云函数 HTTP 地址和管理密钥后开始处理订单。</span>
+        <button id="openOptionsBtn" type="button">去配置</button>
+      </section>
+
+      <section class="toolbar">
+        <button id="openChatgptBtn" class="secondary-button" type="button">打开 ChatGPT</button>
+        <button id="loadBtn" class="primary-button" type="button">加载任务</button>
+      </section>
+
+      <section id="summary" class="summary hidden">
+        <span id="taskCount">0</span>
+        <span>个订单等待人工开通</span>
+      </section>
+
+      <section id="emptyState" class="empty hidden">
+        <p>暂无待开通订单</p>
+        <span>支付成功后的订单会出现在这里。</span>
+      </section>
+
+      <section id="taskList" class="task-list"></section>
+    </main>
+
+    <template id="taskTemplate">
+      <article class="task-card">
+        <div class="task-card__head">
+          <div>
+            <p class="task-card__product"></p>
+            <h2 class="task-card__plan"></h2>
+          </div>
+          <span class="task-card__amount"></span>
+        </div>
+
+        <dl class="meta-grid">
+          <div>
+            <dt>订单号</dt>
+            <dd class="task-card__order"></dd>
+          </div>
+          <div>
+            <dt>支付时间</dt>
+            <dd class="task-card__paid-at"></dd>
+          </div>
+        </dl>
+
+        <div class="credential">
+          <label>账号</label>
+          <div class="copy-row">
+            <input class="task-card__email" readonly />
+            <button class="copy-email" type="button">复制</button>
+          </div>
+        </div>
+
+        <div class="credential">
+          <label>密码</label>
+          <div class="copy-row">
+            <input class="task-card__password" readonly type="password" />
+            <button class="copy-password" type="button">复制</button>
+          </div>
+        </div>
+
+        <textarea class="task-card__note" placeholder="处理备注，例如账号已注册、需重试"></textarea>
+
+        <div class="actions">
+          <button class="open-site secondary-button" type="button">打开官网</button>
+          <button class="mark-processing secondary-button" type="button">处理中</button>
+          <button class="mark-done primary-button" type="button">已开通</button>
+        </div>
+      </article>
+    </template>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

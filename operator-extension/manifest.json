@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Open AI 资讯会员运营助手",
+  "description": "处理待开通会员订单，复制交付账号信息，并确认人工开通。",
+  "version": "0.1.0",
+  "action": {
+    "default_title": "运营助手",
+    "default_popup": "popup.html"
+  },
+  "options_page": "options.html",
+  "permissions": [
+    "storage",
+    "clipboardWrite",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://*/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  }
+}

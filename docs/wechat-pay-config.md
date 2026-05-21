@@ -25,6 +25,18 @@
 - `pay-notify` 兼容虚拟支付消息推送事件 `xpay_goods_deliver_notify` 和 `xpay_coin_pay_notify`，按 `OutTradeNo` 幂等更新订单和会员。
 - 在小程序后台配置虚拟支付回调时，回调 URL 指向 `pay-notify` 的 HTTP 访问地址；校验请求携带 `echostr` 时函数会原样返回。
 - 订单金额在业务表中继续按“元”存储，调用云支付时转换为“分”。
+- 支付成功后会进入人工开通流程，订单 `fulfillmentStatus` 更新为 `opening`，并通过运营通知通道提醒后台开通。
+
+## 运营通知
+
+通知由公共订单成功逻辑触发，不依赖某一个具体支付入口。可选环境变量：
+
+- `WEWORK_BOT_WEBHOOK`：企业微信群机器人 Webhook。
+- `PUSHPLUS_TOKEN`：PushPlus token。
+- `SERVERCHAN_SENDKEY`：Server酱 SendKey。
+- `OPERATOR_NOTIFY_ENABLED=0`：临时关闭通知。
+
+通知内容不包含账号密码明文，只提示运营人员打开运营插件查看。
 
 ## 参考
 

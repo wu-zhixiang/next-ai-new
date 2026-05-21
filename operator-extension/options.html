@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>运营助手配置</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main class="settings">
+      <h1>运营助手配置</h1>
+      <p class="intro">配置云函数 HTTP API 地址和管理密钥。密钥只保存在本机浏览器。</p>
+
+      <label>
+        <span>API Base URL</span>
+        <input id="apiBaseUrl" placeholder="https://xxx.service.tcloudbase.com" />
+      </label>
+
+      <label>
+        <span>管理密钥</span>
+        <input id="operatorToken" type="password" placeholder="OPERATOR_API_TOKEN" />
+      </label>
+
+      <label>
+        <span>ChatGPT 官网地址</span>
+        <input id="chatgptUrl" placeholder="https://chatgpt.com/" />
+      </label>
+
+      <div class="actions">
+        <button id="saveBtn" type="button">保存配置</button>
+        <span id="status"></span>
+      </div>
+
+      <section class="contract">
+        <h2>插件期望的后端接口</h2>
+        <code>GET /operator/tasks?status=opening</code>
+        <code>POST /operator/tasks/:orderNo</code>
+      </section>
+    </main>
+
+    <script src="options.js"></script>
+  </body>
+</html>

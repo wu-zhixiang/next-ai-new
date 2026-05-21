@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.markOrderPaidAndStartOpening = markOrderPaidAndStartOpening;
 exports.fulfillPaidOrderMembership = fulfillPaidOrderMembership;
 const db_1 = require("./db");
+const operator_notify_1 = require("./operator-notify");
 const utils_1 = require("./utils");
 function calcInviteRewardPoints(amount) {
     // 1 积分 = 1 元；邀请奖励按被邀请人实付金额的 10% 向下取整。
@@ -119,7 +120,7 @@ async function rewardInviterOnce(order, paidAt) {
     });
 }
 async function markOrderPaidAndStartOpening(order, options = {}) {
-    var _a, _b, _c, _d, _e, _f, _g;
+    var _a, _b, _c, _d, _e, _f, _g, _h;
     if (order.payStatus !== 'paid') {
         const paidAt = (_a = options.paidAt) !== null && _a !== void 0 ? _a : Date.now();
         await (0, db_1.collection)('orders').doc(order._id).update({
@@ -170,6 +171,13 @@ async function markOrderPaidAndStartOpening(order, options = {}) {
     const finalizedAt = (_g = (_f = options.paidAt) !== null && _f !== void 0 ? _f : order.paidAt) !== null && _g !== void 0 ? _g : Date.now();
     await deductPaymentPointsOnce(order, finalizedAt);
     await rewardInviterOnce(order, finalizedAt);
+    await (0, operator_notify_1.notifyOperatorPaidOrderOnce)({
+        ...order,
+        payStatus: 'paid',
+        fulfillmentStatus: 'opening',
+        transactionId: (_h = options.transactionId) !== null && _h !== void 0 ? _h : order.transactionId,
+        paidAt: finalizedAt,
+    });
 }
 async function fulfillPaidOrderMembership(order, options = {}) {
     var _a;

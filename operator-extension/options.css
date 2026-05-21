@@ -1,0 +1,98 @@
+:root {
+  --bg: #f6f8f7;
+  --card: #fff;
+  --ink: #151c27;
+  --muted: #66716d;
+  --line: #dce5e1;
+  --primary: #31685c;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+}
+
+.settings {
+  max-width: 720px;
+  margin: 56px auto;
+  padding: 32px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--card);
+  box-shadow: 0 14px 40px rgba(15, 23, 42, 0.08);
+}
+
+h1 {
+  margin: 0;
+  font-size: 28px;
+}
+
+.intro {
+  margin: 8px 0 28px;
+  color: var(--muted);
+}
+
+label {
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+  font-weight: 700;
+}
+
+input {
+  height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0 12px;
+  font: inherit;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 24px;
+}
+
+button {
+  height: 40px;
+  border: 0;
+  border-radius: 10px;
+  padding: 0 18px;
+  background: var(--primary);
+  color: #fff;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+#status {
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.contract {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+
+.contract h2 {
+  margin: 0 0 12px;
+  font-size: 18px;
+}
+
+code {
+  display: block;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #f1f5f3;
+  color: #154f45;
+}
