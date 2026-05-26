@@ -104,6 +104,9 @@ export interface OrderRecord {
   fulfilledAt?: number;
   operatorNotifiedAt?: number;
   operatorNotifyChannel?: string;
+  operatorProcessingAt?: number;
+  operatorFailedAt?: number;
+  operatorNote?: string;
   closedAt?: number;
   closeReason?: string;
   createdAt: number;

@@ -49,6 +49,8 @@ npm install
 - `pay-notify`
 - `fulfill-membership`
 - `retry-order`
+- `reset-database`
+- `operator-api`
 - `seed-database`
 
 ## 5. 支付环境配置
@@ -80,9 +82,77 @@ npm install
 
 通知逻辑在公共支付成功链路中触发，因此 `pay-order` 查询支付成功、`pay-notify` 微信回调成功都会覆盖。通知失败不会阻塞订单支付状态更新，失败原因会写入云函数日志。
 
-## 7. 当前手机号绑定说明
+## 7. 运营插件接口配置
+
+运营插件通过 `operator-api` 云函数读取待开通订单、查看账号密码，并把订单标记为处理中或已开通。
+
+需要给 `operator-api` 配置：
+
+- `OPERATOR_API_TOKEN`
+  运营接口访问密钥，建议使用 32 位以上随机字符串。
+- `AI_ACCOUNT_SECRET`
+  必须与 `save-ai-account` 使用的密码加密密钥一致，否则运营插件无法解密用户提交的账号密码。
+
+部署 `operator-api` 后，在云开发控制台开启 HTTP 访问服务。插件设置页填写：
+
+- `API Base URL`
+  填 `operator-api` 的 HTTP 访问地址，不需要自己追加 `/operator/tasks`。
+- `运营密钥`
+  填与 `OPERATOR_API_TOKEN` 完全一致的值。
+
+## 8. 当前手机号绑定说明
 
 - 小程序启动时会静默调用 `user-login`，不再强制先进入登录页。
 - `bind-mobile` 当前在套餐页首购时通过微信手机号授权直接触发，不单独保留绑定页面。
 - 现阶段云函数通过 `openapi.phonenumber.getPhoneNumber` 直接换取真实手机号并落库。
 - 前端只展示脱敏后的手机号，不再依赖占位值。
+
+## 9. 清理测试数据
+
+使用 `reset-database` 云函数清除测试业务数据，并重新初始化会员套餐。为避免误删，必须传确认字符串。
+
+先 dry run 看影响范围：
+
+```json
+{
+  "confirm": "RESET_TEST_DATABASE",
+  "dryRun": true
+}
+```
+
+正式清理默认会清除以下集合：
+
+- `memberships`
+- `orders`
+- `deliveries`
+- `invite_relations`
+- `points_ledger`
+- `email_verification_codes`
+- `reminder_logs`
+- `audit_logs`
+
+同时会把 `users.pointsBalance` 重置为 `0`，并重新初始化 `member_plans` 中的 GO / PLUS 套餐：
+
+```json
+{
+  "confirm": "RESET_TEST_DATABASE"
+}
+```
+
+如果连测试用户也要清除：
+
+```json
+{
+  "confirm": "RESET_TEST_DATABASE",
+  "includeUsers": true
+}
+```
+
+如果要先清空套餐表再重建：
+
+```json
+{
+  "confirm": "RESET_TEST_DATABASE",
+  "includeMemberPlans": true
+}
+```

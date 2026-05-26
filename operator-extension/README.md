@@ -8,6 +8,7 @@
 - 展示订单号、套餐、金额、支付时间
 - 一键复制用户注册账号
 - 一键复制用户注册密码
+- 明文获取当前订单邮箱最近一次验证码，并自动复制
 - 一键打开 ChatGPT 官网
 - 标记处理中
 - 标记已开通
@@ -29,6 +30,13 @@
 GET /operator/tasks?status=opening
 POST /operator/tasks/:orderNo
 ```
+
+当前项目已提供 `operator-api` 云函数。部署后，在插件设置页中：
+
+- `API Base URL` 填 `operator-api` 的 HTTP 访问地址。
+- `运营密钥` 填云函数环境变量 `OPERATOR_API_TOKEN` 的值。
+
+`operator-api` 还需要配置 `AI_ACCOUNT_SECRET`，并且必须与小程序保存账号密码时使用的密钥一致。
 
 建议后端返回格式：
 
@@ -68,6 +76,12 @@ processing
 fulfilled
 failed
 ```
+
+处理含义：
+
+- `processing`：只标记订单正在人工处理。
+- `fulfilled`：调用会员开通逻辑，会员开始计时。
+- `failed`：标记开通失败，保留备注供排查。
 
 ## 安全约定
 

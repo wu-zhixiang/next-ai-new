@@ -13,8 +13,10 @@ export async function main(event: Event) {
 
   const now = Date.now();
   const lastPayAttemptAt = order.prepayId ? order.updatedAt : undefined;
-  const pendingExpireAt = getPendingOrderExpireAt(order.createdAt, order.payExpireAt, lastPayAttemptAt);
-  const pendingExpired = order.payStatus === 'pending' && isPendingOrderExpired(order.createdAt, now, order.payExpireAt, lastPayAttemptAt);
+  const isOpening = order.fulfillmentStatus === 'opening';
+  const isPending = order.payStatus === 'pending' && !isOpening;
+  const pendingExpireAt = isPending ? getPendingOrderExpireAt(order.createdAt, order.payExpireAt, lastPayAttemptAt) : undefined;
+  const pendingExpired = isPending && isPendingOrderExpired(order.createdAt, now, order.payExpireAt, lastPayAttemptAt);
   const payStatus = pendingExpired ? 'closed' : order.payStatus;
   if (pendingExpired) {
     await collection('orders').doc(order._id).update({
@@ -41,8 +43,8 @@ export async function main(event: Event) {
     fulfillmentStatus: order.fulfillmentStatus ?? (payStatus === 'paid' ? 'fulfilled' : 'pending'),
     paidAt: order.paidAt,
     fulfilledAt: order.fulfilledAt,
-    pendingExpireAt: order.payStatus === 'pending' || pendingExpired ? pendingExpireAt : undefined,
-    canPay: payStatus === 'pending',
+    pendingExpireAt,
+    canPay: payStatus === 'pending' && !isOpening,
     membership:
       membership && (membership.status === 'active' || membership.status === 'opening')
         ? {

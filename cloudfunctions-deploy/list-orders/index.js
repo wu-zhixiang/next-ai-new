@@ -15,6 +15,8 @@ async function main() {
         orders: orders.map((order) => {
             var _a;
             const lastPayAttemptAt = order.prepayId ? order.updatedAt : undefined;
+            const isOpening = order.fulfillmentStatus === 'opening';
+            const isPending = order.payStatus === 'pending' && !isOpening;
             return {
                 orderNo: order.orderNo,
                 productCode: order.productCode,
@@ -31,8 +33,8 @@ async function main() {
                 createdAt: order.createdAt,
                 paidAt: order.paidAt,
                 fulfilledAt: order.fulfilledAt,
-                pendingExpireAt: order.payStatus === 'pending' ? (0, utils_1.getPendingOrderExpireAt)(order.createdAt, order.payExpireAt, lastPayAttemptAt) : undefined,
-                canPay: order.payStatus === 'pending' && !(0, utils_1.isPendingOrderExpired)(order.createdAt, Date.now(), order.payExpireAt, lastPayAttemptAt),
+                pendingExpireAt: isPending ? (0, utils_1.getPendingOrderExpireAt)(order.createdAt, order.payExpireAt, lastPayAttemptAt) : undefined,
+                canPay: isPending && !(0, utils_1.isPendingOrderExpired)(order.createdAt, Date.now(), order.payExpireAt, lastPayAttemptAt),
             };
         }),
     });

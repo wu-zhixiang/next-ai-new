@@ -117,15 +117,13 @@ export default function PayResultPage(): JSX.Element {
     }
   }
 
-  const orderViewStatus: OrderViewStatus = data.payStatus === 'pending' && data.canPay
-    ? 'pending'
-    : data.payStatus === 'pending'
-      ? 'abandoned'
-      : data.membership?.status === 'active' || data.fulfillmentStatus === 'fulfilled'
+  const orderViewStatus: OrderViewStatus = data.membership?.status === 'active' || data.fulfillmentStatus === 'fulfilled'
         ? 'completed'
         : data.fulfillmentStatus === 'opening'
           ? 'opening'
-          : 'abandoned';
+          : data.payStatus === 'pending' && data.canPay
+            ? 'pending'
+            : 'abandoned';
   const isPaid = orderViewStatus === 'completed';
   const isOpening = orderViewStatus === 'opening';
   const isPendingPayable = orderViewStatus === 'pending';

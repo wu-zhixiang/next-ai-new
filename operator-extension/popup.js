@@ -14,10 +14,17 @@ const els = {
   taskTemplate: document.querySelector('#taskTemplate'),
   emptyState: document.querySelector('#emptyState'),
   summary: document.querySelector('#summary'),
-  taskCount: document.querySelector('#taskCount')
+  taskCount: document.querySelector('#taskCount'),
+  confirmDialog: document.querySelector('#confirmDialog'),
+  confirmOrderNo: document.querySelector('#confirmOrderNo'),
+  cancelFulfillBtn: document.querySelector('#cancelFulfillBtn'),
+  confirmFulfillBtn: document.querySelector('#confirmFulfillBtn'),
+  toast: document.querySelector('#toast')
 };
 
 let settings = { ...DEFAULT_SETTINGS };
+let pendingFulfill = null;
+let toastTimer = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
   settings = await getSettings();
@@ -33,6 +40,13 @@ function bindActions() {
   els.refreshBtn.addEventListener('click', loadTasks);
   els.loadBtn.addEventListener('click', loadTasks);
   els.openChatgptBtn.addEventListener('click', () => openTab(settings.chatgptUrl || DEFAULT_SETTINGS.chatgptUrl));
+  els.cancelFulfillBtn.addEventListener('click', closeFulfillConfirm);
+  els.confirmDialog.addEventListener('click', (event) => {
+    if (event.target === els.confirmDialog) {
+      closeFulfillConfirm();
+    }
+  });
+  els.confirmFulfillBtn.addEventListener('click', confirmFulfillTask);
 }
 
 function getSettings() {
@@ -85,14 +99,56 @@ function renderTasks(tasks) {
     node.querySelector('.task-card__email').value = task.email || '';
     node.querySelector('.task-card__password').value = task.password || '';
 
-    node.querySelector('.copy-email').addEventListener('click', () => copyText(task.email || ''));
-    node.querySelector('.copy-password').addEventListener('click', () => copyText(task.password || ''));
+    node.querySelector('.copy-email').addEventListener('click', () => copyText(task.email || '', '账号已复制'));
+    node.querySelector('.copy-password').addEventListener('click', () => copyText(task.password || '', '密码已复制'));
+    node.querySelector('.fetch-code').addEventListener('click', (event) => fetchVerificationCode(task.orderNo, node, event.currentTarget));
     node.querySelector('.open-site').addEventListener('click', () => openTab(settings.chatgptUrl || DEFAULT_SETTINGS.chatgptUrl));
     node.querySelector('.mark-processing').addEventListener('click', () => updateTask(task.orderNo, 'processing', node));
-    node.querySelector('.mark-done').addEventListener('click', () => updateTask(task.orderNo, 'fulfilled', node));
+    node.querySelector('.mark-done').addEventListener('click', () => openFulfillConfirm(task.orderNo, node));
 
     els.taskList.appendChild(node);
   });
+}
+
+async function fetchVerificationCode(orderNo, node, button) {
+  if (!orderNo) return;
+  const originalText = button.textContent;
+  button.disabled = true;
+  button.textContent = '获取中';
+  try {
+    const result = await apiRequest(`/operator/tasks/${encodeURIComponent(orderNo)}/verification-code`, { method: 'GET' });
+    const code = result.code || '';
+    node.querySelector('.task-card__code').value = code;
+    await copyText(code, '验证码已复制');
+  } catch (error) {
+    showError(error);
+  } finally {
+    button.disabled = false;
+    button.textContent = originalText;
+  }
+}
+
+function openFulfillConfirm(orderNo, node) {
+  if (!orderNo) return;
+  pendingFulfill = { orderNo, node };
+  els.confirmOrderNo.textContent = orderNo;
+  els.confirmDialog.classList.remove('hidden');
+}
+
+function closeFulfillConfirm() {
+  pendingFulfill = null;
+  els.confirmDialog.classList.add('hidden');
+  els.confirmFulfillBtn.disabled = false;
+  els.confirmFulfillBtn.textContent = '确认已开通';
+}
+
+async function confirmFulfillTask() {
+  if (!pendingFulfill) return;
+  const { orderNo, node } = pendingFulfill;
+  els.confirmFulfillBtn.disabled = true;
+  els.confirmFulfillBtn.textContent = '提交中';
+  await updateTask(orderNo, 'fulfilled', node);
+  closeFulfillConfirm();
 }
 
 async function updateTask(orderNo, status, node) {
@@ -114,6 +170,7 @@ async function updateTask(orderNo, status, node) {
     node.classList.add('is-processing');
   } catch (error) {
     showError(error);
+    throw error;
   }
 }
 
@@ -134,9 +191,10 @@ async function apiRequest(path, options = {}) {
   return payload.data || payload;
 }
 
-async function copyText(text) {
+async function copyText(text, message = '复制成功') {
   if (!text) return;
   await navigator.clipboard.writeText(text);
+  showToast(message);
 }
 
 function openTab(url) {
@@ -154,6 +212,19 @@ function showError(error) {
   els.emptyState.classList.remove('hidden');
   els.emptyState.querySelector('p').textContent = message;
   els.emptyState.querySelector('span').textContent = '请检查配置或稍后重试。';
+  showToast(message);
+}
+
+function showToast(message) {
+  if (!message) return;
+  if (toastTimer) {
+    clearTimeout(toastTimer);
+  }
+  els.toast.textContent = message;
+  els.toast.classList.remove('hidden');
+  toastTimer = setTimeout(() => {
+    els.toast.classList.add('hidden');
+  }, 1600);
 }
 
 function formatMoney(value) {
