@@ -66,6 +66,7 @@ export function normalizeMembership(record?: MembershipRecord | null) {
     startAt: record.startAt,
     endAt: record.endAt,
     remainDays: calcMembershipRemainDays(record),
+    autoRenewStatus: record.autoRenewStatus,
   };
 }
 

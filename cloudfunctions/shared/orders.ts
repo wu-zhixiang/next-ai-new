@@ -1,4 +1,5 @@
 import { _, collection, getMembershipByUserId, getUserById } from './db';
+import { sendMembershipOpenedReminder } from './member-reminders';
 import { notifyOperatorPaidOrderOnce } from './operator-notify';
 import type { MembershipRecord, OrderRecord, PointsLedgerRecord } from './types';
 import { calcMembershipRemainDays } from './utils';
@@ -252,4 +253,16 @@ export async function fulfillPaidOrderMembership(
       updatedAt: fulfilledAt,
     },
   });
+
+  try {
+    await sendMembershipOpenedReminder(order, {
+      endAt,
+      createdAt: fulfilledAt,
+    });
+  } catch (error) {
+    console.warn('membership.opened.reminder.failed', {
+      orderNo: order.orderNo,
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
 }

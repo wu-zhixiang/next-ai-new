@@ -51,6 +51,7 @@ npm install
 - `retry-order`
 - `reset-database`
 - `operator-api`
+- `send-renew-reminders`
 - `seed-database`
 
 ## 5. 支付环境配置
@@ -107,7 +108,24 @@ npm install
 - 现阶段云函数通过 `openapi.phonenumber.getPhoneNumber` 直接换取真实手机号并落库。
 - 前端只展示脱敏后的手机号，不再依赖占位值。
 
-## 9. 清理测试数据
+## 9. 续费提醒
+
+当前续费采用“用户手动续费 + 到期前 2 天提醒”：
+
+- 支付成功后，小程序会自动弹出续费提醒授权。
+- 会员剩余时间小于等于 2 天时，会员中心卡片按钮展示为“立即续费”。
+- `send-renew-reminders` 云函数负责扫描 2 天内到期会员，并发送订阅消息。
+
+需要配置：
+
+- 前端构建环境变量 `TARO_APP_RENEW_REMINDER_TEMPLATE_ID`
+  用于 `wx.requestSubscribeMessage` 申请用户授权。
+- 云函数环境变量 `WX_RENEW_REMINDER_TEMPLATE_ID`
+  用于 `send-renew-reminders` 发送订阅消息。
+
+建议在云开发定时触发器中每天执行一次 `send-renew-reminders`。
+
+## 10. 清理测试数据
 
 使用 `reset-database` 云函数清除测试业务数据，并重新初始化会员套餐。为避免误删，必须传确认字符串。
 

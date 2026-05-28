@@ -176,6 +176,7 @@ export interface MembershipView {
   startAt?: number;
   endAt?: number;
   remainDays?: number;
+  autoRenewStatus?: 'off' | 'on' | 'cancelled' | 'renew_failed';
 }
 
 export interface AiAccountView {

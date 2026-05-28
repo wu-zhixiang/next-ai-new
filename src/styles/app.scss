@@ -827,10 +827,11 @@ button::after {
 .member-days__value {
   display: block;
   color: #fffaf0;
-  font-size: 72rpx;
+  font-size: 64rpx;
   line-height: 1;
   font-weight: 600;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
+  white-space: nowrap;
 }
 
 .member-days__label,
@@ -1268,6 +1269,56 @@ button::after {
 .plan-option__period {
   color: var(--muted);
   font-size: 22rpx;
+}
+
+.plan-sheet__subscribe {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24rpx;
+  margin-top: 24rpx;
+  padding: 24rpx;
+  border-radius: 28rpx;
+  background: #fff8ea;
+  border: 1rpx solid rgba(189, 137, 54, 0.28);
+}
+
+.plan-sheet__subscribe--active {
+  background: rgba(255, 244, 199, 0.86);
+  border-color: rgba(189, 137, 54, 0.52);
+}
+
+.plan-sheet__subscribe-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  flex-wrap: wrap;
+}
+
+.plan-sheet__subscribe-title {
+  color: #151c27;
+  font-size: 26rpx;
+  line-height: 1.4;
+  font-weight: 800;
+}
+
+.plan-sheet__subscribe-badge {
+  padding: 4rpx 12rpx;
+  border-radius: 999rpx;
+  background: #8b5a12;
+  color: #fff8ea;
+  font-size: 20rpx;
+  line-height: 1.4;
+  font-weight: 800;
+}
+
+.plan-sheet__subscribe-desc {
+  display: block;
+  margin-top: 8rpx;
+  color: #70552a;
+  font-size: 22rpx;
+  line-height: 1.45;
+  font-weight: 600;
 }
 
 .plan-sheet__points {

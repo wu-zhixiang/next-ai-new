@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.markOrderPaidAndStartOpening = markOrderPaidAndStartOpening;
 exports.fulfillPaidOrderMembership = fulfillPaidOrderMembership;
 const db_1 = require("./db");
+const member_reminders_1 = require("./member-reminders");
 const operator_notify_1 = require("./operator-notify");
 const utils_1 = require("./utils");
 function calcInviteRewardPoints(amount) {
@@ -232,4 +233,16 @@ async function fulfillPaidOrderMembership(order, options = {}) {
             updatedAt: fulfilledAt,
         },
     });
+    try {
+        await (0, member_reminders_1.sendMembershipOpenedReminder)(order, {
+            endAt,
+            createdAt: fulfilledAt,
+        });
+    }
+    catch (error) {
+        console.warn('membership.opened.reminder.failed', {
+            orderNo: order.orderNo,
+            message: error instanceof Error ? error.message : String(error),
+        });
+    }
 }

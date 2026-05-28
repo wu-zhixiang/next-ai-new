@@ -77,6 +77,7 @@ function normalizeMembership(record) {
         startAt: record.startAt,
         endAt: record.endAt,
         remainDays: calcMembershipRemainDays(record),
+        autoRenewStatus: record.autoRenewStatus,
     };
 }
 function getMembershipOpenStatusLabel(status) {

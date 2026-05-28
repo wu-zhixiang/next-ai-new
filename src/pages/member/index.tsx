@@ -9,7 +9,7 @@ import type { MembershipView, PlanView } from '@/types';
 import { formatDate } from '@/utils/format';
 import { isMobileBound } from '@/utils/mobile';
 import { createPayOrderPayload, requestMiniProgramPayment, type PayOrderResult } from '@/utils/payment';
-import { enableReminderSubscription } from '@/utils/subscription';
+import { disableReminderSubscription, enableReminderSubscription } from '@/utils/subscription';
 import { hideTabBarSafely, showTabBarSafely } from '@/utils/tabbar';
 
 interface MemberHomeData {
@@ -79,6 +79,40 @@ interface SaveAiAccountResult {
   aiAccountEmail: string;
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+const HOUR_MS = 60 * 60 * 1000;
+const MINUTE_MS = 60 * 1000;
+
+function formatRemainCountdown(endAt?: number, now = Date.now()): { value: string; label: string; remainMs: number } {
+  if (!endAt) {
+    return { value: '0', label: '剩余时间', remainMs: 0 };
+  }
+  const remainMs = Math.max(0, endAt - now);
+  const days = Math.floor(remainMs / DAY_MS);
+  const hours = Math.floor((remainMs % DAY_MS) / HOUR_MS);
+  const minutes = Math.floor((remainMs % HOUR_MS) / MINUTE_MS);
+
+  if (days > 0) {
+    return {
+      value: `${days}天`,
+      label: `${hours}小时`,
+      remainMs,
+    };
+  }
+  if (hours > 0) {
+    return {
+      value: `${hours}小时`,
+      label: `${minutes}分钟`,
+      remainMs,
+    };
+  }
+  return {
+    value: `${Math.max(1, minutes)}分钟`,
+    label: '即将到期',
+    remainMs,
+  };
+}
+
 interface AiAccountResult {
   email: string;
   password: string;
@@ -115,6 +149,8 @@ interface AiAccountFormErrors {
   password?: string;
   submit?: string;
 }
+
+type AiAccountSheetSource = 'purchase' | 'profile';
 
 interface WechatPhoneEvent {
   detail?: {
@@ -186,6 +222,7 @@ export default function MemberPage(): JSX.Element {
   const [productIntroVisible, setProductIntroVisible] = useState(false);
   const [introProductCode, setIntroProductCode] = useState('ai_news');
   const [aiAccountSheetVisible, setAiAccountSheetVisible] = useState(false);
+  const [aiAccountSheetSource, setAiAccountSheetSource] = useState<AiAccountSheetSource>('purchase');
   const [pendingProductCode, setPendingProductCode] = useState('ai_news');
   const [aiAccountName, setAiAccountName] = useState('');
   const [aiAccountPassword, setAiAccountPassword] = useState('');
@@ -193,9 +230,11 @@ export default function MemberPage(): JSX.Element {
   const [selectedPlanCode, setSelectedPlanCode] = useState('');
   const [purchaseAgreementAccepted, setPurchaseAgreementAccepted] = useState(false);
   const [usePointsDeduction, setUsePointsDeduction] = useState(false);
+  const [messageReminderEnabled, setMessageReminderEnabled] = useState(false);
   const [memberLoading, setMemberLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [paymentLocked, setPaymentLocked] = useState(false);
+  const [clockNow, setClockNow] = useState(Date.now());
 
   useDidShow(() => {
     showTabBarSafely();
@@ -212,6 +251,14 @@ export default function MemberPage(): JSX.Element {
       showTabBarSafely();
     };
   }, [paymentLocked]);
+
+  useEffect(() => {
+    if (data.membership.status !== 'active') return;
+    const timer = setInterval(() => {
+      setClockNow(Date.now());
+    }, MINUTE_MS);
+    return () => clearInterval(timer);
+  }, [data.membership.status, data.membership.endAt]);
 
   function loadCachedUserInfo(): void {
     const raw = Taro.getStorageSync(CACHE_KEY) as string;
@@ -274,8 +321,14 @@ export default function MemberPage(): JSX.Element {
   const isOpening = data.membership.status === 'opening';
   const memberStatusLabel = data.membership.status === 'none' ? '立即开通' : data.membership.openStatusLabel ?? '立即开通';
   const planLabel = isActive || isOpening ? data.membership.planName ?? '会员套餐' : '普通会员';
-  const remainDays = data.membership.remainDays ?? 0;
-  const progress = Math.max(8, Math.min(100, isActive ? Math.round((remainDays / 30) * 100) : 8));
+  const remainCountdown = isActive
+    ? formatRemainCountdown(data.membership.endAt, clockNow)
+    : { value: String(data.membership.remainDays ?? 0), label: '剩余天数', remainMs: 0 };
+  const renewAvailable = isActive && remainCountdown.remainMs > 0 && remainCountdown.remainMs <= 2 * DAY_MS;
+  const membershipDurationMs = data.membership.startAt && data.membership.endAt
+    ? Math.max(DAY_MS, data.membership.endAt - data.membership.startAt)
+    : 30 * DAY_MS;
+  const progress = Math.max(8, Math.min(100, isActive ? Math.round((remainCountdown.remainMs / membershipDurationMs) * 100) : 8));
   const expiryLabel = data.membership.status === 'none' ? '购买后开始计时' : isOpening ? '人工开通中' : formatDate(data.membership.endAt);
   const currentProductCode = data.membership.productCode ?? 'ai_news';
   const mobileBound = isMobileBound(data.userInfo?.mobile);
@@ -301,6 +354,7 @@ export default function MemberPage(): JSX.Element {
   const finalPayAmount = selectedPlan ? Math.max(0, Number((selectedPlan.price - (usePointsDeduction ? pointsDeductAmount : 0)).toFixed(2))) : 0;
   const pointsDeductionAvailable = activeProductAvailable && maxPointsDeducted > 0;
   const aiAccountRegistered = Boolean(data.userInfo?.aiAccount?.registered || data.userInfo?.aiAccount?.email || cachedUserInfo?.aiAccountRegistered);
+  const messageReminderAvailable = activeProductAvailable;
 
   function openPlanSheet(productCode: string): void {
     const nextProduct = PRODUCT_OPTIONS.find((item) => item.code === productCode) ?? PRODUCT_OPTIONS[0];
@@ -309,6 +363,7 @@ export default function MemberPage(): JSX.Element {
     setSelectedPlanCode(nextPlans[0]?.planCode ?? '');
     setPurchaseAgreementAccepted(false);
     setUsePointsDeduction(false);
+    setMessageReminderEnabled(false);
     setPlanSheetVisible(true);
   }
 
@@ -325,6 +380,7 @@ export default function MemberPage(): JSX.Element {
     setPlanSheetVisible(false);
     setPurchaseAgreementAccepted(false);
     setUsePointsDeduction(false);
+    setMessageReminderEnabled(false);
   }
 
   function openAgreement(url: string): void {
@@ -341,6 +397,7 @@ export default function MemberPage(): JSX.Element {
     }
     setPendingProductCode(productCode);
     if (!aiAccountRegistered) {
+      setAiAccountSheetSource('purchase');
       setAiAccountSheetVisible(true);
       return;
     }
@@ -386,7 +443,12 @@ export default function MemberPage(): JSX.Element {
       setAiAccountName('');
       setAiAccountPassword('');
       setAiAccountErrors({});
-      openPlanSheet(pendingProductCode);
+      if (aiAccountSheetSource === 'purchase') {
+        openPlanSheet(pendingProductCode);
+      } else {
+        Taro.showToast({ title: '账号注册成功', icon: 'success' });
+        void loadData();
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : '注册失败，请稍后再试';
       const submit = message.includes('FunctionName') || message.includes('FUNCTION_NOT_FOUND')
@@ -465,12 +527,14 @@ export default function MemberPage(): JSX.Element {
     try {
       const result = await callCloudFunction<PayOrderResult>('pay-order', await createPayOrderPayload(orderNo));
       if (result.paid || !result.payment && !result.virtualPayment) {
+        await enableRenewReminderAfterPay();
         closePlanSheet();
         Taro.navigateTo({ url: `/pages/pay-result/index?orderNo=${orderNo}` });
         return;
       }
       try {
         await requestMiniProgramPayment(result);
+        await enableRenewReminderAfterPay();
       } finally {
         closePlanSheet();
         Taro.navigateTo({ url: `/pages/pay-result/index?orderNo=${orderNo}` });
@@ -480,6 +544,50 @@ export default function MemberPage(): JSX.Element {
     } finally {
       setPaymentLocked(false);
     }
+  }
+
+  async function enableRenewReminderAfterPay(): Promise<void> {
+    if (data.subscribeMsgAuth || !messageReminderEnabled) {
+      return;
+    }
+    try {
+      const changed = await enableReminderSubscription({ source: 'afterPay' });
+      if (changed) {
+        setData((prev) => ({ ...prev, subscribeMsgAuth: true }));
+      }
+    } catch {
+      // 支付已完成，提醒授权失败不影响跳转和订单状态。
+    }
+  }
+
+  async function handleToggleReminder(): Promise<void> {
+    const changed = data.subscribeMsgAuth
+      ? await disableReminderSubscription()
+      : await enableReminderSubscription();
+    if (!changed) {
+      return;
+    }
+    setData((prev) => ({ ...prev, subscribeMsgAuth: !prev.subscribeMsgAuth }));
+    void loadData();
+  }
+
+  async function handleTogglePlanReminder(): Promise<void> {
+    if (data.subscribeMsgAuth) {
+      Taro.showToast({ title: '消息提醒已开启', icon: 'none' });
+      return;
+    }
+    if (messageReminderEnabled) {
+      setMessageReminderEnabled(false);
+      return;
+    }
+
+    const changed = await enableReminderSubscription({ source: 'afterPay' });
+    if (!changed) {
+      setMessageReminderEnabled(false);
+      return;
+    }
+    setMessageReminderEnabled(true);
+    setData((prev) => ({ ...prev, subscribeMsgAuth: true }));
   }
 
   async function handlePlanPay(): Promise<void> {
@@ -544,6 +652,12 @@ export default function MemberPage(): JSX.Element {
   }
 
   async function handleShowAiAccount(): Promise<void> {
+    if (!aiAccountRegistered) {
+      setAiAccountSheetSource('profile');
+      setAiAccountSheetVisible(true);
+      return;
+    }
+
     try {
       Taro.showLoading({
         title: '加载中',
@@ -562,11 +676,27 @@ export default function MemberPage(): JSX.Element {
       }
     } catch (error) {
       Taro.hideLoading();
-      Taro.showToast({ title: error instanceof Error ? error.message : '账号信息获取失败', icon: 'none' });
+      const message = error instanceof Error ? error.message : '账号信息获取失败';
+      if (message.includes('未注册') || message.includes('不存在') || message.includes('未填写')) {
+        setAiAccountSheetSource('profile');
+        setAiAccountSheetVisible(true);
+        return;
+      }
+      Taro.showToast({ title: message, icon: 'none' });
     }
   }
 
   async function handleShowLatestEmailCode(): Promise<void> {
+    if (!aiAccountRegistered) {
+      await Taro.showModal({
+        title: '暂无验证码',
+        content: '你还没有注册交付账号，暂无可查看的验证码。',
+        showCancel: false,
+        confirmText: '知道了',
+      });
+      return;
+    }
+
     let result: LatestEmailCodeResult;
     try {
       Taro.showLoading({
@@ -654,10 +784,10 @@ export default function MemberPage(): JSX.Element {
                 </View>
                 <View className='member-profile__copy'>
                   <Text
-                    className={`member-plan-title__status member-plan-title__status--${data.membership.status}`}
-                    onClick={() => data.membership.status === 'none' && openSubscriptionFlow(currentProductCode)}
+                    className={`member-plan-title__status member-plan-title__status--${renewAvailable ? 'none' : data.membership.status}`}
+                    onClick={() => (data.membership.status === 'none' || renewAvailable) && openSubscriptionFlow(currentProductCode)}
                   >
-                    {memberStatusLabel}
+                    {renewAvailable ? '立即续费' : memberStatusLabel}
                   </Text>
                 </View>
               </View>
@@ -669,8 +799,8 @@ export default function MemberPage(): JSX.Element {
               </View>
               <View className='member-days'>
                 <View>
-                  <Text className='member-days__value'>{remainDays}</Text>
-                  <Text className='member-days__label'>剩余天数</Text>
+                  <Text className='member-days__value'>{remainCountdown.value}</Text>
+                  <Text className='member-days__label'>{remainCountdown.label}</Text>
                 </View>
                 <Text className='member-days__expiry'>到期时间 {expiryLabel}</Text>
               </View>
@@ -740,21 +870,14 @@ export default function MemberPage(): JSX.Element {
               </View>
             ))}
             <View className='member-divider' />
-            <View className='member-right-item'>
+            <View className='member-right-item' onClick={() => void handleToggleReminder()}>
               <View>
-                <Text className='member-right-item__title'>开启到期提醒</Text>
-                <Text className='member-right-item__desc'>会员到期前通知提醒</Text>
+                <Text className='member-right-item__title'>开启消息提醒</Text>
+                <Text className='member-right-item__desc'>
+                  {data.subscribeMsgAuth ? '已开启，开通成功和临近到期都会提醒' : '开通成功和临近到期都会提醒'}
+                </Text>
               </View>
-              <View
-                className={`ios-switch ${data.subscribeMsgAuth ? 'ios-switch--on' : ''}`}
-                onClick={() => {
-                  void enableReminderSubscription().then((changed) => {
-                    if (changed) {
-                      void loadData();
-                    }
-                  });
-                }}
-              >
+              <View className={`ios-switch ${data.subscribeMsgAuth ? 'ios-switch--on' : ''}`}>
                 <Text className='ios-switch__thumb' />
               </View>
             </View>
@@ -805,7 +928,11 @@ export default function MemberPage(): JSX.Element {
           </View>
           <Text className='plan-sheet__close' onClick={() => setAiAccountSheetVisible(false)}>×</Text>
         </View>
-        <Text className='plan-sheet__desc'>请填写用于后台系统注册和交付的账号前缀，系统会自动拼接 {AI_ACCOUNT_DOMAIN}。注册成功后将继续选择套餐。</Text>
+        <Text className='plan-sheet__desc'>
+          {aiAccountSheetSource === 'purchase'
+            ? `请填写用于后台系统注册和交付的账号前缀，系统会自动拼接 ${AI_ACCOUNT_DOMAIN}。注册成功后将继续选择套餐。`
+            : `你还没有注册交付账号。请填写账号前缀，系统会自动拼接 ${AI_ACCOUNT_DOMAIN}。`}
+        </Text>
         <View className='ai-account-form'>
           <View className='ai-account-field'>
             <Text className='ai-account-field__label'>AI账号</Text>
@@ -873,6 +1000,25 @@ export default function MemberPage(): JSX.Element {
                 );
               })}
             </View>
+            {messageReminderAvailable ? (
+              <View className={`plan-sheet__subscribe ${data.subscribeMsgAuth || messageReminderEnabled ? 'plan-sheet__subscribe--active' : ''}`}>
+                <View>
+                  <View className='plan-sheet__subscribe-title-row'>
+                    <Text className='plan-sheet__subscribe-title'>开启消息提醒</Text>
+                    <Text className='plan-sheet__subscribe-badge'>{data.subscribeMsgAuth ? '已开启' : '推荐'}</Text>
+                  </View>
+                  <Text className='plan-sheet__subscribe-desc'>
+                    {data.subscribeMsgAuth ? '开通完成和到期前 2 天都会通知你。' : '开通完成后通知你，会员到期前 2 天提醒续费。'}
+                  </Text>
+                </View>
+                <View
+                  className={`ios-switch ${data.subscribeMsgAuth || messageReminderEnabled ? 'ios-switch--on' : ''}`}
+                  onClick={() => void handleTogglePlanReminder()}
+                >
+                  <Text className='ios-switch__thumb' />
+                </View>
+              </View>
+            ) : null}
             <View className={`plan-sheet__points ${usePointsDeduction ? 'plan-sheet__points--active' : ''} ${pointsDeductionAvailable ? '' : 'plan-sheet__points--disabled'}`}>
               <View>
                 <Text className='plan-sheet__points-title'>使用积分抵扣</Text>

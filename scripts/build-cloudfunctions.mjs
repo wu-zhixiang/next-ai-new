@@ -27,6 +27,7 @@ const functionNames = [
   'retry-order',
   'save-ai-account',
   'save-subscribe-auth',
+  'send-renew-reminders',
   'seed-database',
   'user-login',
 ];
