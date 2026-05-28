@@ -31,6 +31,7 @@ async function addReminderLog(record: ReminderLogRecord): Promise<void> {
 
 async function sendTemplateMessage(
   user: UserRecord & { _id: string },
+  templateId: string,
   data: {
     thing1: { value: string };
     phrase2: { value: string };
@@ -38,9 +39,8 @@ async function sendTemplateMessage(
     thing4: { value: string };
   },
 ): Promise<void> {
-  const templateId = process.env.WX_RENEW_REMINDER_TEMPLATE_ID;
   if (!templateId) {
-    throw new Error('缺少消息提醒模板：WX_RENEW_REMINDER_TEMPLATE_ID');
+    throw new Error('缺少开通成功模板：WX_MEMBER_OPENED_TEMPLATE_ID');
   }
 
   const openapi = (app as unknown as {
@@ -90,7 +90,7 @@ export async function sendMembershipOpenedReminder(
   }
 
   try {
-    await sendTemplateMessage(user, {
+    await sendTemplateMessage(user, process.env.WX_MEMBER_OPENED_TEMPLATE_ID || '', {
       thing1: { value: order.planName || order.productName || 'Open AI 资讯会员' },
       phrase2: { value: '月度' },
       time3: { value: formatTime(options.endAt) },

@@ -6,6 +6,7 @@ const config: UserConfigExport<'webpack5'> = {
   },
   defineConstants: {
     RENEW_REMINDER_TEMPLATE_ID: JSON.stringify(process.env.TARO_APP_RENEW_REMINDER_TEMPLATE_ID || ''),
+    MEMBER_OPENED_TEMPLATE_ID: JSON.stringify(process.env.TARO_APP_MEMBER_OPENED_TEMPLATE_ID || ''),
   },
   mini: {},
   h5: {},

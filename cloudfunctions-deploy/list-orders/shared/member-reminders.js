@@ -13,11 +13,10 @@ function formatTime(timestamp) {
 async function addReminderLog(record) {
     await (0, db_1.collection)('reminderLogs').add({ data: record });
 }
-async function sendTemplateMessage(user, data) {
+async function sendTemplateMessage(user, templateId, data) {
     var _a;
-    const templateId = process.env.WX_RENEW_REMINDER_TEMPLATE_ID;
     if (!templateId) {
-        throw new Error('缺少消息提醒模板：WX_RENEW_REMINDER_TEMPLATE_ID');
+        throw new Error('缺少开通成功模板：WX_MEMBER_OPENED_TEMPLATE_ID');
     }
     const openapi = db_1.app.openapi;
     if (!((_a = openapi === null || openapi === void 0 ? void 0 : openapi.subscribeMessage) === null || _a === void 0 ? void 0 : _a.send)) {
@@ -51,7 +50,7 @@ async function sendMembershipOpenedReminder(order, options) {
         return;
     }
     try {
-        await sendTemplateMessage(user, {
+        await sendTemplateMessage(user, process.env.WX_MEMBER_OPENED_TEMPLATE_ID || '', {
             thing1: { value: order.planName || order.productName || 'Open AI 资讯会员' },
             phrase2: { value: '月度' },
             time3: { value: formatTime(options.endAt) },

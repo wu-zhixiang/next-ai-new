@@ -2,16 +2,18 @@ import Taro from '@tarojs/taro';
 import { callCloudFunction } from '@/services/api';
 
 declare const RENEW_REMINDER_TEMPLATE_ID: string;
+declare const MEMBER_OPENED_TEMPLATE_ID: string;
 
 export async function enableReminderSubscription(options: { source?: 'manual' | 'afterPay' } = {}): Promise<boolean> {
-  if (RENEW_REMINDER_TEMPLATE_ID && typeof Taro.requestSubscribeMessage === 'function') {
+  const templateIds = [MEMBER_OPENED_TEMPLATE_ID, RENEW_REMINDER_TEMPLATE_ID].filter(Boolean);
+  if (templateIds.length > 0 && typeof Taro.requestSubscribeMessage === 'function') {
     const requestSubscribeMessage = Taro.requestSubscribeMessage as unknown as (payload: {
       tmplIds: string[];
     }) => Promise<Record<string, string>>;
     const result = await requestSubscribeMessage({
-      tmplIds: [RENEW_REMINDER_TEMPLATE_ID],
+      tmplIds: templateIds,
     });
-    const accepted = result[RENEW_REMINDER_TEMPLATE_ID] === 'accept';
+    const accepted = templateIds.some((templateId) => result[templateId] === 'accept');
     await callCloudFunction<{ success: true }>('save-subscribe-auth', { accepted });
     Taro.showToast({ title: accepted ? '提醒已开启' : '未开启提醒', icon: accepted ? 'success' : 'none' });
     return accepted;
