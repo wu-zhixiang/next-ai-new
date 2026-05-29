@@ -818,7 +818,7 @@ export default function MemberPage(): JSX.Element {
               <Image className='member-service-item__arrow' src={CHEVRON_RIGHT_ICON} mode='aspectFit' />
             </View>
             <View className='member-divider' />
-            <View className='member-service-item'>
+            <Button className='member-service-item member-service-item--contact' openType='contact'>
               <View className='member-service-item__icon'>
                 <Image className='member-service-item__image' src={CUSTOMER_SUPPORT_ICON} mode='aspectFit' />
               </View>
@@ -827,7 +827,7 @@ export default function MemberPage(): JSX.Element {
                 <Text className='member-service-item__desc'>24/7 智能与人工支持</Text>
               </View>
               <Image className='member-service-item__arrow' src={CHEVRON_RIGHT_ICON} mode='aspectFit' />
-            </View>
+            </Button>
           </View>
         </View>
 
