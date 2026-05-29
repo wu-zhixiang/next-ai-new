@@ -80,7 +80,6 @@ interface SaveAiAccountResult {
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const HOUR_MS = 60 * 60 * 1000;
 const MINUTE_MS = 60 * 1000;
 
 function formatRemainCountdown(endAt?: number, now = Date.now()): { value: string; label: string; remainMs: number } {
@@ -89,26 +88,9 @@ function formatRemainCountdown(endAt?: number, now = Date.now()): { value: strin
   }
   const remainMs = Math.max(0, endAt - now);
   const days = Math.floor(remainMs / DAY_MS);
-  const hours = Math.floor((remainMs % DAY_MS) / HOUR_MS);
-  const minutes = Math.floor((remainMs % HOUR_MS) / MINUTE_MS);
-
-  if (days > 0) {
-    return {
-      value: `${days}天`,
-      label: `${hours}小时`,
-      remainMs,
-    };
-  }
-  if (hours > 0) {
-    return {
-      value: `${hours}小时`,
-      label: `${minutes}分钟`,
-      remainMs,
-    };
-  }
   return {
-    value: `${Math.max(1, minutes)}分钟`,
-    label: '即将到期',
+    value: String(days),
+    label: '剩余天数',
     remainMs,
   };
 }
