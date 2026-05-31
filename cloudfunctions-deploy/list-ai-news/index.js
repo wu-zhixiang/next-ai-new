@@ -22,10 +22,47 @@ function toView(record) {
 function normalizeCategory(value) {
     return value.toLowerCase().replace(/[\s_-]+/g, '');
 }
+function getCategoryAliases(tag) {
+    const normalized = normalizeCategory(tag);
+    if (normalized === normalizeCategory('AI巨头')) {
+        return [
+            'AI巨头',
+            'OpenAI',
+            'Open AI',
+            'Google AI',
+            'Google',
+            'DeepMind',
+            'Google DeepMind',
+            'Claude AI',
+            'Claude',
+            'Anthropic',
+            'Meta AI',
+            'Microsoft AI',
+            'xAI',
+            'Grok',
+        ].map(normalizeCategory);
+    }
+    if (normalized === normalizeCategory('工具')) {
+        return [
+            '工具',
+            'AI工具',
+            '开发者工具',
+            'Agent',
+            '图片生成',
+            '视频生成',
+            '办公提效',
+            '编程助手',
+            '提示词',
+            'GitHub',
+            'Hugging Face',
+        ].map(normalizeCategory);
+    }
+    return [normalized];
+}
 function matchesCategory(record, tag) {
     var _a;
-    const target = normalizeCategory(tag);
-    return ((_a = record.tags) !== null && _a !== void 0 ? _a : []).some((item) => normalizeCategory(item) === target);
+    const targets = new Set(getCategoryAliases(tag));
+    return ((_a = record.tags) !== null && _a !== void 0 ? _a : []).some((item) => targets.has(normalizeCategory(item)));
 }
 async function main(event = {}) {
     var _a;

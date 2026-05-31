@@ -28,9 +28,47 @@ function normalizeCategory(value: string): string {
   return value.toLowerCase().replace(/[\s_-]+/g, '');
 }
 
+function getCategoryAliases(tag: string): string[] {
+  const normalized = normalizeCategory(tag);
+  if (normalized === normalizeCategory('AI巨头')) {
+    return [
+      'AI巨头',
+      'OpenAI',
+      'Open AI',
+      'Google AI',
+      'Google',
+      'DeepMind',
+      'Google DeepMind',
+      'Claude AI',
+      'Claude',
+      'Anthropic',
+      'Meta AI',
+      'Microsoft AI',
+      'xAI',
+      'Grok',
+    ].map(normalizeCategory);
+  }
+  if (normalized === normalizeCategory('工具')) {
+    return [
+      '工具',
+      'AI工具',
+      '开发者工具',
+      'Agent',
+      '图片生成',
+      '视频生成',
+      '办公提效',
+      '编程助手',
+      '提示词',
+      'GitHub',
+      'Hugging Face',
+    ].map(normalizeCategory);
+  }
+  return [normalized];
+}
+
 function matchesCategory(record: AiNewsRecord, tag: string): boolean {
-  const target = normalizeCategory(tag);
-  return (record.tags ?? []).some((item) => normalizeCategory(item) === target);
+  const targets = new Set(getCategoryAliases(tag));
+  return (record.tags ?? []).some((item) => targets.has(normalizeCategory(item)));
 }
 
 export async function main(event: Event = {}) {

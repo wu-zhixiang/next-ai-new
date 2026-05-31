@@ -686,16 +686,12 @@ button::after {
   transform: translate3d(-114rpx, -112rpx, 0) scale(1);
 }
 
-.news-filter-fab--open .news-filter-fab__option--openai {
+.news-filter-fab--open .news-filter-fab__option--aiGiants {
   transform: translate3d(-186rpx, -44rpx, 0) scale(1);
 }
 
-.news-filter-fab--open .news-filter-fab__option--google {
-  transform: translate3d(-190rpx, 34rpx, 0) scale(1);
-}
-
-.news-filter-fab--open .news-filter-fab__option--claude {
-  transform: translate3d(-128rpx, 98rpx, 0) scale(1);
+.news-filter-fab--open .news-filter-fab__option--tools {
+  transform: translate3d(-168rpx, 34rpx, 0) scale(1);
 }
 
 .news-filter-fab__option--active {

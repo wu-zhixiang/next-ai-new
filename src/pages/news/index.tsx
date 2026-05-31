@@ -31,7 +31,7 @@ interface NewsListResult {
   items: AiNewsView[];
 }
 
-type NewsFilterKey = 'hot' | 'latest' | 'openai' | 'google' | 'claude';
+type NewsFilterKey = 'hot' | 'latest' | 'aiGiants' | 'tools';
 
 interface NewsFilterOption {
   key: NewsFilterKey;
@@ -43,9 +43,8 @@ interface NewsFilterOption {
 const NEWS_FILTERS: NewsFilterOption[] = [
   { key: 'hot', label: '热度', sort: 'hot' },
   { key: 'latest', label: '最新', sort: 'latest' },
-  { key: 'openai', label: 'Open AI', sort: 'latest', tag: 'OpenAI' },
-  { key: 'google', label: 'Google AI', sort: 'latest', tag: 'Google AI' },
-  { key: 'claude', label: 'Claude AI', sort: 'latest', tag: 'Claude AI' },
+  { key: 'aiGiants', label: 'AI巨头', sort: 'latest', tag: 'AI巨头' },
+  { key: 'tools', label: '工具', sort: 'latest', tag: '工具' },
 ];
 
 function getNewsFilterLabel(filterKey: NewsFilterKey): string {

@@ -152,15 +152,58 @@ function normalizeSourcePlatform(value) {
     }
     return 'manual';
 }
+function normalizeTagKey(value) {
+    return value.toLowerCase().replace(/[\s_-]+/g, '');
+}
+function resolveParentTags(tag) {
+    const key = normalizeTagKey(tag);
+    const parentTags = [];
+    const aiGiantKeys = [
+        'openai',
+        'googleai',
+        'google',
+        'deepmind',
+        'googledeepmind',
+        'claudeai',
+        'claude',
+        'anthropic',
+        'metaai',
+        'microsoftai',
+        'xai',
+        'grok',
+    ];
+    if (aiGiantKeys.includes(key)) {
+        parentTags.push('AI巨头');
+    }
+    const toolKeys = [
+        'ai工具',
+        '工具',
+        '开发者工具',
+        'agent',
+        '图片生成',
+        '视频生成',
+        '办公提效',
+        '编程助手',
+        '提示词',
+        'github',
+        'huggingface',
+    ];
+    if (toolKeys.includes(key)) {
+        parentTags.push('工具');
+    }
+    return parentTags;
+}
 function normalizeTags(value) {
     const rawTags = Array.isArray(value)
         ? value
         : typeof value === 'string'
-            ? value.split(/[,，\s]+/)
+            ? value.split(/[,，]+/)
             : [];
-    return Array.from(new Set(rawTags
-        .map((item) => sanitizeText(item, 12))
-        .filter(Boolean))).slice(0, 6);
+    const tags = rawTags
+        .map((item) => sanitizeText(item, 20))
+        .filter(Boolean);
+    const expandedTags = tags.flatMap((tag) => [tag, ...resolveParentTags(tag)]);
+    return Array.from(new Set(expandedTags)).slice(0, 12);
 }
 function normalizeMarkdown(value) {
     return typeof value === 'string' ? value.trim().slice(0, 20000) : '';

@@ -4,7 +4,24 @@ const DEFAULT_SETTINGS = {
   chatgptUrl: 'https://chatgpt.com/'
 };
 const MAX_COVER_DATA_URL_LENGTH = 2 * 1024 * 1024;
-const NEWS_TAG_OPTIONS = ['OpenAI', 'Google AI', 'Claude AI', 'AI工具', '提示词', '模型更新', '产品发布', '开发实践'];
+const NEWS_TAG_TREE = [
+  {
+    group: 'AI巨头',
+    tags: ['OpenAI', 'Google AI', 'Claude AI', 'DeepMind', 'Anthropic', 'Meta AI', 'Microsoft AI', 'xAI', 'Grok']
+  },
+  {
+    group: '开源与社区',
+    tags: ['GitHub', '开源项目', '模型开源', '开发者工具', 'Hugging Face']
+  },
+  {
+    group: '工具与应用',
+    tags: ['AI工具', '提示词', 'Agent', '图片生成', '视频生成', '办公提效', '编程助手']
+  },
+  {
+    group: '行业与教程',
+    tags: ['模型更新', '产品发布', '开发实践', '教程', '商业化', '融资并购', '安全合规']
+  }
+];
 
 const els = {
   setupNotice: document.querySelector('#setupNotice'),
@@ -89,16 +106,23 @@ function bindActions() {
 
 function renderNewsTagsOptions() {
   els.newsTagsMenu.innerHTML = '';
-  NEWS_TAG_OPTIONS.forEach((tag) => {
-    const option = document.createElement('label');
-    option.className = 'tags-dropdown__option';
-    option.innerHTML = `
-      <input type="checkbox" value="${tag}" />
-      <span>${tag}</span>
-    `;
-    const checkbox = option.querySelector('input');
-    checkbox.addEventListener('change', () => handleNewsTagToggle(tag, checkbox.checked));
-    els.newsTagsMenu.appendChild(option);
+  NEWS_TAG_TREE.forEach((group) => {
+    const groupNode = document.createElement('div');
+    groupNode.className = 'tags-dropdown__group';
+    groupNode.textContent = group.group;
+    els.newsTagsMenu.appendChild(groupNode);
+
+    group.tags.forEach((tag) => {
+      const option = document.createElement('label');
+      option.className = 'tags-dropdown__option';
+      option.innerHTML = `
+        <input type="checkbox" value="${tag}" />
+        <span>${tag}</span>
+      `;
+      const checkbox = option.querySelector('input');
+      checkbox.addEventListener('change', () => handleNewsTagToggle(tag, checkbox.checked));
+      els.newsTagsMenu.appendChild(option);
+    });
   });
 }
 
