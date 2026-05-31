@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button, Text, View } from '@tarojs/components';
-import Taro, { useDidShow, useRouter } from '@tarojs/taro';
+import Taro, { useRouter } from '@tarojs/taro';
 import { AppTransparentHeader } from '@/components/AppTransparentHeader';
 import { callCloudFunction } from '@/services/api';
 import type { PlanView } from '@/types';
@@ -82,11 +82,11 @@ export default function PlansPage(): JSX.Element {
   const [mobileBound, setMobileBound] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  useDidShow(() => {
+  useEffect(() => {
     void loadPlans();
     void loadProfile();
     setSelectedPlanCode(defaultPlanCode);
-  });
+  }, []);
 
   async function loadPlans(): Promise<void> {
     try {

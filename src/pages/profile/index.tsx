@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button, Text, View } from '@tarojs/components';
-import Taro, { useDidShow } from '@tarojs/taro';
+import Taro from '@tarojs/taro';
 import { AppTransparentHeader } from '@/components/AppTransparentHeader';
 import { callCloudFunction } from '@/services/api';
 import { formatMobileDisplay } from '@/utils/mobile';
@@ -20,9 +20,9 @@ export default function ProfilePage(): JSX.Element {
     subscribeMsgAuth: false,
   });
 
-  useDidShow(() => {
+  useEffect(() => {
     void loadProfile();
-  });
+  }, []);
 
   async function loadProfile(): Promise<void> {
     const data = await callCloudFunction<ProfileData>('get-profile');

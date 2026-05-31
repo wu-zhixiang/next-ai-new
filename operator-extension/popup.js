@@ -3,6 +3,7 @@ const DEFAULT_SETTINGS = {
   operatorToken: '',
   chatgptUrl: 'https://chatgpt.com/'
 };
+const MAX_COVER_DATA_URL_LENGTH = 2 * 1024 * 1024;
 
 const els = {
   setupNotice: document.querySelector('#setupNotice'),
@@ -10,6 +11,25 @@ const els = {
   refreshBtn: document.querySelector('#refreshBtn'),
   loadBtn: document.querySelector('#loadBtn'),
   openChatgptBtn: document.querySelector('#openChatgptBtn'),
+  ordersTabBtn: document.querySelector('#ordersTabBtn'),
+  newsTabBtn: document.querySelector('#newsTabBtn'),
+  ordersPanel: document.querySelector('#ordersPanel'),
+  newsPanel: document.querySelector('#newsPanel'),
+  fillCurrentTabBtn: document.querySelector('#fillCurrentTabBtn'),
+  clearNewsFormBtn: document.querySelector('#clearNewsFormBtn'),
+  submitNewsBtn: document.querySelector('#submitNewsBtn'),
+  newsCoverDropzone: document.querySelector('#newsCoverDropzone'),
+  newsCoverPreview: document.querySelector('#newsCoverPreview'),
+  newsCoverStatus: document.querySelector('#newsCoverStatus'),
+  newsCover: document.querySelector('#newsCover'),
+  newsContentMarkdown: document.querySelector('#newsContentMarkdown'),
+  newsSourceName: document.querySelector('#newsSourceName'),
+  newsAuthorName: document.querySelector('#newsAuthorName'),
+  newsTags: document.querySelector('#newsTags'),
+  newsViewCount: document.querySelector('#newsViewCount'),
+  newsLikeCount: document.querySelector('#newsLikeCount'),
+  newsRepostCount: document.querySelector('#newsRepostCount'),
+  newsCommentCount: document.querySelector('#newsCommentCount'),
   taskList: document.querySelector('#taskList'),
   taskTemplate: document.querySelector('#taskTemplate'),
   emptyState: document.querySelector('#emptyState'),
@@ -25,6 +45,8 @@ const els = {
 let settings = { ...DEFAULT_SETTINGS };
 let pendingFulfill = null;
 let toastTimer = null;
+let pastedCoverDataUrl = '';
+let coverPreviewObjectUrl = '';
 
 document.addEventListener('DOMContentLoaded', async () => {
   settings = await getSettings();
@@ -40,6 +62,14 @@ function bindActions() {
   els.refreshBtn.addEventListener('click', loadTasks);
   els.loadBtn.addEventListener('click', loadTasks);
   els.openChatgptBtn.addEventListener('click', () => openTab(settings.chatgptUrl || DEFAULT_SETTINGS.chatgptUrl));
+  els.ordersTabBtn.addEventListener('click', () => switchPanel('orders'));
+  els.newsTabBtn.addEventListener('click', () => switchPanel('news'));
+  els.fillCurrentTabBtn.addEventListener('click', fillNewsFromCurrentTab);
+  els.clearNewsFormBtn.addEventListener('click', clearNewsForm);
+  els.submitNewsBtn.addEventListener('click', submitNews);
+  els.newsCoverDropzone.addEventListener('click', () => els.newsCover.click());
+  els.newsCoverDropzone.addEventListener('paste', handleCoverPaste);
+  els.newsCover.addEventListener('change', handleCoverFileChange);
   els.cancelFulfillBtn.addEventListener('click', closeFulfillConfirm);
   els.confirmDialog.addEventListener('click', (event) => {
     if (event.target === els.confirmDialog) {
@@ -47,6 +77,14 @@ function bindActions() {
     }
   });
   els.confirmFulfillBtn.addEventListener('click', confirmFulfillTask);
+}
+
+function switchPanel(panel) {
+  const isNews = panel === 'news';
+  els.ordersPanel.classList.toggle('hidden', isNews);
+  els.newsPanel.classList.toggle('hidden', !isNews);
+  els.ordersTabBtn.classList.toggle('tab-button--active', !isNews);
+  els.newsTabBtn.classList.toggle('tab-button--active', isNews);
 }
 
 function getSettings() {
@@ -189,6 +227,490 @@ async function apiRequest(path, options = {}) {
     throw new Error(payload.message || `请求失败：${response.status}`);
   }
   return payload.data || payload;
+}
+
+async function fillNewsFromCurrentTab() {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab) return;
+  const host = safeHost(tab.url);
+  const isXPage = host.includes('x.com') || host.includes('twitter.com');
+  if (!els.newsSourceName.value.trim()) {
+    els.newsSourceName.value = 'AIO';
+  }
+
+  if (!isXPage || !tab.id) {
+    showToast('已读取当前页');
+    return;
+  }
+
+  try {
+    const [{ result }] = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: extractXPostMeta
+    });
+    applyXPostMeta(result || {});
+    showToast('已读取帖子数据');
+  } catch (error) {
+    showToast('页面数据读取失败，请确认当前页是 X 帖子页');
+  }
+}
+
+function applyXPostMeta(meta) {
+  if (meta.authorName) {
+    els.newsAuthorName.value = meta.authorName;
+  }
+  if (Number.isFinite(meta.viewCount) && meta.viewCount > 0) {
+    els.newsViewCount.value = String(meta.viewCount);
+  }
+  if (Number.isFinite(meta.likeCount) && meta.likeCount > 0) {
+    els.newsLikeCount.value = String(meta.likeCount);
+  }
+  if (Number.isFinite(meta.repostCount) && meta.repostCount > 0) {
+    els.newsRepostCount.value = String(meta.repostCount);
+  }
+  if (Number.isFinite(meta.commentCount) && meta.commentCount > 0) {
+    els.newsCommentCount.value = String(meta.commentCount);
+  }
+}
+
+function extractXPostMeta() {
+  function parseHumanNumber(value) {
+    const raw = String(value || '')
+      .replace(/,/g, '')
+      .replace(/\s+/g, '')
+      .replace(/＋/g, '+')
+      .trim();
+    if (!raw) return 0;
+    const match = raw.match(/(\d+(?:\.\d+)?)(万|千|亿|[kKmMbB])?/);
+    if (!match) return 0;
+    const number = Number(match[1]);
+    if (!Number.isFinite(number)) return 0;
+    const unit = match[2] || '';
+    if (unit === '亿' || unit.toLowerCase() === 'b') return Math.floor(number * 100000000);
+    if (unit === '万') return Math.floor(number * 10000);
+    if (unit === '千' || unit.toLowerCase() === 'k') return Math.floor(number * 1000);
+    if (unit.toLowerCase() === 'm') return Math.floor(number * 1000000);
+    return Math.floor(number);
+  }
+
+  function pickMainArticle() {
+    const articles = Array.from(document.querySelectorAll('article[data-testid="tweet"]'));
+    if (articles.length <= 1) return articles[0] || null;
+    const viewportCenter = window.innerHeight / 2;
+    return articles
+      .map((article) => {
+        const rect = article.getBoundingClientRect();
+        const center = rect.top + rect.height / 2;
+        return { article, distance: Math.abs(center - viewportCenter), top: rect.top };
+      })
+      .filter((item) => item.top > -120)
+      .sort((a, b) => a.distance - b.distance)[0]?.article || articles[0];
+  }
+
+  function getAuthorFromArticle(article) {
+    const urlHandle = location.pathname.split('/').filter(Boolean)[0];
+    const userNameNode = article.querySelector('[data-testid="User-Name"]');
+    const userLinks = Array.from((userNameNode || article).querySelectorAll('a[href^="/"]'));
+    const handleLink = userLinks.find((link) => {
+      const path = link.getAttribute('href') || '';
+      const parts = path.split('/').filter(Boolean);
+      return parts.length === 1 && !['home', 'explore', 'notifications', 'messages', 'i'].includes(parts[0]);
+    });
+    const handle = (handleLink?.getAttribute('href') || urlHandle || '').split('/').filter(Boolean)[0] || '';
+    return handle ? `@${handle}` : '';
+  }
+
+  function getMetricFromSelector(article, selectors) {
+    for (const selector of selectors) {
+      const element = article.querySelector(selector);
+      const value = parseHumanNumber(element?.textContent || element?.getAttribute('aria-label') || '');
+      if (value > 0) return value;
+    }
+    return 0;
+  }
+
+  function getMetricFromGroupLabel(article, names) {
+    const labels = Array.from(article.querySelectorAll('[role="group"][aria-label], [aria-label]'))
+      .map((node) => node.getAttribute('aria-label') || '')
+      .filter(Boolean);
+    for (const label of labels) {
+      const parts = label.split(/[,，、]/).map((part) => part.trim()).filter(Boolean);
+      for (const part of parts) {
+        if (names.some((name) => part.toLowerCase().includes(name.toLowerCase()))) {
+          const value = parseHumanNumber(part);
+          if (value > 0) return value;
+        }
+      }
+    }
+    return 0;
+  }
+
+  const article = pickMainArticle();
+  if (!article) {
+    return {};
+  }
+
+  const commentCount =
+    getMetricFromSelector(article, ['[data-testid="reply"]']) ||
+    getMetricFromGroupLabel(article, ['reply', 'replies', 'comment', 'comments', '回复', '评论']);
+  const repostCount =
+    getMetricFromSelector(article, ['[data-testid="retweet"]']) ||
+    getMetricFromGroupLabel(article, ['repost', 'reposts', 'retweet', 'retweets', '转发', '转帖']);
+  const likeCount =
+    getMetricFromSelector(article, ['[data-testid="like"]', '[data-testid="unlike"]']) ||
+    getMetricFromGroupLabel(article, ['like', 'likes', '喜欢', '赞']);
+  const viewCount =
+    getMetricFromSelector(article, ['a[href$="/analytics"]', 'a[aria-label*="views"]', 'a[aria-label*="查看"]']) ||
+    getMetricFromGroupLabel(article, ['view', 'views', '查看', '浏览']);
+
+  return {
+    authorName: getAuthorFromArticle(article),
+    viewCount,
+    likeCount,
+    repostCount,
+    commentCount
+  };
+}
+
+function clearNewsForm() {
+  [
+    els.newsContentMarkdown,
+    els.newsSourceName,
+    els.newsAuthorName,
+    els.newsTags,
+    els.newsViewCount,
+    els.newsLikeCount,
+    els.newsRepostCount,
+    els.newsCommentCount
+  ].forEach((input) => {
+    input.value = '';
+  });
+  els.newsCover.value = '';
+  resetCoverPreview();
+}
+
+async function submitNews() {
+  settings = await getSettings();
+  updateSetupNotice();
+  if (!isConfigured()) return;
+
+  const contentMarkdown = els.newsContentMarkdown.value.trim();
+  if (!contentMarkdown) {
+    showToast('请填写文章正文');
+    return;
+  }
+
+  els.submitNewsBtn.disabled = true;
+  els.submitNewsBtn.textContent = '上传头图';
+
+  let coverFileId = '';
+  try {
+    coverFileId = await uploadCoverToCloudStorage();
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : '头图上传失败');
+    els.submitNewsBtn.disabled = false;
+    els.submitNewsBtn.textContent = '上传发布';
+    return;
+  }
+
+  const payload = {
+    coverFileId,
+    contentMarkdown,
+    sourceName: els.newsSourceName.value.trim() || 'AIO',
+    authorName: els.newsAuthorName.value.trim(),
+    sourcePlatform: inferPlatform(els.newsSourceName.value),
+    tags: els.newsTags.value.trim(),
+    viewCount: toNumber(els.newsViewCount.value),
+    likeCount: toNumber(els.newsLikeCount.value),
+    repostCount: toNumber(els.newsRepostCount.value),
+    commentCount: toNumber(els.newsCommentCount.value),
+    status: 'published',
+    publishedAt: Date.now()
+  };
+
+  if (JSON.stringify(payload).length > 900 * 1024) {
+    showToast('内容过大，请缩短正文');
+    els.submitNewsBtn.disabled = false;
+    els.submitNewsBtn.textContent = '上传发布';
+    return;
+  }
+
+  els.submitNewsBtn.textContent = '发布中';
+  try {
+    const result = await apiRequest('/operator/news', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+    showToast(`已发布，热度 ${result.score || 0}`);
+    clearNewsForm();
+  } catch (error) {
+    showError(error);
+  } finally {
+    els.submitNewsBtn.disabled = false;
+    els.submitNewsBtn.textContent = '上传发布';
+  }
+}
+
+async function uploadCoverToCloudStorage() {
+  const coverDataUrl = await readCoverDataUrl();
+  if (!coverDataUrl) {
+    return '';
+  }
+  const blob = dataUrlToBlob(coverDataUrl);
+  const result = await apiRequest('/operator/news/cover', {
+    method: 'POST',
+    headers: {
+      'content-type': blob.type || 'image/jpeg'
+    },
+    body: blob
+  });
+  return result.coverFileId || '';
+}
+
+function readCoverDataUrl() {
+  if (pastedCoverDataUrl) {
+    return Promise.resolve(pastedCoverDataUrl);
+  }
+
+  return new Promise((resolve, reject) => {
+    const file = els.newsCover.files && els.newsCover.files[0];
+    if (!file) {
+      resolve('');
+      return;
+    }
+    if (!/^image\/(png|jpe?g|webp)$/.test(file.type)) {
+      reject(new Error('头图仅支持 PNG/JPG/WebP'));
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      reject(new Error('头图不能超过 5MB'));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      compressImageDataUrl(String(reader.result || ''))
+        .then(resolve)
+        .catch(reject);
+    };
+    reader.onerror = () => reject(new Error('头图读取失败'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function dataUrlToBlob(dataUrl) {
+  const matched = String(dataUrl || '').match(/^data:(image\/(?:png|jpe?g|webp));base64,([A-Za-z0-9+/=]+)$/);
+  if (!matched) {
+    throw new Error('头图格式不正确');
+  }
+  const mimeType = matched[1];
+  const binary = atob(matched[2]);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return new Blob([bytes], { type: mimeType });
+}
+
+async function handleCoverPaste(event) {
+  const clipboardData = event.clipboardData;
+  if (!clipboardData) return;
+
+  const imageFile = findImageFileFromClipboard(clipboardData);
+  if (imageFile) {
+    event.preventDefault();
+    await setCoverFromFile(imageFile, '已粘贴头图');
+    return;
+  }
+
+  const imageUrl = findImageUrlFromClipboard(clipboardData);
+  if (imageUrl) {
+    event.preventDefault();
+    await setCoverFromUrl(imageUrl);
+    return;
+  }
+
+  showToast('剪贴板里没有图片');
+}
+
+async function handleCoverFileChange() {
+  const file = els.newsCover.files && els.newsCover.files[0];
+  if (!file) return;
+  pastedCoverDataUrl = '';
+  setCoverPreview(URL.createObjectURL(file), file.name || '已选择头图', true);
+}
+
+function findImageFileFromClipboard(clipboardData) {
+  const items = Array.from(clipboardData.items || []);
+  const imageItem = items.find((item) => item.kind === 'file' && /^image\//.test(item.type));
+  return imageItem?.getAsFile() || null;
+}
+
+function findImageUrlFromClipboard(clipboardData) {
+  const html = clipboardData.getData('text/html');
+  if (html) {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const src = doc.querySelector('img')?.getAttribute('src') || '';
+    if (/^https?:\/\//.test(src) || /^data:image\//.test(src)) {
+      return src;
+    }
+  }
+
+  const text = clipboardData.getData('text/plain').trim();
+  return /^https?:\/\/.+\.(png|jpe?g|webp)(\?.*)?$/i.test(text) ? text : '';
+}
+
+async function setCoverFromFile(file, message) {
+  try {
+    const dataUrl = await readImageFileDataUrl(file);
+    pastedCoverDataUrl = await compressImageDataUrl(dataUrl);
+    els.newsCover.value = '';
+    setCoverPreview(pastedCoverDataUrl, message);
+    showToast(message);
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : '头图读取失败');
+  }
+}
+
+async function setCoverFromUrl(url) {
+  try {
+    const dataUrl = url.startsWith('data:image/')
+      ? url
+      : await fetchImageAsDataUrl(url);
+    pastedCoverDataUrl = await compressImageDataUrl(dataUrl);
+    els.newsCover.value = '';
+    setCoverPreview(pastedCoverDataUrl, '已粘贴图片链接');
+    showToast('已粘贴头图');
+  } catch {
+    showToast('图片链接读取失败，请改用复制图片或本地选择');
+  }
+}
+
+function readImageFileDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    if (!/^image\/(png|jpe?g|webp)$/.test(file.type)) {
+      reject(new Error('头图仅支持 PNG/JPG/WebP'));
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      reject(new Error('头图不能超过 5MB'));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('头图读取失败'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function fetchImageAsDataUrl(url) {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error('图片链接读取失败');
+  }
+  const blob = await response.blob();
+  if (!/^image\/(png|jpe?g|webp)$/.test(blob.type)) {
+    throw new Error('头图仅支持 PNG/JPG/WebP');
+  }
+  if (blob.size > 5 * 1024 * 1024) {
+    throw new Error('头图不能超过 5MB');
+  }
+  return readImageFileDataUrl(blob);
+}
+
+function setCoverPreview(src, status, revokeOnReset = false) {
+  if (coverPreviewObjectUrl) {
+    URL.revokeObjectURL(coverPreviewObjectUrl);
+    coverPreviewObjectUrl = '';
+  }
+  if (revokeOnReset) {
+    coverPreviewObjectUrl = src;
+  }
+  els.newsCoverPreview.src = src;
+  els.newsCoverPreview.classList.remove('hidden');
+  els.newsCoverDropzone.classList.add('cover-dropzone--filled');
+  els.newsCoverStatus.textContent = status;
+}
+
+function resetCoverPreview() {
+  pastedCoverDataUrl = '';
+  if (coverPreviewObjectUrl) {
+    URL.revokeObjectURL(coverPreviewObjectUrl);
+    coverPreviewObjectUrl = '';
+  }
+  els.newsCoverPreview.removeAttribute('src');
+  els.newsCoverPreview.classList.add('hidden');
+  els.newsCoverDropzone.classList.remove('cover-dropzone--filled');
+  els.newsCoverStatus.textContent = '复制网页图片后，点击这里按 Cmd/Ctrl + V';
+}
+
+function compressImageDataUrl(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => {
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      if (!context) {
+        reject(new Error('头图压缩失败'));
+        return;
+      }
+
+      const baseWidth = Math.min(1280, image.width);
+      const scale = baseWidth / image.width;
+      const candidates = [
+        { width: baseWidth, quality: 0.9 },
+        { width: Math.round(baseWidth * 0.92), quality: 0.84 },
+        { width: Math.round(baseWidth * 0.82), quality: 0.78 },
+        { width: Math.round(baseWidth * 0.72), quality: 0.7 },
+        { width: Math.round(baseWidth * 0.62), quality: 0.62 }
+      ];
+
+      let bestDataUrl = '';
+      for (const candidate of candidates) {
+        const width = Math.max(640, candidate.width);
+        const height = Math.max(1, Math.round(image.height * scale * (width / baseWidth)));
+        canvas.width = width;
+        canvas.height = height;
+        context.clearRect(0, 0, width, height);
+        context.drawImage(image, 0, 0, width, height);
+        bestDataUrl = canvas.toDataURL('image/jpeg', candidate.quality);
+        if (bestDataUrl.length <= MAX_COVER_DATA_URL_LENGTH) {
+          resolve(bestDataUrl);
+          return;
+        }
+      }
+
+      if (bestDataUrl && bestDataUrl.length <= 3 * 1024 * 1024) {
+        resolve(bestDataUrl);
+        return;
+      }
+      reject(new Error('头图压缩后仍过大，请换一张更小的图片'));
+    };
+    image.onerror = () => reject(new Error('头图压缩失败'));
+    image.src = dataUrl;
+  });
+}
+
+function safeHost(url) {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return '';
+  }
+}
+
+function inferPlatform(url) {
+  const normalized = String(url || '').toLowerCase();
+  if (normalized === 'x' || normalized.includes('twitter')) return 'x';
+  if (normalized.includes('openai') || normalized.includes('anthropic') || normalized.includes('google')) return 'official';
+  const host = safeHost(url);
+  if (host.includes('x.com') || host.includes('twitter.com')) return 'x';
+  if (host.includes('openai.com') || host.includes('anthropic.com') || host.includes('google')) return 'official';
+  return 'blog';
+}
+
+function toNumber(value) {
+  const numeric = Number(String(value || '').replace(/,/g, ''));
+  return Number.isFinite(numeric) ? Math.max(0, Math.floor(numeric)) : 0;
 }
 
 async function copyText(text, message = '复制成功') {

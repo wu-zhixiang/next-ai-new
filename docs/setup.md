@@ -46,12 +46,15 @@ npm install
 - `create-order`
 - `pay-order`
 - `get-pay-result`
+- `list-ai-news`
+- `get-ai-news-detail`
 - `pay-notify`
 - `fulfill-membership`
 - `retry-order`
 - `reset-database`
 - `operator-api`
 - `send-renew-reminders`
+- `summarize-ai-tool`
 - `seed-database`
 
 ## 5. 支付环境配置
@@ -85,7 +88,7 @@ npm install
 
 ## 7. 运营插件接口配置
 
-运营插件通过 `operator-api` 云函数读取待开通订单、查看账号密码，并把订单标记为处理中或已开通。
+运营插件通过 `operator-api` 云函数读取待开通订单、查看账号密码、把订单标记为处理中或已开通，并上传 AI 资讯文章。
 
 需要给 `operator-api` 配置：
 
@@ -93,6 +96,14 @@ npm install
   运营接口访问密钥，建议使用 32 位以上随机字符串。
 - `AI_ACCOUNT_SECRET`
   必须与 `save-ai-account` 使用的密码加密密钥一致，否则运营插件无法解密用户提交的账号密码。
+- `TCB_AI_NEWS_META_ENABLED`
+  可选。设置为 `true` 后，运营插件上传 Markdown 资讯时会优先通过云开发 AI 成长计划生成标题和摘要。
+- `TCB_AI_API_KEY`
+  可选。云开发 AI API Key。
+- `TCB_AI_BASE_URL`
+  可选。云开发 AI OpenAI 兼容 Base URL，例如 `https://<ENV_ID>.api.tcloudbasegateway.com/v1/ai/hunyuan-v3`。
+- `TCB_AI_MODEL`
+  可选。标题摘要生成模型，默认 `hy3-preview`。未配置或 AI 调用失败时，会从 Markdown 正文自动提取标题和摘要。
 
 部署 `operator-api` 后，在云开发控制台开启 HTTP 访问服务。插件设置页填写：
 
@@ -101,14 +112,34 @@ npm install
 - `运营密钥`
   填与 `OPERATOR_API_TOKEN` 完全一致的值。
 
-## 8. 当前手机号绑定说明
+## 8. AI 工具配置
+
+`AI工具` 页第一版已接入 `文章总结`，需要部署：
+
+- `summarize-ai-tool`
+
+云函数环境变量：
+
+- `TCB_AI_API_KEY`
+  云开发 AI API Key。
+- `TCB_AI_BASE_URL`
+  云开发 AI OpenAI 兼容 Base URL，例如 `https://<ENV_ID>.api.tcloudbasegateway.com/v1/ai/hunyuan-v3`。
+- `TCB_AI_MODEL`
+  可选，默认 `hy3-preview`。
+
+小程序前端广告配置：
+
+- `TARO_APP_AI_TOOL_REWARD_AD_UNIT_ID`
+  激励视频广告位 ID。未配置时，免费次数用完后会提示广告位待配置，不会继续调用工具。
+
+## 9. 当前手机号绑定说明
 
 - 小程序启动时会静默调用 `user-login`，不再强制先进入登录页。
 - `bind-mobile` 当前在套餐页首购时通过微信手机号授权直接触发，不单独保留绑定页面。
 - 现阶段云函数通过 `openapi.phonenumber.getPhoneNumber` 直接换取真实手机号并落库。
 - 前端只展示脱敏后的手机号，不再依赖占位值。
 
-## 9. 续费提醒
+## 10. 续费提醒
 
 当前续费采用“用户手动续费 + 到期前 2 天提醒”：
 
@@ -125,7 +156,7 @@ npm install
 
 建议在云开发定时触发器中每天执行一次 `send-renew-reminders`。
 
-## 10. 清理测试数据
+## 11. 清理测试数据
 
 使用 `reset-database` 云函数清除测试业务数据，并重新初始化会员套餐。为避免误删，必须传确认字符串。
 

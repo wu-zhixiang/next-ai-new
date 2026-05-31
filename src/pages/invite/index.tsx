@@ -63,11 +63,11 @@ export default function InvitePage(): JSX.Element {
     Taro.showShareMenu({
       withShareTicket: true,
     });
+    void loadInviteHome();
   }, []);
 
   useDidShow(() => {
     showTabBarSafely();
-    void loadInviteHome();
   });
 
   useShareAppMessage(() => {

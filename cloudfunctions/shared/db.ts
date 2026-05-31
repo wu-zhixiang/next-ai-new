@@ -29,6 +29,25 @@ export function collection(name: CollectionName) {
   return db.collection(COLLECTIONS[name]);
 }
 
+export async function ensureCollection(name: CollectionName): Promise<void> {
+  const target = COLLECTIONS[name];
+  try {
+    await (db as unknown as { createCollection(collectionName: string): Promise<unknown> }).createCollection(target);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (
+      !message.includes('already exists')
+      && !message.includes('Collection already exists')
+      && !message.includes('already exist')
+      && !message.includes('DATABASE_COLLECTION_ALREADY_EXIST')
+      && !message.includes('ResourceExist')
+      && !message.includes('Table exist')
+    ) {
+      throw error;
+    }
+  }
+}
+
 export async function getUserByOpenId(openid: string): Promise<(UserRecord & { _id: string }) | null> {
   const result = await collection('users').where({ openid }).limit(1).get();
   return (result.data[0] as (UserRecord & { _id: string }) | undefined) ?? null;

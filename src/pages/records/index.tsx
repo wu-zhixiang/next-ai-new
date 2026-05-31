@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Image, Text, View } from '@tarojs/components';
 import Taro, { useDidShow } from '@tarojs/taro';
 import { SaasPageFrame } from '@/components/SaasPageFrame';
@@ -53,8 +53,11 @@ export default function RecordsPage(): JSX.Element {
 
   useDidShow(() => {
     showTabBarSafely();
-    void loadOrders();
   });
+
+  useEffect(() => {
+    void loadOrders();
+  }, []);
 
   async function loadOrders(): Promise<void> {
     setLoading(true);

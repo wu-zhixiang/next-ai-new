@@ -33,3 +33,21 @@ export interface PlanView {
   durationDays: number;
   description?: string;
 }
+
+export interface AiNewsView {
+  id: string;
+  title: string;
+  summary: string;
+  coverFileId?: string;
+  sourceName: string;
+  sourceUrl?: string;
+  authorName?: string;
+  sourcePlatform: 'x' | 'blog' | 'official' | 'manual';
+  tags: string[];
+  heat: number;
+  publishedAt: number;
+}
+
+export interface AiNewsDetailView extends AiNewsView {
+  contentMarkdown: string;
+}

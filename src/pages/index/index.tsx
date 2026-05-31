@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button, Text, View } from '@tarojs/components';
-import Taro, { useDidShow } from '@tarojs/taro';
+import Taro from '@tarojs/taro';
 import { AppTransparentHeader } from '@/components/AppTransparentHeader';
 import { callCloudFunction } from '@/services/api';
 import type { MembershipView } from '@/types';
@@ -13,9 +13,9 @@ interface HomeData {
 export default function IndexPage(): JSX.Element {
   const [membership, setMembership] = useState<MembershipView>({ status: 'none' });
 
-  useDidShow(() => {
+  useEffect(() => {
     void loadData();
-  });
+  }, []);
 
   async function loadData(): Promise<void> {
     try {

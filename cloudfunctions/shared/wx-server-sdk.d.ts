@@ -30,8 +30,10 @@ declare module 'wx-server-sdk' {
       APPID?: string;
       UNIONID?: string;
     };
+    uploadFile(options: { cloudPath: string; fileContent: Buffer }): Promise<{ fileID: string }>;
     database(): {
       command: unknown;
+      createCollection(name: string): Promise<unknown>;
       collection(name: string): CollectionRef;
     };
   };

@@ -4,14 +4,19 @@
   "description": "处理待开通会员订单，复制交付账号信息，并确认人工开通。",
   "version": "0.1.0",
   "action": {
-    "default_title": "运营助手",
-    "default_popup": "popup.html"
+    "default_title": "运营助手"
+  },
+  "side_panel": {
+    "default_path": "popup.html"
   },
   "options_page": "options.html",
   "permissions": [
     "storage",
     "clipboardWrite",
-    "tabs"
+    "tabs",
+    "activeTab",
+    "scripting",
+    "sidePanel"
   ],
   "host_permissions": [
     "https://*/*",

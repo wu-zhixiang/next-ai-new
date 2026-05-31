@@ -131,6 +131,31 @@ h1 {
   flex: 1;
 }
 
+.tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 4px;
+  border-radius: 12px;
+  background: #eaf1ee;
+}
+
+.tab-button {
+  height: 34px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.tab-button--active {
+  background: var(--card);
+  color: var(--primary-strong);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+}
+
 .notice {
   display: grid;
   gap: 8px;
@@ -166,6 +191,141 @@ h1 {
   display: grid;
   gap: 14px;
   margin-top: 16px;
+}
+
+.news-panel {
+  margin-top: 16px;
+}
+
+.news-form-card {
+  padding: 16px;
+  border: 1px solid rgba(220, 229, 225, 0.9);
+  border-radius: 14px;
+  background: var(--card);
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06);
+}
+
+.news-form-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.news-form-card__head h2 {
+  font-size: 19px;
+  line-height: 1.25;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.field span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.field input,
+.field textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 9px 10px;
+  background: #fbfdfc;
+  color: var(--ink);
+  outline: none;
+}
+
+.field textarea {
+  min-height: 92px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.field input[type="file"] {
+  padding: 8px;
+}
+
+.cover-file-input {
+  display: none;
+}
+
+.cover-dropzone {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 132px;
+  border: 1px dashed rgba(49, 104, 92, 0.38);
+  border-radius: 12px;
+  background: #f5faf8;
+  color: var(--primary-strong);
+  cursor: pointer;
+  overflow: hidden;
+  outline: none;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
+}
+
+.cover-dropzone:hover,
+.cover-dropzone:focus {
+  border-color: var(--primary);
+  background: #eef7f3;
+  box-shadow: 0 0 0 3px rgba(49, 104, 92, 0.08);
+}
+
+.cover-dropzone--filled {
+  border-style: solid;
+  background: #eef4f1;
+}
+
+.cover-dropzone__preview {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.cover-dropzone__placeholder {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  padding: 18px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.78);
+  text-align: center;
+}
+
+.cover-dropzone__placeholder strong {
+  font-size: 14px;
+}
+
+.cover-dropzone__placeholder small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.field .markdown-textarea {
+  min-height: 190px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.field-grid--four {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
 }
 
 .task-card {

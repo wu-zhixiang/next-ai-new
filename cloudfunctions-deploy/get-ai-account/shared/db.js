@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports._ = exports.db = exports.app = void 0;
 exports.collection = collection;
+exports.ensureCollection = ensureCollection;
 exports.getUserByOpenId = getUserByOpenId;
 exports.getUserById = getUserById;
 exports.getUserByInviteCode = getUserByInviteCode;
@@ -30,6 +31,23 @@ exports.db = wx_server_sdk_1.default.database();
 exports._ = exports.db.command;
 function collection(name) {
     return exports.db.collection(constants_1.COLLECTIONS[name]);
+}
+async function ensureCollection(name) {
+    const target = constants_1.COLLECTIONS[name];
+    try {
+        await exports.db.createCollection(target);
+    }
+    catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (!message.includes('already exists')
+            && !message.includes('Collection already exists')
+            && !message.includes('already exist')
+            && !message.includes('DATABASE_COLLECTION_ALREADY_EXIST')
+            && !message.includes('ResourceExist')
+            && !message.includes('Table exist')) {
+            throw error;
+        }
+    }
 }
 async function getUserByOpenId(openid) {
     var _a;

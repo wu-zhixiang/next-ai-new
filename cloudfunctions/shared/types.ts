@@ -151,6 +151,28 @@ export interface EmailVerificationCodeRecord {
   createdAt: number;
 }
 
+export interface AiNewsRecord {
+  _id?: string;
+  title: string;
+  summary: string;
+  coverFileId?: string;
+  contentMarkdown: string;
+  sourceName: string;
+  sourceUrl?: string;
+  authorName?: string;
+  sourcePlatform: 'x' | 'blog' | 'official' | 'manual';
+  tags: string[];
+  viewCount: number;
+  likeCount: number;
+  repostCount: number;
+  commentCount: number;
+  score: number;
+  status: 'draft' | 'published' | 'archived';
+  publishedAt: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface ApiResponse<T> {
   code: number;
   message: string;
@@ -165,6 +187,24 @@ export interface PlanView {
   price: number;
   durationDays: number;
   description?: string;
+}
+
+export interface AiNewsView {
+  id: string;
+  title: string;
+  summary: string;
+  coverFileId?: string;
+  sourceName: string;
+  sourceUrl?: string;
+  authorName?: string;
+  sourcePlatform: AiNewsRecord['sourcePlatform'];
+  tags: string[];
+  heat: number;
+  publishedAt: number;
+}
+
+export interface AiNewsDetailView extends AiNewsView {
+  contentMarkdown: string;
 }
 
 export interface MembershipView {

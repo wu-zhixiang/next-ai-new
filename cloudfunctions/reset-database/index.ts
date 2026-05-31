@@ -30,6 +30,7 @@ const DEFAULT_CLEAR_COLLECTIONS: CollectionKey[] = [
   'inviteRelations',
   'pointsLedger',
   'emailVerificationCodes',
+  'aiNews',
   'reminderLogs',
   'auditLogs',
 ];

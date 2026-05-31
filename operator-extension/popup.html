@@ -27,17 +27,91 @@
         <button id="loadBtn" class="primary-button" type="button">加载任务</button>
       </section>
 
-      <section id="summary" class="summary hidden">
-        <span id="taskCount">0</span>
-        <span>个订单等待人工开通</span>
+      <nav class="tabs" aria-label="运营功能">
+        <button id="ordersTabBtn" class="tab-button tab-button--active" type="button">订单</button>
+        <button id="newsTabBtn" class="tab-button" type="button">资讯</button>
+      </nav>
+
+      <section id="ordersPanel">
+        <section id="summary" class="summary hidden">
+          <span id="taskCount">0</span>
+          <span>个订单等待人工开通</span>
+        </section>
+
+        <section id="emptyState" class="empty hidden">
+          <p>暂无待开通订单</p>
+          <span>支付成功后的订单会出现在这里。</span>
+        </section>
+
+        <section id="taskList" class="task-list"></section>
       </section>
 
-      <section id="emptyState" class="empty hidden">
-        <p>暂无待开通订单</p>
-        <span>支付成功后的订单会出现在这里。</span>
-      </section>
+      <section id="newsPanel" class="news-panel hidden">
+        <div class="news-form-card">
+          <div class="news-form-card__head">
+            <div>
+              <p class="eyebrow">AI资讯</p>
+              <h2>上传真实资讯</h2>
+            </div>
+            <button id="fillCurrentTabBtn" class="secondary-button" type="button">读取当前页</button>
+          </div>
 
-      <section id="taskList" class="task-list"></section>
+          <label class="field">
+            <span>头图</span>
+            <div id="newsCoverDropzone" class="cover-dropzone" tabindex="0" role="button" aria-label="粘贴或选择头图">
+              <img id="newsCoverPreview" class="cover-dropzone__preview hidden" alt="头图预览" />
+              <div class="cover-dropzone__placeholder">
+                <strong>粘贴头图或点击选择</strong>
+                <small id="newsCoverStatus">复制网页图片后，点击这里按 Cmd/Ctrl + V</small>
+              </div>
+            </div>
+            <input id="newsCover" class="cover-file-input" type="file" accept="image/png,image/jpeg,image/webp" />
+          </label>
+          <label class="field">
+            <span>文章正文 Markdown</span>
+            <textarea id="newsContentMarkdown" class="markdown-textarea" maxlength="20000" placeholder="粘贴 Grok 生成的公众号风格 Markdown 正文"></textarea>
+          </label>
+          <div class="field-grid">
+            <label class="field">
+              <span>来源</span>
+              <input id="newsSourceName" placeholder="AIO" />
+            </label>
+            <label class="field">
+              <span>作者</span>
+              <input id="newsAuthorName" placeholder="@author" />
+            </label>
+          </div>
+
+          <label class="field">
+            <span>标签</span>
+            <input id="newsTags" placeholder="OpenAI,Google AI,Claude AI,AI工具" />
+          </label>
+
+          <div class="field-grid field-grid--four">
+            <label class="field">
+              <span>浏览</span>
+              <input id="newsViewCount" inputmode="numeric" placeholder="0" />
+            </label>
+            <label class="field">
+              <span>点赞</span>
+              <input id="newsLikeCount" inputmode="numeric" placeholder="0" />
+            </label>
+            <label class="field">
+              <span>转发</span>
+              <input id="newsRepostCount" inputmode="numeric" placeholder="0" />
+            </label>
+            <label class="field">
+              <span>评论</span>
+              <input id="newsCommentCount" inputmode="numeric" placeholder="0" />
+            </label>
+          </div>
+
+          <div class="actions">
+            <button id="clearNewsFormBtn" class="secondary-button" type="button">清空</button>
+            <button id="submitNewsBtn" class="primary-button" type="button">上传发布</button>
+          </div>
+        </div>
+      </section>
 
       <section id="confirmDialog" class="confirm-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
         <div class="confirm-dialog__panel">

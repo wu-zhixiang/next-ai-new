@@ -220,10 +220,13 @@ export default function MemberPage(): JSX.Element {
 
   useDidShow(() => {
     showTabBarSafely();
+  });
+
+  useEffect(() => {
     loadCachedUserInfo();
     void loadData();
     void loadPlans();
-  });
+  }, []);
 
   useEffect(() => {
     if (!paymentLocked) return;

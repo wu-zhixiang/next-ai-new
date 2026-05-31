@@ -1,6 +1,10 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.main = main;
+const node_https_1 = __importDefault(require("node:https"));
 const ai_account_1 = require("./shared/ai-account");
 const db_1 = require("./shared/db");
 const orders_1 = require("./shared/orders");
@@ -88,10 +92,22 @@ function matchTaskRoute(event) {
     if (event.action === 'getVerificationCode' && event.orderNo) {
         return { action: 'getVerificationCode', orderNo: event.orderNo };
     }
+    if (event.action === 'createNews') {
+        return { action: 'createNews' };
+    }
+    if (event.action === 'uploadNewsCover') {
+        return { action: 'uploadNewsCover' };
+    }
     const method = getMethod(event);
     const path = getPath(event).replace(/\/$/, '');
     if (method === 'GET' && /(?:^|\/)(?:operator\/)?tasks$/.test(path)) {
         return { action: 'listTasks' };
+    }
+    if (method === 'POST' && /(?:^|\/)(?:operator\/)?news$/.test(path)) {
+        return { action: 'createNews' };
+    }
+    if (method === 'POST' && /(?:^|\/)(?:operator\/)?news\/cover$/.test(path)) {
+        return { action: 'uploadNewsCover' };
     }
     const codeMatched = path.match(/(?:^|\/)(?:operator\/)?tasks\/([^/]+)\/verification-code$/);
     if (method === 'GET' && (codeMatched === null || codeMatched === void 0 ? void 0 : codeMatched[1])) {
@@ -122,6 +138,202 @@ function sanitizeNote(value) {
         return '';
     }
     return value.trim().slice(0, 200);
+}
+function sanitizeText(value, maxLength) {
+    return typeof value === 'string' ? value.trim().slice(0, maxLength) : '';
+}
+function sanitizeNumber(value) {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? Math.max(0, Math.floor(numeric)) : 0;
+}
+function normalizeSourcePlatform(value) {
+    if (value === 'x' || value === 'blog' || value === 'official' || value === 'manual') {
+        return value;
+    }
+    return 'manual';
+}
+function normalizeTags(value) {
+    const rawTags = Array.isArray(value)
+        ? value
+        : typeof value === 'string'
+            ? value.split(/[,，\s]+/)
+            : [];
+    return Array.from(new Set(rawTags
+        .map((item) => sanitizeText(item, 12))
+        .filter(Boolean))).slice(0, 6);
+}
+function normalizeMarkdown(value) {
+    return typeof value === 'string' ? value.trim().slice(0, 20000) : '';
+}
+function stripMarkdown(markdown) {
+    return markdown
+        .replace(/!\[[^\]]*]\([^)]+\)/g, '')
+        .replace(/\[([^\]]+)]\([^)]+\)/g, '$1')
+        .replace(/[`*_>#-]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+function fallbackNewsMeta(markdown) {
+    const lines = markdown
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean);
+    const heading = lines.find((line) => /^#{1,3}\s+/.test(line));
+    const plain = stripMarkdown(markdown);
+    const title = sanitizeText((heading === null || heading === void 0 ? void 0 : heading.replace(/^#{1,3}\s+/, '')) || plain.slice(0, 36), 80) || 'AI 技术新动态';
+    const summary = sanitizeText(plain.slice(0, 150), 260) || '这是一篇关于 AI 最新动态和实际应用价值的整理文章。';
+    return { title, summary };
+}
+function parseJsonObject(text) {
+    const matched = text.match(/\{[\s\S]*}/);
+    if (!matched) {
+        return null;
+    }
+    try {
+        const parsed = JSON.parse(matched[0]);
+        return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+    }
+    catch (_a) {
+        return null;
+    }
+}
+function postJson(url, headers, body) {
+    return new Promise((resolve, reject) => {
+        const payload = JSON.stringify(body);
+        const request = node_https_1.default.request(url, {
+            method: 'POST',
+            headers: {
+                ...headers,
+                'content-length': Buffer.byteLength(payload),
+            },
+        }, (response) => {
+            const chunks = [];
+            response.on('data', (chunk) => chunks.push(chunk));
+            response.on('end', () => {
+                var _a;
+                const text = Buffer.concat(chunks).toString('utf8');
+                if (((_a = response.statusCode) !== null && _a !== void 0 ? _a : 500) >= 400) {
+                    reject(new Error(`云开发 AI 调用失败：${response.statusCode} ${text.slice(0, 200)}`));
+                    return;
+                }
+                try {
+                    resolve(JSON.parse(text));
+                }
+                catch (_b) {
+                    reject(new Error('云开发 AI 返回非 JSON'));
+                }
+            });
+        });
+        request.on('error', reject);
+        request.write(payload);
+        request.end();
+    });
+}
+async function generateNewsMetaByTencentAi(markdown) {
+    var _a, _b, _c, _d;
+    const apiKey = process.env.TCB_AI_API_KEY;
+    const baseUrl = process.env.TCB_AI_BASE_URL;
+    if (process.env.TCB_AI_NEWS_META_ENABLED !== 'true' || !apiKey || !baseUrl) {
+        return null;
+    }
+    try {
+        const modelName = process.env.TCB_AI_MODEL || 'hy3-preview';
+        const endpoint = `${baseUrl.replace(/\/$/, '')}/chat/completions`;
+        const result = await postJson(endpoint, {
+            authorization: `Bearer ${apiKey}`,
+            'content-type': 'application/json',
+        }, {
+            model: modelName,
+            temperature: 0.35,
+            messages: [
+                {
+                    role: 'system',
+                    content: '你是 AI 科技资讯编辑。请只输出 JSON，不要输出 Markdown。',
+                },
+                {
+                    role: 'user',
+                    content: `请根据下面这篇文章生成适合小程序 AI 资讯卡片的标题和摘要。标题不超过 32 个汉字，摘要 80-120 个汉字，客观克制，不夸大，不使用“震惊”等营销词。\n\n文章：\n${markdown.slice(0, 8000)}\n\n输出格式：{"title":"...","summary":"..."}`,
+                },
+            ],
+        });
+        const text = (_d = (_c = (_b = (_a = result.choices) === null || _a === void 0 ? void 0 : _a[0]) === null || _b === void 0 ? void 0 : _b.message) === null || _c === void 0 ? void 0 : _c.content) !== null && _d !== void 0 ? _d : '';
+        const parsed = parseJsonObject(text);
+        const title = sanitizeText(parsed === null || parsed === void 0 ? void 0 : parsed.title, 80);
+        const summary = sanitizeText(parsed === null || parsed === void 0 ? void 0 : parsed.summary, 260);
+        return title && summary ? { title, summary } : null;
+    }
+    catch (error) {
+        console.warn('ai.news.meta.generate.failed', error instanceof Error ? error.message : String(error));
+        return null;
+    }
+}
+function parseDataUrl(value) {
+    if (typeof value !== 'string') {
+        return null;
+    }
+    const matched = value.match(/^data:(image\/(?:png|jpe?g|webp));base64,([A-Za-z0-9+/=]+)$/);
+    if (!matched) {
+        return null;
+    }
+    const mimeType = matched[1];
+    const extension = mimeType.includes('png') ? 'png' : mimeType.includes('webp') ? 'webp' : 'jpg';
+    const bytes = Buffer.from(matched[2], 'base64');
+    if (bytes.length > 3 * 1024 * 1024) {
+        throw new Error('头图不能超过 3MB');
+    }
+    return { mimeType, extension, bytes };
+}
+function getImageExtension(mimeType) {
+    return mimeType.includes('png') ? 'png' : mimeType.includes('webp') ? 'webp' : 'jpg';
+}
+async function uploadNewsCoverFile(file, now) {
+    if (file.bytes.length > 3 * 1024 * 1024) {
+        throw new Error('头图不能超过 3MB');
+    }
+    const random = Math.floor(Math.random() * 100000).toString().padStart(5, '0');
+    const result = await db_1.app.uploadFile({
+        cloudPath: `ai-news/covers/${now}-${random}.${file.extension}`,
+        fileContent: file.bytes,
+    });
+    return result.fileID;
+}
+async function uploadNewsCover(dataUrl, now) {
+    const file = parseDataUrl(dataUrl);
+    return file ? uploadNewsCoverFile(file, now) : '';
+}
+function parseImageEventBody(event) {
+    const contentType = getHeader(event, 'content-type').split(';')[0].trim().toLowerCase();
+    if (!/^image\/(?:png|jpe?g|webp)$/.test(contentType)) {
+        throw new Error('头图仅支持 PNG/JPG/WebP');
+    }
+    if (!event.body) {
+        throw new Error('缺少头图文件');
+    }
+    const bytes = event.isBase64Encoded
+        ? Buffer.from(event.body, 'base64')
+        : Buffer.from(event.body, 'binary');
+    if (bytes.length === 0) {
+        throw new Error('缺少头图文件');
+    }
+    return {
+        mimeType: contentType,
+        extension: getImageExtension(contentType),
+        bytes,
+    };
+}
+async function uploadNewsCoverFromEvent(event) {
+    const now = Date.now();
+    const file = parseImageEventBody(event);
+    const coverFileId = await uploadNewsCoverFile(file, now);
+    return ok({ coverFileId });
+}
+function calcNewsScore(input) {
+    const ageHours = Math.max(0, (Date.now() - input.publishedAt) / (60 * 60 * 1000));
+    const freshness = Math.max(0.42, 1 - ageHours / 96);
+    return Math.round((input.viewCount +
+        input.likeCount * 20 +
+        input.repostCount * 50 +
+        input.commentCount * 30) * freshness);
 }
 async function buildTask(order) {
     var _a, _b, _c, _d, _e;
@@ -240,6 +452,60 @@ async function getVerificationCode(orderNo) {
         expiresAt: codeRecord.expiresAt,
     });
 }
+async function createNews(body) {
+    var _a, _b;
+    const now = Date.now();
+    const sourceUrl = sanitizeText(body.sourceUrl, 500);
+    const contentMarkdown = normalizeMarkdown(body.contentMarkdown);
+    if (!contentMarkdown) {
+        return fail(400, '缺少文章正文 Markdown');
+    }
+    if (sourceUrl && !/^https?:\/\//.test(sourceUrl)) {
+        return fail(400, '原文链接必须是 http/https 地址');
+    }
+    const publishedAt = sanitizeNumber(body.publishedAt) || now;
+    const coverFileId = sanitizeText(body.coverFileId, 500) || await uploadNewsCover(body.coverDataUrl, now);
+    const aiMeta = await generateNewsMetaByTencentAi(contentMarkdown);
+    const meta = aiMeta !== null && aiMeta !== void 0 ? aiMeta : fallbackNewsMeta(contentMarkdown);
+    const record = {
+        title: meta.title,
+        summary: meta.summary,
+        coverFileId,
+        contentMarkdown,
+        sourceName: sanitizeText(body.sourceName, 30) || 'X',
+        sourceUrl,
+        authorName: sanitizeText(body.authorName, 40),
+        sourcePlatform: normalizeSourcePlatform(body.sourcePlatform),
+        tags: normalizeTags(body.tags),
+        viewCount: sanitizeNumber(body.viewCount),
+        likeCount: sanitizeNumber(body.likeCount),
+        repostCount: sanitizeNumber(body.repostCount),
+        commentCount: sanitizeNumber(body.commentCount),
+        score: 0,
+        status: body.status === 'draft' ? 'draft' : 'published',
+        publishedAt,
+        createdAt: now,
+        updatedAt: now,
+    };
+    record.score = calcNewsScore(record);
+    let result;
+    try {
+        result = await (0, db_1.collection)('aiNews').add({ data: record });
+    }
+    catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (!message.includes('collection not exists') && !message.includes('DATABASE_COLLECTION_NOT_EXIST') && !message.includes('Table not exist')) {
+            throw error;
+        }
+        await (0, db_1.ensureCollection)('aiNews');
+        result = await (0, db_1.collection)('aiNews').add({ data: record });
+    }
+    return ok({
+        success: true,
+        id: (_b = (_a = result._id) !== null && _a !== void 0 ? _a : result.id) !== null && _b !== void 0 ? _b : '',
+        score: record.score,
+    });
+}
 async function main(event) {
     var _a;
     if (getMethod(event) === 'OPTIONS') {
@@ -260,6 +526,12 @@ async function main(event) {
         }
         if (route.action === 'getVerificationCode') {
             return getVerificationCode(route.orderNo);
+        }
+        if (route.action === 'createNews') {
+            return createNews(parseBody(event));
+        }
+        if (route.action === 'uploadNewsCover') {
+            return uploadNewsCoverFromEvent(event);
         }
         return updateTask(route.orderNo, parseBody(event), event);
     }
