@@ -82,10 +82,15 @@
             </label>
           </div>
 
-          <label class="field">
+          <div class="field">
             <span>标签</span>
-            <input id="newsTags" placeholder="OpenAI,Google AI,Claude AI,AI工具" />
-          </label>
+            <div id="newsTagsDropdown" class="tags-dropdown">
+              <button id="newsTagsTrigger" class="tags-dropdown__trigger" type="button" aria-expanded="false">
+                请选择标签（可多选）
+              </button>
+              <div id="newsTagsMenu" class="tags-dropdown__menu hidden"></div>
+            </div>
+          </div>
 
           <div class="field-grid field-grid--four">
             <label class="field">

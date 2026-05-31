@@ -505,6 +505,10 @@ export default function MemberPage(): JSX.Element {
     });
   }
 
+  function togglePurchaseAgreement(): void {
+    setPurchaseAgreementAccepted((accepted) => !accepted);
+  }
+
   async function payOrder(orderNo: string, lockAlreadyEnabled = false): Promise<void> {
     if (!lockAlreadyEnabled) {
       setPaymentLocked(true);
@@ -1032,11 +1036,11 @@ export default function MemberPage(): JSX.Element {
             <View className='plan-sheet__agreement'>
               <View
                 className={`plan-sheet__checkbox ${purchaseAgreementAccepted ? 'plan-sheet__checkbox--checked' : ''}`}
-                onClick={() => setPurchaseAgreementAccepted((accepted) => !accepted)}
+                onClick={togglePurchaseAgreement}
               >
                 {purchaseAgreementAccepted ? <Text className='plan-sheet__checkmark'>✓</Text> : null}
               </View>
-              <Text className='plan-sheet__agreement-text'>我已阅读并同意</Text>
+              <Text className='plan-sheet__agreement-text' onClick={togglePurchaseAgreement}>我已阅读并同意</Text>
               <Text className='plan-sheet__link' onClick={() => openAgreement(USER_AGREEMENT_URL)}>《用户协议》</Text>
               <Text className='plan-sheet__link' onClick={() => openAgreement(PRIVACY_AGREEMENT_URL)}>《隐私政策》</Text>
             </View>

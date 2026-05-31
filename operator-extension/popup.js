@@ -4,6 +4,7 @@ const DEFAULT_SETTINGS = {
   chatgptUrl: 'https://chatgpt.com/'
 };
 const MAX_COVER_DATA_URL_LENGTH = 2 * 1024 * 1024;
+const NEWS_TAG_OPTIONS = ['OpenAI', 'Google AI', 'Claude AI', 'AI工具', '提示词', '模型更新', '产品发布', '开发实践'];
 
 const els = {
   setupNotice: document.querySelector('#setupNotice'),
@@ -25,7 +26,9 @@ const els = {
   newsContentMarkdown: document.querySelector('#newsContentMarkdown'),
   newsSourceName: document.querySelector('#newsSourceName'),
   newsAuthorName: document.querySelector('#newsAuthorName'),
-  newsTags: document.querySelector('#newsTags'),
+  newsTagsDropdown: document.querySelector('#newsTagsDropdown'),
+  newsTagsTrigger: document.querySelector('#newsTagsTrigger'),
+  newsTagsMenu: document.querySelector('#newsTagsMenu'),
   newsViewCount: document.querySelector('#newsViewCount'),
   newsLikeCount: document.querySelector('#newsLikeCount'),
   newsRepostCount: document.querySelector('#newsRepostCount'),
@@ -47,11 +50,14 @@ let pendingFulfill = null;
 let toastTimer = null;
 let pastedCoverDataUrl = '';
 let coverPreviewObjectUrl = '';
+let selectedNewsTags = new Set();
 
 document.addEventListener('DOMContentLoaded', async () => {
   settings = await getSettings();
   updateSetupNotice();
   bindActions();
+  renderNewsTagsOptions();
+  updateNewsTagsTrigger();
   if (isConfigured()) {
     await loadTasks();
   }
@@ -67,6 +73,8 @@ function bindActions() {
   els.fillCurrentTabBtn.addEventListener('click', fillNewsFromCurrentTab);
   els.clearNewsFormBtn.addEventListener('click', clearNewsForm);
   els.submitNewsBtn.addEventListener('click', submitNews);
+  els.newsTagsTrigger.addEventListener('click', toggleNewsTagsDropdown);
+  document.addEventListener('click', handleOutsideClick);
   els.newsCoverDropzone.addEventListener('click', () => els.newsCover.click());
   els.newsCoverDropzone.addEventListener('paste', handleCoverPaste);
   els.newsCover.addEventListener('change', handleCoverFileChange);
@@ -77,6 +85,60 @@ function bindActions() {
     }
   });
   els.confirmFulfillBtn.addEventListener('click', confirmFulfillTask);
+}
+
+function renderNewsTagsOptions() {
+  els.newsTagsMenu.innerHTML = '';
+  NEWS_TAG_OPTIONS.forEach((tag) => {
+    const option = document.createElement('label');
+    option.className = 'tags-dropdown__option';
+    option.innerHTML = `
+      <input type="checkbox" value="${tag}" />
+      <span>${tag}</span>
+    `;
+    const checkbox = option.querySelector('input');
+    checkbox.addEventListener('change', () => handleNewsTagToggle(tag, checkbox.checked));
+    els.newsTagsMenu.appendChild(option);
+  });
+}
+
+function handleNewsTagToggle(tag, checked) {
+  if (checked) {
+    selectedNewsTags.add(tag);
+  } else {
+    selectedNewsTags.delete(tag);
+  }
+  updateNewsTagsTrigger();
+}
+
+function updateNewsTagsTrigger() {
+  if (!selectedNewsTags.size) {
+    els.newsTagsTrigger.textContent = '请选择标签（可多选）';
+    return;
+  }
+  els.newsTagsTrigger.textContent = Array.from(selectedNewsTags).join('、');
+}
+
+function toggleNewsTagsDropdown(event) {
+  event.stopPropagation();
+  const isOpen = !els.newsTagsMenu.classList.contains('hidden');
+  if (isOpen) {
+    closeNewsTagsDropdown();
+    return;
+  }
+  els.newsTagsMenu.classList.remove('hidden');
+  els.newsTagsTrigger.setAttribute('aria-expanded', 'true');
+}
+
+function closeNewsTagsDropdown() {
+  els.newsTagsMenu.classList.add('hidden');
+  els.newsTagsTrigger.setAttribute('aria-expanded', 'false');
+}
+
+function handleOutsideClick(event) {
+  if (!els.newsTagsDropdown.contains(event.target)) {
+    closeNewsTagsDropdown();
+  }
 }
 
 function switchPanel(panel) {
@@ -377,7 +439,6 @@ function clearNewsForm() {
     els.newsContentMarkdown,
     els.newsSourceName,
     els.newsAuthorName,
-    els.newsTags,
     els.newsViewCount,
     els.newsLikeCount,
     els.newsRepostCount,
@@ -385,6 +446,13 @@ function clearNewsForm() {
   ].forEach((input) => {
     input.value = '';
   });
+  selectedNewsTags = new Set();
+  const checkboxes = els.newsTagsMenu.querySelectorAll('input[type="checkbox"]');
+  checkboxes.forEach((checkbox) => {
+    checkbox.checked = false;
+  });
+  updateNewsTagsTrigger();
+  closeNewsTagsDropdown();
   els.newsCover.value = '';
   resetCoverPreview();
 }
@@ -419,7 +487,7 @@ async function submitNews() {
     sourceName: els.newsSourceName.value.trim() || 'AIO',
     authorName: els.newsAuthorName.value.trim(),
     sourcePlatform: inferPlatform(els.newsSourceName.value),
-    tags: els.newsTags.value.trim(),
+    tags: Array.from(selectedNewsTags).join(','),
     viewCount: toNumber(els.newsViewCount.value),
     likeCount: toNumber(els.newsLikeCount.value),
     repostCount: toNumber(els.newsRepostCount.value),

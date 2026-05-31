@@ -142,9 +142,11 @@ export default function NewsDetailPage(): JSX.Element {
   const [detail, setDetail] = useState<AiNewsDetailView | null>(null);
   const [loading, setLoading] = useState(true);
   const [sharePanelVisible, setSharePanelVisible] = useState(false);
+  const [isDirectEntry, setIsDirectEntry] = useState(false);
 
   useLoad((options) => {
     enableShareMenu();
+    setIsDirectEntry(Taro.getCurrentPages().length <= 1);
     const id = typeof options.id === 'string' ? options.id : '';
     void loadDetail(id);
   });
@@ -241,10 +243,33 @@ export default function NewsDetailPage(): JSX.Element {
     });
   }
 
+  function goNewsHome(): void {
+    void Taro.switchTab({ url: '/pages/news/index' });
+  }
+
+  function goBack(): void {
+    const pages = Taro.getCurrentPages();
+    if (pages.length > 1) {
+      void Taro.navigateBack();
+      return;
+    }
+    goNewsHome();
+  }
+
   const markdownLinks = detail ? extractMarkdownLinks(detail.contentMarkdown) : [];
 
   return (
-    <SaasPageFrame title='AI资讯' className='news-detail-frame' onBack={() => Taro.navigateBack()}>
+    <SaasPageFrame
+      title='AI资讯'
+      className='news-detail-frame'
+      onBack={goBack}
+      rightAction={isDirectEntry ? (
+        <View className='news-detail-home-action' onClick={goNewsHome}>
+          <Text className='news-detail-home-action__roof' />
+          <Text className='news-detail-home-action__body' />
+        </View>
+      ) : null}
+    >
       <View className='news-detail-page'>
         {loading ? (
           <View className='news-detail-empty'>

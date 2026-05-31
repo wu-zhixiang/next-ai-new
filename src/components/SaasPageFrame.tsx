@@ -7,13 +7,14 @@ interface Props {
   className?: string;
   showBack?: boolean;
   onBack?: () => void;
+  rightAction?: ReactNode;
   children: ReactNode;
 }
 
-export function SaasPageFrame({ title, className = '', showBack = true, onBack, children }: Props): JSX.Element {
+export function SaasPageFrame({ title, className = '', showBack = true, onBack, rightAction, children }: Props): JSX.Element {
   return (
     <View className={`page saas-page ${className}`}>
-      <AppTransparentHeader title={title} showBack={showBack} onBack={onBack} />
+      <AppTransparentHeader title={title} showBack={showBack} onBack={onBack} rightAction={rightAction} />
       {children}
     </View>
   );

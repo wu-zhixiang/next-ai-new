@@ -260,6 +260,10 @@ button::after {
   align-items: center;
 }
 
+.app-nav__side--right {
+  justify-content: flex-end;
+}
+
 .app-nav__back {
   width: 78rpx;
   height: 88rpx;
@@ -1135,6 +1139,38 @@ button::after {
 .news-detail-share-trigger .wechat-share-icon {
   flex: none;
   color: var(--primary);
+}
+
+.news-detail-home-action {
+  position: relative;
+  width: 64rpx;
+  height: 64rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.news-detail-home-action__roof {
+  position: absolute;
+  top: 15rpx;
+  left: 20rpx;
+  width: 24rpx;
+  height: 24rpx;
+  border-left: 6rpx solid #ffffff;
+  border-top: 6rpx solid #ffffff;
+  transform: rotate(45deg);
+  border-radius: 4rpx 0 0;
+}
+
+.news-detail-home-action__body {
+  position: absolute;
+  left: 18rpx;
+  bottom: 13rpx;
+  width: 28rpx;
+  height: 24rpx;
+  border: 6rpx solid #ffffff;
+  border-top: 0;
+  border-radius: 0 0 5rpx 5rpx;
 }
 
 .news-detail-article__summary {

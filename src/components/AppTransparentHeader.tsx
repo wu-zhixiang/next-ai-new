@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { Image, Text, View } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 
@@ -8,6 +8,7 @@ interface Props {
   title: string;
   showBack?: boolean;
   onBack?: () => void;
+  rightAction?: ReactNode;
 }
 
 interface HeaderMetrics {
@@ -43,7 +44,7 @@ function getHeaderMetrics(): HeaderMetrics {
   }
 }
 
-export function AppTransparentHeader({ title, showBack = true, onBack }: Props): JSX.Element {
+export function AppTransparentHeader({ title, showBack = true, onBack, rightAction }: Props): JSX.Element {
   const metrics = useMemo(() => getHeaderMetrics(), []);
 
   function handleBack(): void {
@@ -74,7 +75,9 @@ export function AppTransparentHeader({ title, showBack = true, onBack }: Props):
           ) : null}
         </View>
         <Text className='app-nav__title'>{title}</Text>
-        <View className='app-nav__side' style={{ width: `${metrics.sideWidth}px` }} />
+        <View className='app-nav__side app-nav__side--right' style={{ width: `${metrics.sideWidth}px` }}>
+          {rightAction}
+        </View>
         </View>
       </View>
     </View>
