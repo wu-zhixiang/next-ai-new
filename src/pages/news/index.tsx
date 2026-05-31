@@ -68,6 +68,11 @@ function formatHeat(value: number): string {
   return String(value || 0);
 }
 
+function getNewsDisplayTag(tags?: string[]): string {
+  const hiddenTags = new Set(['AI巨头', '工具']);
+  return tags?.find((tag) => tag && !hiddenTags.has(tag)) || tags?.[0] || 'AIO';
+}
+
 export default function NewsPage() {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [activeInviteCode, setActiveInviteCode] = useState('');
@@ -287,7 +292,7 @@ export default function NewsPage() {
                 <View className='news-card__top'>
                   <View className='news-card__title-block'>
                     <View className='news-card__meta'>
-                      <Text className='saas-chip news-card__tag'>AIO</Text>
+                      <Text className='saas-chip news-card__tag'>{getNewsDisplayTag(item.tags)}</Text>
                       <Text className='news-card__time'>{formatRelativeTime(item.publishedAt)}</Text>
                     </View>
                     <Text className='news-card__title'>{item.title}</Text>
