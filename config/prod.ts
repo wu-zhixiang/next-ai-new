@@ -9,7 +9,11 @@ const config: UserConfigExport<'webpack5'> = {
     MEMBER_OPENED_TEMPLATE_ID: JSON.stringify(process.env.TARO_APP_MEMBER_OPENED_TEMPLATE_ID || ''),
     AI_TOOL_REWARD_AD_UNIT_ID: JSON.stringify(process.env.TARO_APP_AI_TOOL_REWARD_AD_UNIT_ID || ''),
   },
-  mini: {},
+  mini: {
+    webpackChain(chain) {
+      chain.devtool(false);
+    },
+  },
   h5: {},
 };
 

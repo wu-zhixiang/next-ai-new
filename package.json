@@ -5,7 +5,7 @@
   "description": "Taro mini-program + CloudBase membership management MVP",
   "scripts": {
     "dev:weapp": "taro build --type weapp --watch",
-    "build:weapp": "taro build --type weapp",
+    "build:weapp": "taro build --type weapp && node scripts/remove-dist-sourcemaps.mjs",
     "typecheck": "tsc --noEmit",
     "test:unit": "node --test tests/mobile-utils.test.ts",
     "upload:cloudfunctions": "node scripts/upload-cloudfunctions.mjs",

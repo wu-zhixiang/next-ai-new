@@ -20,7 +20,12 @@
   "libVersion": "3.16.0",
   "srcMiniprogramRoot": "dist/",
   "packOptions": {
-    "ignore": [],
+    "ignore": [
+      {
+        "value": "**/*.map",
+        "type": "glob"
+      }
+    ],
     "include": []
   },
   "condition": {},
