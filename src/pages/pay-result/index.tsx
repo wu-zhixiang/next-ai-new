@@ -117,12 +117,12 @@ export default function PayResultPage(): JSX.Element {
     }
   }
 
-  const orderViewStatus: OrderViewStatus = data.membership?.status === 'active' || data.fulfillmentStatus === 'fulfilled'
-        ? 'completed'
-        : data.fulfillmentStatus === 'opening'
+  const orderViewStatus: OrderViewStatus = data.payStatus === 'pending' && data.canPay
+        ? 'pending'
+        : data.payStatus === 'paid' && data.fulfillmentStatus === 'opening'
           ? 'opening'
-          : data.payStatus === 'pending' && data.canPay
-            ? 'pending'
+          : data.payStatus === 'paid' && (data.fulfillmentStatus === 'fulfilled' || data.membership?.status === 'active')
+            ? 'completed'
             : 'abandoned';
   const isPaid = orderViewStatus === 'completed';
   const isOpening = orderViewStatus === 'opening';
@@ -182,7 +182,7 @@ export default function PayResultPage(): JSX.Element {
               <Text className='info-row__value'>{orderNo}</Text>
             </View>
             <View className='info-row'>
-              <Text className='info-row__label'>{isOpening ? '支付时间' : '开通时间'}</Text>
+              <Text className='info-row__label'>{isPendingPayable ? '下单时间' : isOpening ? '支付时间' : '开通时间'}</Text>
               <Text className='info-row__value'>{isPaid ? formatDateTime(data.membership?.startAt) : formatDateTime(data.paidAt ?? data.createdAt)}</Text>
             </View>
             <View className='info-row'>
