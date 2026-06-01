@@ -139,6 +139,22 @@ npm install
 - 现阶段云函数通过 `openapi.phonenumber.getPhoneNumber` 直接换取真实手机号并落库。
 - 前端只展示脱敏后的手机号，不再依赖占位值。
 
+## 9.1 前端远程开关
+
+`get-app-config` 云函数会读取数据库集合 `app_config` 下的 `client` 文档，用于控制线上前端行为。
+
+当前支持字段：
+
+```json
+{
+  "_id": "client",
+  "enableNewsAuthModal": false
+}
+```
+
+- `enableNewsAuthModal: false`：用户首次进入 AI 资讯页不展示昵称头像授权浮层。
+- 未创建集合、未创建文档或字段缺失时，默认按 `true` 处理，保持展示授权浮层。
+
 ## 10. 续费提醒
 
 当前续费采用“用户手动续费 + 到期前 2 天提醒”：

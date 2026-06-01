@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Button, Image, Text, View } from '@tarojs/components';
-import Taro, { useDidShow, useRouter, useShareAppMessage, useShareTimeline } from '@tarojs/taro';
+import Taro, { useDidShow, usePullDownRefresh, useRouter, useShareAppMessage, useShareTimeline } from '@tarojs/taro';
 import { AppTransparentHeader } from '@/components/AppTransparentHeader';
 import AuthModal, { type AuthUserInfo } from '@/components/AuthModal';
 import { callCloudFunction } from '@/services/api';
@@ -29,6 +29,10 @@ interface LoginResult extends CachedUserInfo {
 
 interface NewsListResult {
   items: AiNewsView[];
+}
+
+interface AppConfigResult {
+  enableNewsAuthModal?: boolean;
 }
 
 type NewsFilterKey = 'hot' | 'latest' | 'aiGiants' | 'tools';
@@ -85,15 +89,15 @@ export default function NewsPage() {
   const router = useRouter();
 
   useEffect(() => {
-    enableShareMenu();
-    const inviteCode = resolveInviteCode(router.params);
-    setActiveInviteCode(inviteCode);
-    checkAuth(inviteCode);
-    void loadNews('hot');
+    void initializePage();
   }, []);
 
   useDidShow(() => {
     showTabBarSafely();
+  });
+
+  usePullDownRefresh(() => {
+    void refreshNews();
   });
 
   useShareAppMessage(() => getShareAppMessage(shareItem));
@@ -108,6 +112,32 @@ export default function NewsPage() {
       } as unknown as Parameters<typeof Taro.showShareMenu>[0]);
     } catch {
       // 部分基础库不支持 shareTimeline 菜单参数，忽略即可。
+    }
+  }
+
+  async function initializePage(): Promise<void> {
+    enableShareMenu();
+    const inviteCode = resolveInviteCode(router.params);
+    setActiveInviteCode(inviteCode);
+    const appConfig = await loadAppConfig();
+    if (appConfig.enableNewsAuthModal) {
+      checkAuth(inviteCode);
+    } else if (inviteCode) {
+      syncCachedLoginState(inviteCode);
+    }
+    void loadNews('hot');
+  }
+
+  async function loadAppConfig(): Promise<Required<AppConfigResult>> {
+    try {
+      const result = await callCloudFunction<AppConfigResult>('get-app-config');
+      return {
+        enableNewsAuthModal: result.enableNewsAuthModal !== false,
+      };
+    } catch {
+      return {
+        enableNewsAuthModal: true,
+      };
     }
   }
 
@@ -137,8 +167,11 @@ export default function NewsPage() {
     };
   }
 
-  async function loadNews(filterKey = activeFilterKey): Promise<void> {
-    setNewsLoading(true);
+  async function loadNews(filterKey = activeFilterKey, showSkeleton = true): Promise<void> {
+    if (showSkeleton) {
+      setNewsLoading(true);
+      setNewsList([]);
+    }
     try {
       const filter = NEWS_FILTERS.find((item) => item.key === filterKey) ?? NEWS_FILTERS[0];
       const result = await callCloudFunction<NewsListResult>('list-ai-news', {
@@ -150,7 +183,17 @@ export default function NewsPage() {
     } catch {
       setNewsList([]);
     } finally {
-      setNewsLoading(false);
+      if (showSkeleton) {
+        setNewsLoading(false);
+      }
+    }
+  }
+
+  async function refreshNews(): Promise<void> {
+    try {
+      await loadNews(activeFilterKey, false);
+    } finally {
+      Taro.stopPullDownRefresh();
     }
   }
 
@@ -174,7 +217,22 @@ export default function NewsPage() {
     setShowAuthModal(true);
   }
 
-  async function syncLoginState(cached: CachedUserInfo, inviteCode: string): Promise<void> {
+  function syncCachedLoginState(inviteCode: string): void {
+    const raw = Taro.getStorageSync(CACHE_KEY) as string;
+    if (!raw) {
+      return;
+    }
+    try {
+      const cached: CachedUserInfo = JSON.parse(raw);
+      if (cached.userId && (inviteCode || !cached.openId && !cached.openid)) {
+        void syncLoginState(cached, inviteCode, false);
+      }
+    } catch {
+      // 缓存异常不影响资讯浏览。
+    }
+  }
+
+  async function syncLoginState(cached: CachedUserInfo, inviteCode: string, allowAuthModal = true): Promise<void> {
     try {
       const loginResult = await callCloudFunction<LoginResult>('user-login', {
         nickname: cached.nickname,
@@ -190,7 +248,7 @@ export default function NewsPage() {
         profileAuthed: Boolean(loginResult.nickname || loginResult.avatarUrl),
       };
       saveToCache(nextInfo);
-      if (!hasUserProfile(nextInfo)) {
+      if (allowAuthModal && !hasUserProfile(nextInfo)) {
         setShowAuthModal(true);
       }
       if (inviteCode && loginResult.inviterUserId) {
@@ -287,7 +345,7 @@ export default function NewsPage() {
                 <Text className='news-empty__desc'>运营端上传后会在这里展示。</Text>
               </View>
             ) : null}
-            {newsList.map((item, index) => (
+            {!newsLoading ? newsList.map((item, index) => (
               <View className='news-card' key={item.id} onClick={() => void openNews(item)}>
                 <View className='news-card__top'>
                   <View className='news-card__title-block'>
@@ -316,7 +374,7 @@ export default function NewsPage() {
                   </View>
                 </View>
               </View>
-            ))}
+            )) : null}
           </View>
         </View>
       </View>

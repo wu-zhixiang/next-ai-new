@@ -23,12 +23,6 @@ const appConfig = {
         selectedIconPath: 'assets/tabbar/news-active.png',
       },
       {
-        pagePath: 'pages/tools/index',
-        text: 'AI工具',
-        iconPath: 'assets/tabbar/tools.png',
-        selectedIconPath: 'assets/tabbar/tools-active.png',
-      },
-      {
         pagePath: 'pages/records/index',
         text: '服务记录',
         iconPath: 'assets/tabbar/records.png',

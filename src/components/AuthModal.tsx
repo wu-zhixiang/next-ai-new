@@ -104,6 +104,10 @@ export default function AuthModal({ visible, inviteCode, onAuthSuccess }: AuthMo
     });
   }
 
+  function toggleAgreement(): void {
+    setAgreementAccepted((accepted) => !accepted);
+  }
+
   return (
     <View className='auth-modal'>
       <View className='auth-modal__mask' />
@@ -121,11 +125,11 @@ export default function AuthModal({ visible, inviteCode, onAuthSuccess }: AuthMo
         <View className='auth-modal__agreement'>
           <View
             className={`auth-modal__checkbox ${agreementAccepted ? 'auth-modal__checkbox--checked' : ''}`}
-            onClick={() => setAgreementAccepted((accepted) => !accepted)}
+            onClick={toggleAgreement}
           >
             {agreementAccepted ? <Text className='auth-modal__checkmark'>✓</Text> : null}
           </View>
-          <Text className='auth-modal__agreement-text'>我已阅读并同意</Text>
+          <Text className='auth-modal__agreement-text' onClick={toggleAgreement}>我已阅读并同意</Text>
           <Text className='auth-modal__link' onClick={() => openAgreement(USER_AGREEMENT_URL)}>《用户协议》</Text>
           <Text className='auth-modal__link' onClick={() => openAgreement(PRIVACY_AGREEMENT_URL)}>《隐私政策》</Text>
         </View>
