@@ -3,7 +3,6 @@ const appConfig = {
   pages: [
     'pages/news/index',
     'pages/news-detail/index',
-    'pages/tools/index',
     'pages/records/index',
     'pages/invite/index',
     'pages/member/index',

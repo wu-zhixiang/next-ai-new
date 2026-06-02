@@ -221,3 +221,22 @@ npm install
   "includeMemberPlans": true
 }
 ```
+
+## 12. 废弃订单自动清理
+
+废弃订单保留 7 天，超过 7 天后从 `orders` 集合删除。
+
+废弃订单包含：
+
+- `payStatus` 为 `closed` 或 `failed` 的订单。
+- `payStatus` 为 `pending`，且已超过支付有效期的待支付订单。
+
+当前有两种清理入口：
+
+- 用户进入服务记录页时，`list-orders` 会顺手清理该用户 7 天前的废弃订单。
+- `cleanup-abandoned-orders` 云函数用于全量清理所有用户废弃订单，建议在云开发控制台配置定时触发，每天执行一次。
+
+需要部署：
+
+- `list-orders`
+- `cleanup-abandoned-orders`

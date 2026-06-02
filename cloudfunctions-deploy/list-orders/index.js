@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.main = main;
 const db_1 = require("./shared/db");
+const order_cleanup_1 = require("./shared/order-cleanup");
 const utils_1 = require("./shared/utils");
 const context_1 = require("./_lib/context");
 async function main() {
@@ -10,6 +11,7 @@ async function main() {
     if (!user) {
         return (0, utils_1.ok)({ orders: [] });
     }
+    await (0, order_cleanup_1.cleanupAbandonedOrders)({ userId: user._id });
     const orders = await (0, db_1.listOrdersByUserId)(user._id);
     return (0, utils_1.ok)({
         orders: orders.map((order) => {

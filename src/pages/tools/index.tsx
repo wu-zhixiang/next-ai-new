@@ -239,6 +239,7 @@ export default function ToolsPage(): JSX.Element {
                     : '今日可免费'}
               </Text>
             </View>
+            <Text className='tool-ai-notice'>本页面内容由人工智能生成，生成结果仅供参考，请结合实际情况判断使用。</Text>
 
             <View className='tool-output-tabs'>
               {OUTPUT_OPTIONS.map((item) => (
@@ -265,6 +266,7 @@ export default function ToolsPage(): JSX.Element {
 
             {result ? (
               <View className='tool-result'>
+                <Text className='tool-result__ai-badge'>AI生成内容</Text>
                 <View className='tool-result__head'>
                   <Text className='tool-result__title'>{result.title}</Text>
                   <Text className='tool-result__copy' onClick={() => void copyResult()}>复制</Text>

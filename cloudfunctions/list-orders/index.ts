@@ -1,4 +1,5 @@
 import { getUserByOpenId, listOrdersByUserId } from '../shared/db';
+import { cleanupAbandonedOrders } from '../shared/order-cleanup';
 import { getPendingOrderExpireAt, isPendingOrderExpired, ok } from '../shared/utils';
 import { getWxContext } from '../_lib/context';
 
@@ -9,6 +10,7 @@ export async function main() {
     return ok({ orders: [] });
   }
 
+  await cleanupAbandonedOrders({ userId: user._id });
   const orders = await listOrdersByUserId(user._id);
   return ok({
     orders: orders.map((order) => {

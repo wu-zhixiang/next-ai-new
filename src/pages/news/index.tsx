@@ -82,7 +82,7 @@ export default function NewsPage() {
   const [activeInviteCode, setActiveInviteCode] = useState('');
   const [newsList, setNewsList] = useState<AiNewsView[]>([]);
   const [newsLoading, setNewsLoading] = useState(true);
-  const [activeFilterKey, setActiveFilterKey] = useState<NewsFilterKey>('hot');
+  const [activeFilterKey, setActiveFilterKey] = useState<NewsFilterKey>('latest');
   const [filterOpen, setFilterOpen] = useState(false);
   const [sharePanelVisible, setSharePanelVisible] = useState(false);
   const [shareItem, setShareItem] = useState<AiNewsView | null>(null);
@@ -125,7 +125,7 @@ export default function NewsPage() {
     } else if (inviteCode) {
       syncCachedLoginState(inviteCode);
     }
-    void loadNews('hot');
+    void loadNews('latest');
   }
 
   async function loadAppConfig(): Promise<Required<AppConfigResult>> {
