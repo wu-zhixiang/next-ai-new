@@ -321,6 +321,12 @@ export default function NewsDetailPage(): JSX.Element {
         ) : null}
       </View>
 
+      {!loading && detail ? (
+        <Button className='news-detail-floating-share' openType='share'>
+          <View className='wechat-share-icon news-detail-floating-share__icon' />
+        </Button>
+      ) : null}
+
       {sharePanelVisible ? (
         <View className='news-share-sheet' onClick={closeSharePanel}>
           <View className='news-share-sheet__panel' onClick={(event) => event.stopPropagation()}>
