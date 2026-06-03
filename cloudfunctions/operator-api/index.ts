@@ -1,8 +1,8 @@
 import https from 'node:https';
 import { decryptAiAccountPassword } from '../shared/ai-account';
-import { app, collection, ensureCollection, getLatestUnusedEmailVerificationCode, getOrderByNo, getUserById } from '../shared/db';
+import { _, app, collection, ensureCollection, getLatestUnusedEmailVerificationCode, getOrderByNo, getUserById } from '../shared/db';
 import { fulfillPaidOrderMembership } from '../shared/orders';
-import type { AiNewsRecord, FulfillmentStatus, OrderRecord } from '../shared/types';
+import type { AiNewsRecord, FulfillmentStatus, OrderRecord, UserRecord } from '../shared/types';
 
 interface Event {
   httpMethod?: string;
@@ -26,6 +26,8 @@ interface HttpResponse {
 }
 
 type OperatorTaskStatus = 'opening' | 'processing' | 'fulfilled' | 'failed';
+
+const DEFAULT_NEWS_REMINDER_TEMPLATE_ID = 'm7Cb5rMgtJtFdyVn3YvR671tWZwyK87qe6qKr7KPZrQ';
 
 const CORS_HEADERS = {
   'access-control-allow-origin': '*',
@@ -228,6 +230,21 @@ function resolveParentTags(tag: string): string[] {
   ];
   if (toolKeys.includes(key)) {
     parentTags.push('工具');
+  }
+  const tutorialKeys = [
+    '教程',
+    '使用教程',
+    '实战教程',
+    '入门指南',
+    '案例拆解',
+    '开发实践',
+    '指南',
+    '教学',
+    'howto',
+    'tutorial',
+  ];
+  if (tutorialKeys.includes(key)) {
+    parentTags.push('教程');
   }
   return parentTags;
 }
@@ -435,6 +452,79 @@ function calcNewsScore(input: Pick<AiNewsRecord, 'viewCount' | 'likeCount' | 're
   ) * freshness);
 }
 
+function formatTemplateTime(timestamp: number): string {
+  const date = new Date(timestamp + 8 * 60 * 60 * 1000);
+  return date.toISOString().replace('T', ' ').slice(0, 16);
+}
+
+function truncateTemplateText(value: string, maxLength: number): string {
+  const text = value.replace(/\s+/g, ' ').trim();
+  return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
+}
+
+async function sendNewsReminderToSubscribers(newsId: string, record: AiNewsRecord): Promise<{ sent: number; failed: number }> {
+  const templateId = process.env.WX_NEWS_REMINDER_TEMPLATE_ID || DEFAULT_NEWS_REMINDER_TEMPLATE_ID;
+  const openapi = (app as unknown as {
+    openapi?: {
+      subscribeMessage?: {
+        send(payload: unknown): Promise<unknown>;
+      };
+    };
+  }).openapi;
+  if (!templateId || !openapi?.subscribeMessage?.send) {
+    console.warn(JSON.stringify({
+      tag: 'aiNews.reminder.skipped',
+      reason: !templateId ? 'missingTemplateId' : 'missingSubscribeMessageOpenapi',
+      newsId,
+    }));
+    return { sent: 0, failed: 0 };
+  }
+
+  const result = await collection('users')
+    .where({
+      newsSubscribeMsgAuth: true,
+      newsSubscribeMsgQuota: _.gt(0),
+    })
+    .limit(50)
+    .get();
+  const users = result.data as Array<UserRecord & { _id: string }>;
+  let sent = 0;
+  let failed = 0;
+
+  for (const user of users) {
+    if (!user.openid) continue;
+    try {
+      await openapi.subscribeMessage.send({
+        touser: user.openid,
+        templateId,
+        page: `pages/news-detail/index?id=${encodeURIComponent(newsId)}`,
+        data: {
+          thing1: { value: truncateTemplateText(record.title, 20) },
+          time2: { value: formatTemplateTime(record.publishedAt) },
+          thing3: { value: truncateTemplateText(record.summary || record.title, 20) },
+        },
+      });
+      await collection('users').doc(user._id).update({
+        data: {
+          newsSubscribeMsgQuota: _.inc(-1),
+          updatedAt: Date.now(),
+        },
+      });
+      sent += 1;
+    } catch (error) {
+      failed += 1;
+      console.error(JSON.stringify({
+        tag: 'aiNews.reminder.send.failed',
+        newsId,
+        userId: user._id,
+        message: error instanceof Error ? error.message : String(error),
+      }));
+    }
+  }
+
+  return { sent, failed };
+}
+
 async function buildTask(order: OrderRecord & { _id: string }) {
   const user = await getUserById(order.userId);
   let password = '';
@@ -607,10 +697,17 @@ async function createNews(body: Record<string, unknown>): Promise<HttpResponse> 
     await ensureCollection('aiNews');
     result = await collection('aiNews').add({ data: record });
   }
+  const newsId = result._id ?? result.id ?? '';
+  const reminderResult = record.status === 'published' && newsId
+    ? await sendNewsReminderToSubscribers(newsId, record)
+    : { sent: 0, failed: 0 };
+
   return ok({
     success: true,
-    id: result._id ?? result.id ?? '',
+    id: newsId,
     score: record.score,
+    reminderSent: reminderResult.sent,
+    reminderFailed: reminderResult.failed,
   });
 }
 

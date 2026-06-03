@@ -172,6 +172,22 @@ npm install
 
 建议在云开发定时触发器中每天执行一次 `send-renew-reminders`。
 
+## 10.1 AI 资讯提醒
+
+资讯详情页右下角的小铃铛会申请一次“AI 资讯更新提醒”订阅授权。
+
+需要配置：
+
+- 前端构建环境变量 `TARO_APP_NEWS_REMINDER_TEMPLATE_ID`
+  用于 `wx.requestSubscribeMessage` 申请用户授权。
+- `save-subscribe-auth` 云函数已支持 `scene: "news"`，授权成功后会写入：
+  - `newsSubscribeMsgAuth`
+  - `newsSubscribeMsgAuthAt`
+  - `newsSubscribeMsgQuota`
+
+微信普通订阅消息通常是一次授权一次可发送机会，后续发布资讯时应按 `newsSubscribeMsgQuota` 扣减后再发送。
+当前 `operator-api` 发布正式资讯后会自动给有可用额度的用户发送提醒，消息卡片的「详情」会跳转到 `pages/news-detail/index?id=<资讯ID>`。
+
 ## 11. 清理测试数据
 
 使用 `reset-database` 云函数清除测试业务数据，并重新初始化会员套餐。为避免误删，必须传确认字符串。

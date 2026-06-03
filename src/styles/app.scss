@@ -1137,11 +1137,18 @@ button::after {
   color: var(--primary);
 }
 
-.news-detail-floating-share {
+.news-detail-floating-actions {
   position: fixed;
   right: 34rpx;
   bottom: calc(44rpx + env(safe-area-inset-bottom));
   z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+}
+
+.news-detail-floating-reminder,
+.news-detail-floating-share {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1150,7 +1157,6 @@ button::after {
   padding: 0;
   border-radius: 50%;
   border: 0;
-  background: #31685c;
   color: #ffffff;
   line-height: 1;
   box-shadow:
@@ -1158,8 +1164,21 @@ button::after {
     0 26rpx 52rpx rgba(15, 23, 42, 0.16);
 }
 
+.news-detail-floating-reminder {
+  background: #f2c94c;
+}
+
+.news-detail-floating-share {
+  background: #31685c;
+}
+
 .news-detail-floating-share::after {
   border: 0;
+}
+
+.news-bell-icon {
+  width: 52rpx;
+  height: 52rpx;
 }
 
 .news-detail-floating-share__icon {

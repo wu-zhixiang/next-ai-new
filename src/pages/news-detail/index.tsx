@@ -4,6 +4,9 @@ import Taro, { useLoad, useShareAppMessage, useShareTimeline } from '@tarojs/tar
 import { SaasPageFrame } from '@/components/SaasPageFrame';
 import { callCloudFunction } from '@/services/api';
 import type { AiNewsDetailView } from '@/types';
+import { enableNewsReminderSubscription } from '@/utils/subscription';
+
+const NEWS_BELL_ICON = require('../../assets/icons/news-bell.svg') as string;
 
 function escapeHtml(value: string): string {
   return value
@@ -111,6 +114,11 @@ interface MarkdownLink {
   url: string;
 }
 
+interface NewsReminderProfile {
+  newsSubscribeMsgAuth?: boolean;
+  newsSubscribeMsgQuota?: number;
+}
+
 function extractMarkdownLinks(markdown: string): MarkdownLink[] {
   const links: MarkdownLink[] = [];
   const seen = new Set<string>();
@@ -143,12 +151,14 @@ export default function NewsDetailPage(): JSX.Element {
   const [loading, setLoading] = useState(true);
   const [sharePanelVisible, setSharePanelVisible] = useState(false);
   const [isDirectEntry, setIsDirectEntry] = useState(false);
+  const [newsReminderVisible, setNewsReminderVisible] = useState(false);
 
   useLoad((options) => {
     enableShareMenu();
     setIsDirectEntry(Taro.getCurrentPages().length <= 1);
     const id = typeof options.id === 'string' ? options.id : '';
     void loadDetail(id);
+    void loadNewsReminderState();
   });
 
   useShareAppMessage(() => getShareAppMessage());
@@ -208,6 +218,16 @@ export default function NewsDetailPage(): JSX.Element {
     }
   }
 
+  async function loadNewsReminderState(): Promise<void> {
+    try {
+      const profile = await callCloudFunction<NewsReminderProfile>('get-profile');
+      const hasActiveNewsReminder = Boolean(profile.newsSubscribeMsgAuth && (profile.newsSubscribeMsgQuota ?? 0) > 0);
+      setNewsReminderVisible(!hasActiveNewsReminder);
+    } catch {
+      setNewsReminderVisible(true);
+    }
+  }
+
   async function copySourceUrl(): Promise<void> {
     if (!detail?.sourceUrl) return;
     await Taro.setClipboardData({ data: detail.sourceUrl });
@@ -254,6 +274,13 @@ export default function NewsDetailPage(): JSX.Element {
       return;
     }
     goNewsHome();
+  }
+
+  async function enableNewsReminder(): Promise<void> {
+    const accepted = await enableNewsReminderSubscription();
+    if (accepted) {
+      setNewsReminderVisible(false);
+    }
   }
 
   const markdownLinks = detail ? extractMarkdownLinks(detail.contentMarkdown) : [];
@@ -322,9 +349,16 @@ export default function NewsDetailPage(): JSX.Element {
       </View>
 
       {!loading && detail ? (
-        <Button className='news-detail-floating-share' openType='share'>
-          <View className='wechat-share-icon news-detail-floating-share__icon' />
-        </Button>
+        <View className='news-detail-floating-actions'>
+          {newsReminderVisible ? (
+            <View className='news-detail-floating-reminder' onClick={() => void enableNewsReminder()}>
+              <Image className='news-bell-icon' src={NEWS_BELL_ICON} mode='aspectFit' />
+            </View>
+          ) : null}
+          <Button className='news-detail-floating-share' openType='share'>
+            <View className='wechat-share-icon news-detail-floating-share__icon' />
+          </Button>
+        </View>
       ) : null}
 
       {sharePanelVisible ? (

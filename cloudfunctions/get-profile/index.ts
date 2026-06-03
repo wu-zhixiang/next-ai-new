@@ -15,6 +15,8 @@ export async function main() {
       avatarUrl: '',
       membershipStatus: 'none' as const,
       subscribeMsgAuth: false,
+      newsSubscribeMsgAuth: false,
+      newsSubscribeMsgQuota: 0,
     });
   }
 
@@ -31,5 +33,7 @@ export async function main() {
     membershipProductCode: membership?.productCode,
     membershipProductName: membership?.productName,
     subscribeMsgAuth: user.subscribeMsgAuth,
+    newsSubscribeMsgAuth: Boolean(user.newsSubscribeMsgAuth),
+    newsSubscribeMsgQuota: user.newsSubscribeMsgQuota ?? 0,
   });
 }

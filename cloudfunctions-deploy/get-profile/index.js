@@ -17,6 +17,8 @@ async function main() {
             avatarUrl: '',
             membershipStatus: 'none',
             subscribeMsgAuth: false,
+            newsSubscribeMsgAuth: false,
+            newsSubscribeMsgQuota: 0,
         });
     }
     const membership = (_b = (_a = (await (0, db_1.getMembershipByUserId)(user._id, constants_1.DEFAULT_PRODUCT_CODE))) !== null && _a !== void 0 ? _a : (await (0, db_1.listMembershipsByUserId)(user._id)).find((item) => item.status === 'active' || item.status === 'opening')) !== null && _b !== void 0 ? _b : null;
@@ -29,5 +31,7 @@ async function main() {
         membershipProductCode: membership === null || membership === void 0 ? void 0 : membership.productCode,
         membershipProductName: membership === null || membership === void 0 ? void 0 : membership.productName,
         subscribeMsgAuth: user.subscribeMsgAuth,
+        newsSubscribeMsgAuth: Boolean(user.newsSubscribeMsgAuth),
+        newsSubscribeMsgQuota: (_a = user.newsSubscribeMsgQuota) !== null && _a !== void 0 ? _a : 0,
     });
 }

@@ -21,6 +21,7 @@ type CollectionName = keyof typeof COLLECTIONS;
 interface DatabaseCommand {
   in(values: unknown[]): unknown;
   inc(value: number): unknown;
+  gt(value: number): unknown;
 }
 
 export const _ = db.command as DatabaseCommand;

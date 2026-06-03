@@ -10,12 +10,21 @@ async function main(event) {
     if (!user) {
         throw new Error('用户未登录');
     }
-    await (0, db_1.collection)('users').doc(user._id).update({
-        data: {
+    const now = Date.now();
+    const data = event.scene === 'news'
+        ? {
+            newsSubscribeMsgAuth: event.accepted,
+            newsSubscribeMsgAuthAt: event.accepted ? now : undefined,
+            newsSubscribeMsgQuota: event.accepted ? db_1._.inc(1) : 0,
+            updatedAt: now,
+        }
+        : {
             subscribeMsgAuth: event.accepted,
-            subscribeMsgAuthAt: event.accepted ? Date.now() : undefined,
-            updatedAt: Date.now(),
-        },
+            subscribeMsgAuthAt: event.accepted ? now : undefined,
+            updatedAt: now,
+        };
+    await (0, db_1.collection)('users').doc(user._id).update({
+        data,
     });
     return (0, utils_1.ok)({ success: true });
 }

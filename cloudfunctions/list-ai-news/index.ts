@@ -63,6 +63,20 @@ function getCategoryAliases(tag: string): string[] {
       'Hugging Face',
     ].map(normalizeCategory);
   }
+  if (normalized === normalizeCategory('教程')) {
+    return [
+      '教程',
+      '使用教程',
+      '实战教程',
+      '入门指南',
+      '案例拆解',
+      '开发实践',
+      '指南',
+      '教学',
+      'HowTo',
+      'Tutorial',
+    ].map(normalizeCategory);
+  }
   return [normalized];
 }
 

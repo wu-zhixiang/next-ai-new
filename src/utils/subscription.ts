@@ -3,6 +3,9 @@ import { callCloudFunction } from '@/services/api';
 
 declare const RENEW_REMINDER_TEMPLATE_ID: string;
 declare const MEMBER_OPENED_TEMPLATE_ID: string;
+declare const NEWS_REMINDER_TEMPLATE_ID: string;
+
+const DEFAULT_NEWS_REMINDER_TEMPLATE_ID = 'm7Cb5rMgtJtFdyVn3YvR671tWZwyK87qe6qKr7KPZrQ';
 
 export async function enableReminderSubscription(options: { source?: 'manual' | 'afterPay' } = {}): Promise<boolean> {
   const templateIds = [MEMBER_OPENED_TEMPLATE_ID, RENEW_REMINDER_TEMPLATE_ID].filter(Boolean);
@@ -52,4 +55,37 @@ export async function disableReminderSubscription(): Promise<boolean> {
   await callCloudFunction<{ success: true }>('save-subscribe-auth', { accepted: false });
   Taro.showToast({ title: '提醒已关闭', icon: 'success' });
   return true;
+}
+
+export async function enableNewsReminderSubscription(): Promise<boolean> {
+  const newsReminderTemplateId = typeof NEWS_REMINDER_TEMPLATE_ID === 'string' && NEWS_REMINDER_TEMPLATE_ID
+    ? NEWS_REMINDER_TEMPLATE_ID
+    : DEFAULT_NEWS_REMINDER_TEMPLATE_ID;
+
+  if (!newsReminderTemplateId) {
+    Taro.showToast({ title: '资讯提醒模板未配置', icon: 'none' });
+    return false;
+  }
+
+  if (typeof Taro.requestSubscribeMessage !== 'function') {
+    Taro.showToast({ title: '当前微信版本不支持订阅提醒', icon: 'none' });
+    return false;
+  }
+
+  const requestSubscribeMessage = Taro.requestSubscribeMessage as unknown as (payload: {
+    tmplIds: string[];
+  }) => Promise<Record<string, string>>;
+  const result = await requestSubscribeMessage({
+    tmplIds: [newsReminderTemplateId],
+  });
+  const accepted = result[newsReminderTemplateId] === 'accept';
+  await callCloudFunction<{ success: true }>('save-subscribe-auth', {
+    accepted,
+    scene: 'news',
+  });
+  Taro.showToast({
+    title: accepted ? '资讯提醒已开启' : '未开启资讯提醒',
+    icon: accepted ? 'success' : 'none',
+  });
+  return accepted;
 }

@@ -20,6 +20,9 @@ export interface UserRecord {
   status: 'active' | 'disabled';
   subscribeMsgAuth: boolean;
   subscribeMsgAuthAt?: number;
+  newsSubscribeMsgAuth?: boolean;
+  newsSubscribeMsgAuthAt?: number;
+  newsSubscribeMsgQuota?: number;
   lastLoginAt?: number;
   createdAt: number;
   updatedAt: number;

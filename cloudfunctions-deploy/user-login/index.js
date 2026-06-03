@@ -138,6 +138,8 @@ async function main(event = {}) {
         aiAccountRegistered: false,
         status: 'active',
         subscribeMsgAuth: false,
+        newsSubscribeMsgAuth: false,
+        newsSubscribeMsgQuota: 0,
         createdAt: now,
         updatedAt: now,
         lastLoginAt: now,

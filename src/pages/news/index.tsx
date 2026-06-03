@@ -35,7 +35,7 @@ interface AppConfigResult {
   enableNewsAuthModal?: boolean;
 }
 
-type NewsFilterKey = 'hot' | 'latest' | 'aiGiants' | 'tools';
+type NewsFilterKey = 'hot' | 'latest' | 'aiGiants' | 'tools' | 'tutorials';
 
 interface NewsFilterOption {
   key: NewsFilterKey;
@@ -49,6 +49,7 @@ const NEWS_FILTERS: NewsFilterOption[] = [
   { key: 'latest', label: '最新', sort: 'latest' },
   { key: 'aiGiants', label: 'AI巨头', sort: 'latest', tag: 'AI巨头' },
   { key: 'tools', label: '工具', sort: 'latest', tag: '工具' },
+  { key: 'tutorials', label: '教程', sort: 'latest', tag: '教程' },
 ];
 
 function getNewsFilterLabel(filterKey: NewsFilterKey): string {
@@ -73,7 +74,7 @@ function formatHeat(value: number): string {
 }
 
 function getNewsDisplayTag(tags?: string[]): string {
-  const hiddenTags = new Set(['AI巨头', '工具']);
+  const hiddenTags = new Set(['AI巨头', '工具', '教程']);
   return tags?.find((tag) => tag && !hiddenTags.has(tag)) || tags?.[0] || 'AIO';
 }
 
