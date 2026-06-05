@@ -3,6 +3,8 @@ const appConfig = {
   pages: [
     'pages/news/index',
     'pages/news-detail/index',
+    'pages/tools/index',
+    'pages/tool-detail/index',
     'pages/records/index',
     'pages/invite/index',
     'pages/member/index',
@@ -20,6 +22,12 @@ const appConfig = {
         text: 'AI资讯',
         iconPath: 'assets/tabbar/news.png',
         selectedIconPath: 'assets/tabbar/news-active.png',
+      },
+      {
+        pagePath: 'pages/tools/index',
+        text: 'AI工具',
+        iconPath: 'assets/tabbar/tools.png',
+        selectedIconPath: 'assets/tabbar/tools-active.png',
       },
       {
         pagePath: 'pages/records/index',

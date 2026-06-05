@@ -6,6 +6,12 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.main = main;
 const node_https_1 = __importDefault(require("node:https"));
 const SUCCESS_CODE = 0;
+const LEGACY_PROMPT_PREFIXES = [
+    '请帮我总结这篇 AI 资讯，突出核心变化、影响范围和普通用户应该关注的点：',
+    '请把下面内容整理成行动清单，按优先级输出，避免空泛建议：',
+    '请把下面内容改写成克制可信的小红书风格文案，包含标题、正文和标签：',
+    '请把下面内容改写成适合朋友圈发布的短文案，语气自然、有信息密度：',
+];
 function ok(data) {
     return { code: SUCCESS_CODE, message: 'ok', data };
 }
@@ -13,7 +19,7 @@ function fail(message) {
     return { code: 400, message, data: null };
 }
 function sanitizeContent(value) {
-    return String(value || '').trim().slice(0, 6000);
+    return LEGACY_PROMPT_PREFIXES.reduce((next, prefix) => next.split(prefix).join(''), String(value || '')).trim().slice(0, 6000);
 }
 function normalizeOutputType(value) {
     if (value === 'bullets' || value === 'xiaohongshu' || value === 'moments') {
@@ -49,18 +55,54 @@ function fallbackResult(content, outputType) {
         .slice(0, 4)
         .map((item) => item.slice(0, 52));
     const summary = plain.slice(0, 120) || '暂无可总结内容';
-    const prefix = outputType === 'xiaohongshu'
-        ? '小红书文案'
-        : outputType === 'moments'
-            ? '朋友圈文案'
-            : outputType === 'bullets'
-                ? '要点总结'
-                : '摘要总结';
+    if (outputType === 'bullets') {
+        return {
+            title: '要点总结',
+            summary,
+            points,
+            outputText: [
+                '要点总结',
+                '',
+                ...points.map((item, index) => `${index + 1}. ${item}`),
+                '',
+            ].join('\n'),
+        };
+    }
+    if (outputType === 'xiaohongshu') {
+        return {
+            title: `${title}｜值得关注`,
+            summary,
+            points,
+            outputText: [
+                `${title}，这件事值得关注`,
+                '',
+                summary,
+                '',
+                points.map((item) => `- ${item}`).join('\n'),
+                '',
+                '#AI工具 #AI资讯 #效率提升',
+            ].join('\n'),
+        };
+    }
+    if (outputType === 'moments') {
+        return {
+            title: '朋友圈文案',
+            summary,
+            points,
+            outputText: [
+                `今天看到一个 AI 相关变化：${summary}`,
+                '',
+                points.length ? `我觉得最值得关注的是：${points[0]}` : '',
+                '',
+                '先记录一下，后面继续观察实际影响。',
+            ].filter(Boolean).join('\n'),
+        };
+    }
     return {
         title,
         summary,
         points,
-        outputText: `${prefix}\n\n${summary}\n\n${points.map((item) => `- ${item}`).join('\n')}`,
+        outputText: `摘要总结\n\n${summary}`,
     };
 }
 function postJson(url, headers, body) {
@@ -97,14 +139,14 @@ function postJson(url, headers, body) {
 }
 function buildPrompt(content, outputType) {
     const task = {
-        summary: '生成适合普通用户快速阅读的摘要。',
-        bullets: '提炼 4-6 条重点，突出结论和可执行建议。',
-        xiaohongshu: '改写成小红书风格文案，包含标题、正文和标签，克制自然，不夸大。',
-        moments: '改写成适合朋友圈发布的短文案，语气自然，有信息密度。',
+        summary: '只做摘要总结。outputText 必须是一段 120-180 字中文摘要，不要输出行动清单、标签或社交媒体文案。',
+        bullets: '只做要点总结。outputText 标题必须叫“要点总结”，并使用 1. 2. 3. 编号列出 4-6 条重点。不要写“行动清单”，不要输出行动建议标题。',
+        xiaohongshu: '只做小红书风格文案。outputText 必须包含吸引人的标题、分段正文和 3-5 个 #标签，语气克制自然，不夸大。',
+        moments: '只做朋友圈短文案。outputText 必须是 80-140 字自然口吻短文，不要编号，不要小红书标签。',
     }[outputType];
     return `请基于用户输入完成任务：${task}
 
-只输出 JSON，不要输出 Markdown。格式：
+四种 outputType 的结果必须明显不同。只输出 JSON，不要输出 Markdown。格式：
 {"title":"不超过24字","summary":"80-120字摘要","points":["要点1","要点2","要点3"],"outputText":"可直接复制使用的完整文本"}
 
 用户输入：

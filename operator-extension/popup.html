@@ -30,6 +30,7 @@
       <nav class="tabs" aria-label="运营功能">
         <button id="ordersTabBtn" class="tab-button tab-button--active" type="button">订单</button>
         <button id="newsTabBtn" class="tab-button" type="button">资讯</button>
+        <button id="registerTabBtn" class="tab-button" type="button">注册</button>
       </nav>
 
       <section id="ordersPanel">
@@ -118,6 +119,51 @@
         </div>
       </section>
 
+      <section id="registerPanel" class="register-panel hidden">
+        <div class="register-card">
+          <div class="news-form-card__head">
+            <div>
+              <p class="eyebrow">Apple Store</p>
+              <h2>注册账号生成</h2>
+            </div>
+            <button id="generateAppleAccountBtn" class="secondary-button" type="button">随机生成</button>
+          </div>
+
+          <label class="field">
+            <span>Apple Store 邮箱</span>
+            <div class="copy-row">
+              <input id="appleAccountEmail" placeholder="点击随机生成账号" />
+              <button id="copyAppleAccountEmailBtn" type="button">复制</button>
+            </div>
+          </label>
+
+          <label class="field">
+            <span>手机号</span>
+            <div class="copy-row">
+              <input id="appleAccountMobile" value="1581090117" />
+              <button id="copyAppleAccountMobileBtn" type="button">复制</button>
+            </div>
+          </label>
+
+          <label class="field">
+            <span>密码</span>
+            <div class="copy-row">
+              <input id="appleAccountPassword" placeholder="自动生成符合 Apple 要求的密码" />
+              <button id="copyAppleAccountPasswordBtn" type="button">复制</button>
+            </div>
+          </label>
+
+          <p class="helper-text">
+            注册完成后点击保存，该账号会进入可用池；后续订单开通时会自动从可用池获取未绑定账号。
+          </p>
+
+          <div class="actions">
+            <button id="clearAppleAccountBtn" class="secondary-button" type="button">清空</button>
+            <button id="saveAppleAccountBtn" class="primary-button" type="button">保存账号</button>
+          </div>
+        </div>
+      </section>
+
       <section id="confirmDialog" class="confirm-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
         <div class="confirm-dialog__panel">
           <p class="eyebrow">确认操作</p>
@@ -181,6 +227,22 @@
           <div class="copy-row">
             <input class="task-card__code" readonly placeholder="点击获取最近验证码" />
             <button class="fetch-code" type="button">获取</button>
+          </div>
+        </div>
+
+        <div class="credential credential--apple">
+          <label>Apple Store 账号</label>
+          <div class="copy-row">
+            <input class="task-card__apple-email" readonly placeholder="点击获取未绑定账号" />
+            <button class="fetch-apple-account" type="button">获取</button>
+          </div>
+        </div>
+
+        <div class="credential">
+          <label>Apple Store 密码</label>
+          <div class="copy-row">
+            <input class="task-card__apple-password" readonly type="password" />
+            <button class="copy-apple-password" type="button">复制</button>
           </div>
         </div>
 

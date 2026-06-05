@@ -205,19 +205,16 @@ def icon_member(color):
 
 def icon_tools(color):
     img = blank()
-    draw_rect_outline(img, 43, 48, 119, 124, 10, color)
-    draw_line(img, 43, 74, 119, 74, 9, color)
-    draw_line(img, 69, 48, 69, 124, 9, color)
-    draw_line(img, 93, 92, 124, 61, 11, color)
-    draw_line(img, 84, 101, 96, 113, 9, color)
-    draw_line(img, 78, 107, 91, 120, 8, color)
-    draw_disc(img, 127, 58, 6, color)
-    draw_line(img, 127, 38, 127, 29, 7, color)
-    draw_line(img, 127, 87, 127, 78, 7, color)
-    draw_line(img, 107, 58, 98, 58, 7, color)
-    draw_line(img, 156, 58, 147, 58, 7, color)
-    draw_line(img, 113, 44, 106, 37, 6, color)
-    draw_line(img, 141, 72, 148, 79, 6, color)
+
+    # A
+    draw_line(img, 35, 113, 60, 46, 14, color)
+    draw_line(img, 60, 46, 86, 113, 14, color)
+    draw_line(img, 47, 89, 74, 89, 11, color)
+
+    # I
+    draw_line(img, 100, 50, 128, 50, 14, color)
+    draw_line(img, 114, 50, 114, 111, 14, color)
+    draw_line(img, 100, 111, 128, 111, 14, color)
     return img
 
 

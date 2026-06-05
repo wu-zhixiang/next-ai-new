@@ -154,6 +154,20 @@ export interface EmailVerificationCodeRecord {
   createdAt: number;
 }
 
+export interface AppStoreAccountRecord {
+  _id?: string;
+  email: string;
+  mobile: string;
+  password: string;
+  status: 'available' | 'bound' | 'disabled';
+  chatgptAccountEmail?: string;
+  orderNo?: string;
+  userId?: string;
+  boundAt?: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface AiNewsRecord {
   _id?: string;
   title: string;

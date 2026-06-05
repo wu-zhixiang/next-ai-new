@@ -35,8 +35,10 @@ const els = {
   openChatgptBtn: document.querySelector('#openChatgptBtn'),
   ordersTabBtn: document.querySelector('#ordersTabBtn'),
   newsTabBtn: document.querySelector('#newsTabBtn'),
+  registerTabBtn: document.querySelector('#registerTabBtn'),
   ordersPanel: document.querySelector('#ordersPanel'),
   newsPanel: document.querySelector('#newsPanel'),
+  registerPanel: document.querySelector('#registerPanel'),
   fillCurrentTabBtn: document.querySelector('#fillCurrentTabBtn'),
   clearNewsFormBtn: document.querySelector('#clearNewsFormBtn'),
   submitNewsBtn: document.querySelector('#submitNewsBtn'),
@@ -54,6 +56,15 @@ const els = {
   newsLikeCount: document.querySelector('#newsLikeCount'),
   newsRepostCount: document.querySelector('#newsRepostCount'),
   newsCommentCount: document.querySelector('#newsCommentCount'),
+  generateAppleAccountBtn: document.querySelector('#generateAppleAccountBtn'),
+  saveAppleAccountBtn: document.querySelector('#saveAppleAccountBtn'),
+  clearAppleAccountBtn: document.querySelector('#clearAppleAccountBtn'),
+  appleAccountEmail: document.querySelector('#appleAccountEmail'),
+  appleAccountMobile: document.querySelector('#appleAccountMobile'),
+  appleAccountPassword: document.querySelector('#appleAccountPassword'),
+  copyAppleAccountEmailBtn: document.querySelector('#copyAppleAccountEmailBtn'),
+  copyAppleAccountMobileBtn: document.querySelector('#copyAppleAccountMobileBtn'),
+  copyAppleAccountPasswordBtn: document.querySelector('#copyAppleAccountPasswordBtn'),
   taskList: document.querySelector('#taskList'),
   taskTemplate: document.querySelector('#taskTemplate'),
   emptyState: document.querySelector('#emptyState'),
@@ -91,6 +102,7 @@ function bindActions() {
   els.openChatgptBtn.addEventListener('click', () => openTab(settings.chatgptUrl || DEFAULT_SETTINGS.chatgptUrl));
   els.ordersTabBtn.addEventListener('click', () => switchPanel('orders'));
   els.newsTabBtn.addEventListener('click', () => switchPanel('news'));
+  els.registerTabBtn.addEventListener('click', () => switchPanel('register'));
   els.fillCurrentTabBtn.addEventListener('click', fillNewsFromCurrentTab);
   els.clearNewsFormBtn.addEventListener('click', clearNewsForm);
   els.submitNewsBtn.addEventListener('click', submitNews);
@@ -99,6 +111,12 @@ function bindActions() {
   els.newsCoverDropzone.addEventListener('click', () => els.newsCover.click());
   els.newsCoverDropzone.addEventListener('paste', handleCoverPaste);
   els.newsCover.addEventListener('change', handleCoverFileChange);
+  els.generateAppleAccountBtn.addEventListener('click', generateAppleAccount);
+  els.saveAppleAccountBtn.addEventListener('click', saveAppleAccount);
+  els.clearAppleAccountBtn.addEventListener('click', clearAppleAccountForm);
+  els.copyAppleAccountEmailBtn.addEventListener('click', () => copyText(els.appleAccountEmail.value, 'Apple 邮箱已复制'));
+  els.copyAppleAccountMobileBtn.addEventListener('click', () => copyText(els.appleAccountMobile.value, '手机号已复制'));
+  els.copyAppleAccountPasswordBtn.addEventListener('click', () => copyText(els.appleAccountPassword.value, 'Apple 密码已复制'));
   els.cancelFulfillBtn.addEventListener('click', closeFulfillConfirm);
   els.confirmDialog.addEventListener('click', (event) => {
     if (event.target === els.confirmDialog) {
@@ -171,10 +189,13 @@ function handleOutsideClick(event) {
 
 function switchPanel(panel) {
   const isNews = panel === 'news';
-  els.ordersPanel.classList.toggle('hidden', isNews);
+  const isRegister = panel === 'register';
+  els.ordersPanel.classList.toggle('hidden', isNews || isRegister);
   els.newsPanel.classList.toggle('hidden', !isNews);
-  els.ordersTabBtn.classList.toggle('tab-button--active', !isNews);
+  els.registerPanel.classList.toggle('hidden', !isRegister);
+  els.ordersTabBtn.classList.toggle('tab-button--active', !isNews && !isRegister);
   els.newsTabBtn.classList.toggle('tab-button--active', isNews);
+  els.registerTabBtn.classList.toggle('tab-button--active', isRegister);
 }
 
 function getSettings() {
@@ -226,10 +247,14 @@ function renderTasks(tasks) {
     node.querySelector('.task-card__paid-at').textContent = formatTime(task.paidAt);
     node.querySelector('.task-card__email').value = task.email || '';
     node.querySelector('.task-card__password').value = task.password || '';
+    applyAppleStoreAccountToTask(node, task.appleStoreAccount);
 
     node.querySelector('.copy-email').addEventListener('click', () => copyText(task.email || '', '账号已复制'));
     node.querySelector('.copy-password').addEventListener('click', () => copyText(task.password || '', '密码已复制'));
     node.querySelector('.fetch-code').addEventListener('click', (event) => fetchVerificationCode(task.orderNo, node, event.currentTarget));
+    node.querySelector('.fetch-apple-account').addEventListener('click', (event) => fetchAppleStoreAccount(task.orderNo, node, event.currentTarget));
+    node.querySelector('.task-card__apple-email').addEventListener('click', () => copyText(node.querySelector('.task-card__apple-email').value, 'Apple 邮箱已复制'));
+    node.querySelector('.copy-apple-password').addEventListener('click', () => copyText(node.querySelector('.task-card__apple-password').value, 'Apple 密码已复制'));
     node.querySelector('.open-site').addEventListener('click', () => openTab(settings.chatgptUrl || DEFAULT_SETTINGS.chatgptUrl));
     node.querySelector('.mark-processing').addEventListener('click', () => updateTask(task.orderNo, 'processing', node));
     node.querySelector('.mark-done').addEventListener('click', () => openFulfillConfirm(task.orderNo, node));
@@ -256,8 +281,40 @@ async function fetchVerificationCode(orderNo, node, button) {
   }
 }
 
+function applyAppleStoreAccountToTask(node, account) {
+  const emailInput = node.querySelector('.task-card__apple-email');
+  const passwordInput = node.querySelector('.task-card__apple-password');
+  const fetchButton = node.querySelector('.fetch-apple-account');
+  const normalized = account || null;
+  node.dataset.appleStoreAccountId = normalized?.id || '';
+  emailInput.value = normalized?.email || '';
+  passwordInput.value = normalized?.password || '';
+  fetchButton.textContent = normalized?.email ? '已取' : '获取';
+}
+
+async function fetchAppleStoreAccount(orderNo, node, button) {
+  if (!orderNo) return;
+  const originalText = button.textContent;
+  button.disabled = true;
+  button.textContent = '获取中';
+  try {
+    const result = await apiRequest(`/operator/tasks/${encodeURIComponent(orderNo)}/appstore-account`, { method: 'GET' });
+    applyAppleStoreAccountToTask(node, result.account);
+    await copyText(result.account?.email || '', result.reused ? '已复用并复制 Apple 邮箱' : '已获取并复制 Apple 邮箱');
+  } catch (error) {
+    showError(error);
+  } finally {
+    button.disabled = false;
+    button.textContent = node.dataset.appleStoreAccountId ? '已取' : originalText;
+  }
+}
+
 function openFulfillConfirm(orderNo, node) {
   if (!orderNo) return;
+  if (!node.dataset.appleStoreAccountId) {
+    showToast('请先获取 Apple Store 账号');
+    return;
+  }
   pendingFulfill = { orderNo, node };
   els.confirmOrderNo.textContent = orderNo;
   els.confirmDialog.classList.remove('hidden');
@@ -282,10 +339,11 @@ async function confirmFulfillTask() {
 async function updateTask(orderNo, status, node) {
   if (!orderNo) return;
   const note = node.querySelector('.task-card__note').value.trim();
+  const appleStoreAccountId = node.dataset.appleStoreAccountId || '';
   try {
     await apiRequest(`/operator/tasks/${encodeURIComponent(orderNo)}`, {
       method: 'POST',
-      body: JSON.stringify({ status, note })
+      body: JSON.stringify({ status, note, appleStoreAccountId })
     });
     if (status === 'fulfilled') {
       node.remove();
@@ -317,6 +375,65 @@ async function apiRequest(path, options = {}) {
     throw new Error(payload.message || `请求失败：${response.status}`);
   }
   return payload.data || payload;
+}
+
+async function generateAppleAccount() {
+  settings = await getSettings();
+  updateSetupNotice();
+  if (!isConfigured()) return;
+
+  const originalText = els.generateAppleAccountBtn.textContent;
+  els.generateAppleAccountBtn.disabled = true;
+  els.generateAppleAccountBtn.textContent = '生成中';
+  try {
+    const account = await apiRequest('/operator/appstore-accounts/generate', { method: 'POST' });
+    els.appleAccountEmail.value = account.email || '';
+    els.appleAccountMobile.value = account.mobile || '1581090117';
+    els.appleAccountPassword.value = account.password || '';
+    showToast('账号已生成');
+  } catch (error) {
+    showError(error);
+  } finally {
+    els.generateAppleAccountBtn.disabled = false;
+    els.generateAppleAccountBtn.textContent = originalText;
+  }
+}
+
+async function saveAppleAccount() {
+  settings = await getSettings();
+  updateSetupNotice();
+  if (!isConfigured()) return;
+
+  const email = els.appleAccountEmail.value.trim();
+  const mobile = els.appleAccountMobile.value.trim() || '1581090117';
+  const password = els.appleAccountPassword.value.trim();
+  if (!email || !password) {
+    showToast('请先生成账号和密码');
+    return;
+  }
+
+  const originalText = els.saveAppleAccountBtn.textContent;
+  els.saveAppleAccountBtn.disabled = true;
+  els.saveAppleAccountBtn.textContent = '保存中';
+  try {
+    await apiRequest('/operator/appstore-accounts', {
+      method: 'POST',
+      body: JSON.stringify({ email, mobile, password })
+    });
+    showToast('Apple Store 账号已保存');
+    clearAppleAccountForm();
+  } catch (error) {
+    showError(error);
+  } finally {
+    els.saveAppleAccountBtn.disabled = false;
+    els.saveAppleAccountBtn.textContent = originalText;
+  }
+}
+
+function clearAppleAccountForm() {
+  els.appleAccountEmail.value = '';
+  els.appleAccountMobile.value = '1581090117';
+  els.appleAccountPassword.value = '';
 }
 
 async function fillNewsFromCurrentTab() {

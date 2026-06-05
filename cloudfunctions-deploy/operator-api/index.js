@@ -9,6 +9,9 @@ const ai_account_1 = require("./shared/ai-account");
 const db_1 = require("./shared/db");
 const orders_1 = require("./shared/orders");
 const DEFAULT_NEWS_REMINDER_TEMPLATE_ID = 'm7Cb5rMgtJtFdyVn3YvR671tWZwyK87qe6qKr7KPZrQ';
+const APPSTORE_EMAIL_DOMAIN = 'mraclpivot.com';
+const DEFAULT_APPSTORE_MOBILE = '1581090117';
+const APPSTORE_PASSWORD_SPECIALS = '!@#$%^&*';
 const CORS_HEADERS = {
     'access-control-allow-origin': '*',
     'access-control-allow-methods': 'GET,POST,OPTIONS',
@@ -93,6 +96,15 @@ function matchTaskRoute(event) {
     if (event.action === 'getVerificationCode' && event.orderNo) {
         return { action: 'getVerificationCode', orderNo: event.orderNo };
     }
+    if (event.action === 'getAvailableAppStoreAccount' && event.orderNo) {
+        return { action: 'getAvailableAppStoreAccount', orderNo: event.orderNo };
+    }
+    if (event.action === 'generateAppStoreAccount') {
+        return { action: 'generateAppStoreAccount' };
+    }
+    if (event.action === 'saveAppStoreAccount') {
+        return { action: 'saveAppStoreAccount' };
+    }
     if (event.action === 'createNews') {
         return { action: 'createNews' };
     }
@@ -110,9 +122,19 @@ function matchTaskRoute(event) {
     if (method === 'POST' && /(?:^|\/)(?:operator\/)?news\/cover$/.test(path)) {
         return { action: 'uploadNewsCover' };
     }
+    if (method === 'POST' && /(?:^|\/)(?:operator\/)?appstore-accounts\/generate$/.test(path)) {
+        return { action: 'generateAppStoreAccount' };
+    }
+    if (method === 'POST' && /(?:^|\/)(?:operator\/)?appstore-accounts$/.test(path)) {
+        return { action: 'saveAppStoreAccount' };
+    }
     const codeMatched = path.match(/(?:^|\/)(?:operator\/)?tasks\/([^/]+)\/verification-code$/);
     if (method === 'GET' && (codeMatched === null || codeMatched === void 0 ? void 0 : codeMatched[1])) {
         return { action: 'getVerificationCode', orderNo: decodeURIComponent(codeMatched[1]) };
+    }
+    const appstoreMatched = path.match(/(?:^|\/)(?:operator\/)?tasks\/([^/]+)\/appstore-account$/);
+    if (method === 'GET' && (appstoreMatched === null || appstoreMatched === void 0 ? void 0 : appstoreMatched[1])) {
+        return { action: 'getAvailableAppStoreAccount', orderNo: decodeURIComponent(appstoreMatched[1]) };
     }
     const matched = path.match(/(?:^|\/)(?:operator\/)?tasks\/([^/]+)$/);
     if (method === 'POST' && (matched === null || matched === void 0 ? void 0 : matched[1])) {
@@ -146,6 +168,101 @@ function sanitizeText(value, maxLength) {
 function sanitizeNumber(value) {
     const numeric = Number(value);
     return Number.isFinite(numeric) ? Math.max(0, Math.floor(numeric)) : 0;
+}
+function normalizeAppStoreEmail(value) {
+    return sanitizeText(value, 80).toLowerCase();
+}
+function isValidAppStoreEmail(email) {
+    return new RegExp(`^[a-z0-9._%+-]+@${APPSTORE_EMAIL_DOMAIN.replace('.', '\\.')}$`).test(email);
+}
+function isValidAppStorePassword(password) {
+    return (password.length >= 8
+        && /[0-9]/.test(password)
+        && /[A-Z]/.test(password)
+        && /[a-z]/.test(password)
+        && /[!@#$%^&*]/.test(password));
+}
+function randomInt(max) {
+    return Math.floor(Math.random() * max);
+}
+function randomFrom(characters) {
+    var _a;
+    return (_a = characters[randomInt(characters.length)]) !== null && _a !== void 0 ? _a : characters[0];
+}
+function shuffleText(value) {
+    const chars = value.split('');
+    for (let index = chars.length - 1; index > 0; index -= 1) {
+        const target = randomInt(index + 1);
+        [chars[index], chars[target]] = [chars[target], chars[index]];
+    }
+    return chars.join('');
+}
+function generateAppStorePassword() {
+    const lower = 'abcdefghijkmnpqrstuvwxyz';
+    const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+    const digits = '23456789';
+    const pool = `${lower}${upper}${digits}${APPSTORE_PASSWORD_SPECIALS}`;
+    const required = [
+        randomFrom(upper),
+        randomFrom(lower),
+        randomFrom(digits),
+        randomFrom(APPSTORE_PASSWORD_SPECIALS),
+    ];
+    while (required.length < 12) {
+        required.push(randomFrom(pool));
+    }
+    return shuffleText(required.join(''));
+}
+function serializeAppStoreAccount(account) {
+    var _a, _b, _c;
+    return {
+        id: account._id,
+        email: account.email,
+        mobile: account.mobile,
+        password: account.password,
+        status: account.status,
+        chatgptAccountEmail: (_a = account.chatgptAccountEmail) !== null && _a !== void 0 ? _a : '',
+        orderNo: (_b = account.orderNo) !== null && _b !== void 0 ? _b : '',
+    };
+}
+async function findAppStoreAccountByEmail(email) {
+    var _a;
+    await (0, db_1.ensureCollection)('appstoreAccounts');
+    const result = await (0, db_1.collection)('appstoreAccounts').where({ email }).limit(1).get();
+    return (_a = result.data[0]) !== null && _a !== void 0 ? _a : null;
+}
+async function getAppStoreAccountById(accountId) {
+    var _a;
+    if (!accountId) {
+        return null;
+    }
+    await (0, db_1.ensureCollection)('appstoreAccounts');
+    try {
+        const result = await (0, db_1.collection)('appstoreAccounts').doc(accountId).get();
+        return (_a = result.data) !== null && _a !== void 0 ? _a : null;
+    }
+    catch (_b) {
+        return null;
+    }
+}
+async function getAppStoreAccountByOrderNo(orderNo) {
+    var _a;
+    await (0, db_1.ensureCollection)('appstoreAccounts');
+    const result = await (0, db_1.collection)('appstoreAccounts').where({ orderNo }).limit(1).get();
+    return (_a = result.data[0]) !== null && _a !== void 0 ? _a : null;
+}
+async function generateUniqueAppStoreEmail() {
+    await (0, db_1.ensureCollection)('appstoreAccounts');
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+        const random = Math.random().toString(36).slice(2, 8);
+        const suffix = Date.now().toString(36).slice(-5);
+        const email = `as${suffix}${random}@${APPSTORE_EMAIL_DOMAIN}`;
+        const existing = await findAppStoreAccountByEmail(email);
+        if (!existing) {
+            return email;
+        }
+    }
+    throw new Error('随机账号生成失败，请重试');
 }
 function normalizeSourcePlatform(value) {
     if (value === 'x' || value === 'blog' || value === 'official' || value === 'manual') {
@@ -461,6 +578,7 @@ async function sendNewsReminderToSubscribers(newsId, record) {
 async function buildTask(order) {
     var _a, _b, _c, _d, _e;
     const user = await (0, db_1.getUserById)(order.userId);
+    const appStoreAccount = await getAppStoreAccountByOrderNo(order.orderNo);
     let password = '';
     if (user === null || user === void 0 ? void 0 : user.aiAccountPasswordEncrypted) {
         try {
@@ -490,6 +608,7 @@ async function buildTask(order) {
         nickname: (_d = user === null || user === void 0 ? void 0 : user.nickname) !== null && _d !== void 0 ? _d : '',
         email: (_e = user === null || user === void 0 ? void 0 : user.aiAccountEmail) !== null && _e !== void 0 ? _e : '',
         password,
+        appleStoreAccount: appStoreAccount ? serializeAppStoreAccount(appStoreAccount) : null,
     };
 }
 async function listTasks(event) {
@@ -511,6 +630,7 @@ async function updateTask(orderNo, body, event) {
     var _a, _b, _c;
     const status = normalizeStatus(String((_b = (_a = body.status) !== null && _a !== void 0 ? _a : event.status) !== null && _b !== void 0 ? _b : ''));
     const note = sanitizeNote((_c = body.note) !== null && _c !== void 0 ? _c : event.note);
+    const appStoreAccountId = sanitizeText(body.appleStoreAccountId, 80);
     const order = await (0, db_1.getOrderByNo)(orderNo);
     if (!order) {
         return fail(404, '订单不存在');
@@ -520,16 +640,56 @@ async function updateTask(orderNo, body, event) {
     }
     const now = Date.now();
     if (status === 'fulfilled') {
-        await (0, orders_1.fulfillPaidOrderMembership)(order, { fulfilledAt: now });
-        if (note) {
-            await (0, db_1.collection)('orders').doc(order._id).update({
-                data: {
-                    operatorNote: note,
-                    updatedAt: now,
-                },
-            });
+        if (!appStoreAccountId) {
+            return fail(400, '请先获取 Apple Store 账号');
         }
-        return ok({ success: true, orderNo: order.orderNo, status: 'fulfilled' });
+        const user = await (0, db_1.getUserById)(order.userId);
+        if (!(user === null || user === void 0 ? void 0 : user.aiAccountEmail)) {
+            return fail(400, '该订单用户暂未填写 ChatGPT 注册邮箱');
+        }
+        const appStoreAccount = await getAppStoreAccountById(appStoreAccountId);
+        if (!appStoreAccount) {
+            return fail(404, 'Apple Store 账号不存在');
+        }
+        if (appStoreAccount.status === 'disabled') {
+            return fail(400, 'Apple Store 账号已停用');
+        }
+        if (appStoreAccount.status === 'bound' && appStoreAccount.orderNo !== order.orderNo) {
+            return fail(400, 'Apple Store 账号已绑定其他订单');
+        }
+        await (0, db_1.collection)('appstoreAccounts').doc(appStoreAccount._id).update({
+            data: {
+                status: 'bound',
+                chatgptAccountEmail: user.aiAccountEmail,
+                orderNo: order.orderNo,
+                userId: order.userId,
+                boundAt: now,
+                updatedAt: now,
+            },
+        });
+        await (0, orders_1.fulfillPaidOrderMembership)(order, { fulfilledAt: now });
+        await (0, db_1.collection)('orders').doc(order._id).update({
+            data: {
+                appleStoreAccountId: appStoreAccount._id,
+                appleStoreEmail: appStoreAccount.email,
+                operatorNote: note,
+                updatedAt: now,
+            },
+        });
+        return ok({
+            success: true,
+            orderNo: order.orderNo,
+            status: 'fulfilled',
+            appleStoreAccount: serializeAppStoreAccount({
+                ...appStoreAccount,
+                status: 'bound',
+                chatgptAccountEmail: user.aiAccountEmail,
+                orderNo: order.orderNo,
+                userId: order.userId,
+                boundAt: now,
+                updatedAt: now,
+            }),
+        });
     }
     if (status === 'failed') {
         await (0, db_1.collection)('orders').doc(order._id).update({
@@ -574,6 +734,71 @@ async function getVerificationCode(orderNo) {
         receivedAt: codeRecord.receivedAt,
         expiresAt: codeRecord.expiresAt,
     });
+}
+async function generateAppStoreAccount() {
+    const email = await generateUniqueAppStoreEmail();
+    return ok({
+        email,
+        mobile: DEFAULT_APPSTORE_MOBILE,
+        password: generateAppStorePassword(),
+    });
+}
+async function saveAppStoreAccount(body) {
+    var _a, _b;
+    const now = Date.now();
+    const email = normalizeAppStoreEmail(body.email);
+    const mobile = sanitizeText(body.mobile, 20) || DEFAULT_APPSTORE_MOBILE;
+    const password = sanitizeText(body.password, 80);
+    if (!isValidAppStoreEmail(email)) {
+        return fail(400, `Apple Store 邮箱必须以 @${APPSTORE_EMAIL_DOMAIN} 结尾`);
+    }
+    if (!isValidAppStorePassword(password)) {
+        return fail(400, '密码需至少 8 位，并包含数字、大写、小写和特殊符号');
+    }
+    const existing = await findAppStoreAccountByEmail(email);
+    if (existing) {
+        return fail(409, '该 Apple Store 邮箱已存在');
+    }
+    const record = {
+        email,
+        mobile,
+        password,
+        status: 'available',
+        createdAt: now,
+        updatedAt: now,
+    };
+    const result = await (0, db_1.collection)('appstoreAccounts').add({ data: record });
+    const id = (_b = (_a = result._id) !== null && _a !== void 0 ? _a : result.id) !== null && _b !== void 0 ? _b : '';
+    return ok({
+        success: true,
+        account: serializeAppStoreAccount({ ...record, _id: id }),
+    });
+}
+async function getAvailableAppStoreAccount(orderNo) {
+    const order = await (0, db_1.getOrderByNo)(orderNo);
+    if (!order) {
+        return fail(404, '订单不存在');
+    }
+    if (order.payStatus !== 'paid') {
+        return fail(400, '订单未支付，不能获取 Apple Store 账号');
+    }
+    const bound = await getAppStoreAccountByOrderNo(order.orderNo);
+    if (bound) {
+        return ok({ account: serializeAppStoreAccount(bound), reused: true });
+    }
+    await (0, db_1.ensureCollection)('appstoreAccounts');
+    const result = await (0, db_1.collection)('appstoreAccounts')
+        .where({
+        status: 'available',
+    })
+        .limit(20)
+        .get();
+    const account = result.data
+        .find((item) => !item.orderNo && !item.chatgptAccountEmail);
+    if (!account) {
+        return fail(404, '暂无可用 Apple Store 账号，请先到注册页保存账号');
+    }
+    return ok({ account: serializeAppStoreAccount(account), reused: false });
 }
 async function createNews(body) {
     var _a, _b;
@@ -655,6 +880,15 @@ async function main(event) {
         }
         if (route.action === 'getVerificationCode') {
             return getVerificationCode(route.orderNo);
+        }
+        if (route.action === 'getAvailableAppStoreAccount') {
+            return getAvailableAppStoreAccount(route.orderNo);
+        }
+        if (route.action === 'generateAppStoreAccount') {
+            return generateAppStoreAccount();
+        }
+        if (route.action === 'saveAppStoreAccount') {
+            return saveAppStoreAccount(parseBody(event));
         }
         if (route.action === 'createNews') {
             return createNews(parseBody(event));

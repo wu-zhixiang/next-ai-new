@@ -133,7 +133,7 @@ h1 {
 
 .tabs {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
   margin-top: 14px;
   padding: 4px;
@@ -193,11 +193,13 @@ h1 {
   margin-top: 16px;
 }
 
-.news-panel {
+.news-panel,
+.register-panel {
   margin-top: 16px;
 }
 
-.news-form-card {
+.news-form-card,
+.register-card {
   padding: 16px;
   border: 1px solid rgba(220, 229, 225, 0.9);
   border-radius: 14px;
@@ -469,6 +471,13 @@ h1 {
   padding: 0 10px;
   background: #fbfdfc;
   color: var(--ink);
+}
+
+.helper-text {
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 .task-card__note {
