@@ -9,6 +9,7 @@
 - 一键复制用户注册账号
 - 一键复制用户注册密码
 - 明文获取当前订单邮箱最近一次验证码，并自动复制
+- Apple 注册页支持按当前账号邮箱获取最近验证码、复制和手动刷新
 - 一键打开 ChatGPT 官网
 - 标记处理中
 - 标记已开通
@@ -35,6 +36,8 @@ GET /operator/tasks?status=opening
 POST /operator/tasks/:orderNo
 POST /operator/news/cover
 POST /operator/news
+GET /operator/appstore-accounts/email-code?email=xxx@mraclpivot.com
+POST /operator/appstore-accounts/email-code/clear
 ```
 
 当前项目已提供 `operator-api` 云函数。部署后，在插件设置页中：

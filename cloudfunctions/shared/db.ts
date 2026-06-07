@@ -1,6 +1,7 @@
 import cloud from 'wx-server-sdk';
 import { COLLECTIONS } from './constants';
 import type {
+  AppStoreEmailVerificationCodeRecord,
   DeliveryRecord,
   EmailVerificationCodeRecord,
   InviteRelationRecord,
@@ -148,6 +149,25 @@ export async function getLatestUnusedEmailVerificationCode(
     .sort(sortEmailVerificationCodes)[0] ?? null;
 }
 
+export async function getLatestAppStoreEmailVerificationCode(
+  email: string,
+  now = Date.now(),
+): Promise<(AppStoreEmailVerificationCodeRecord & { _id: string }) | null> {
+  const codes = await listAppStoreEmailVerificationCodes(email);
+  return codes
+    .filter((item) => item.expiresAt > now && !item.usedAt)
+    .sort(sortAppStoreEmailVerificationCodes)[0] ?? null;
+}
+
+export async function getLatestUnusedAppStoreEmailVerificationCode(
+  email: string,
+): Promise<(AppStoreEmailVerificationCodeRecord & { _id: string }) | null> {
+  const codes = await listAppStoreEmailVerificationCodes(email);
+  return codes
+    .filter((item) => !item.usedAt)
+    .sort(sortAppStoreEmailVerificationCodes)[0] ?? null;
+}
+
 async function listEmailVerificationCodes(
   emailOrUserId: string,
   currentEmail?: string,
@@ -175,6 +195,34 @@ async function listEmailVerificationCodes(
 function sortEmailVerificationCodes(
   left: EmailVerificationCodeRecord,
   right: EmailVerificationCodeRecord,
+): number {
+  const leftReceivedAt = left.receivedAt || left.createdAt || 0;
+  const rightReceivedAt = right.receivedAt || right.createdAt || 0;
+  if (rightReceivedAt !== leftReceivedAt) {
+    return rightReceivedAt - leftReceivedAt;
+  }
+  return (right.createdAt || 0) - (left.createdAt || 0);
+}
+
+async function listAppStoreEmailVerificationCodes(
+  email: string,
+): Promise<Array<AppStoreEmailVerificationCodeRecord & { _id: string }>> {
+  const normalizedEmail = email.trim().toLowerCase();
+  try {
+    const result = await collection('appstoreEmailVerificationCodes').where({ email: normalizedEmail }).get();
+    return result.data as Array<AppStoreEmailVerificationCodeRecord & { _id: string }>;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes('collection not exists') || message.includes('DATABASE_COLLECTION_NOT_EXIST') || message.includes('Table not exist')) {
+      return [];
+    }
+    throw error;
+  }
+}
+
+function sortAppStoreEmailVerificationCodes(
+  left: AppStoreEmailVerificationCodeRecord,
+  right: AppStoreEmailVerificationCodeRecord,
 ): number {
   const leftReceivedAt = left.receivedAt || left.createdAt || 0;
   const rightReceivedAt = right.receivedAt || right.createdAt || 0;

@@ -98,6 +98,12 @@ function matchTaskRoute(event) {
     if (event.action === 'getVerificationCode' && event.orderNo) {
         return { action: 'getVerificationCode', orderNo: event.orderNo };
     }
+    if (event.action === 'getAppStoreVerificationCode') {
+        return { action: 'getAppStoreVerificationCode' };
+    }
+    if (event.action === 'clearAppStoreVerificationCode') {
+        return { action: 'clearAppStoreVerificationCode' };
+    }
     if (event.action === 'getAvailableAppStoreAccount' && event.orderNo) {
         return { action: 'getAvailableAppStoreAccount', orderNo: event.orderNo };
     }
@@ -129,6 +135,12 @@ function matchTaskRoute(event) {
     }
     if (method === 'POST' && /(?:^|\/)(?:operator\/)?appstore-accounts$/.test(path)) {
         return { action: 'saveAppStoreAccount' };
+    }
+    if (method === 'GET' && /(?:^|\/)(?:operator\/)?appstore-accounts\/email-code$/.test(path)) {
+        return { action: 'getAppStoreVerificationCode' };
+    }
+    if (method === 'POST' && /(?:^|\/)(?:operator\/)?appstore-accounts\/email-code\/clear$/.test(path)) {
+        return { action: 'clearAppStoreVerificationCode' };
     }
     const codeMatched = path.match(/(?:^|\/)(?:operator\/)?tasks\/([^/]+)\/verification-code$/);
     if (method === 'GET' && (codeMatched === null || codeMatched === void 0 ? void 0 : codeMatched[1])) {
@@ -799,6 +811,79 @@ async function getVerificationCode(orderNo) {
         expiresAt: codeRecord.expiresAt,
     });
 }
+async function getAppStoreVerificationCode(event) {
+    var _a;
+    const email = normalizeAppStoreEmail((_a = event.queryStringParameters) === null || _a === void 0 ? void 0 : _a.email);
+    if (!email || !isValidAppStoreEmail(email)) {
+        return fail(400, '缺少或错误的 Apple 邮箱');
+    }
+    await (0, db_1.ensureCollection)('appstoreEmailVerificationCodes');
+    let result;
+    try {
+        result = await (0, db_1.collection)('appstoreEmailVerificationCodes').where({ email }).get();
+    }
+    catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (message.includes('collection not exists') || message.includes('DATABASE_COLLECTION_NOT_EXIST') || message.includes('Table not exist')) {
+            return ok({ hasCode: false, email });
+        }
+        throw error;
+    }
+    const latestCode = result.data
+        .filter((item) => !item.usedAt)
+        .sort((left, right) => ((right.receivedAt || right.createdAt || 0) - (left.receivedAt || left.createdAt || 0)))[0] || null;
+    const expiredCodes = result.data.filter((item) => !item.usedAt && item.expiresAt <= Date.now());
+    await Promise.all(expiredCodes.map((item) => (0, db_1.collection)('appstoreEmailVerificationCodes').doc(item._id).update({
+        data: {
+            usedAt: Date.now(),
+        },
+    })));
+    if (!latestCode) {
+        return ok({
+            hasCode: false,
+            email,
+        });
+    }
+    if (latestCode.expiresAt <= Date.now()) {
+        return ok({
+            hasCode: false,
+            email,
+            expired: true,
+        });
+    }
+    return ok({
+        hasCode: true,
+        codeId: latestCode._id,
+        email: latestCode.email,
+        code: latestCode.code,
+        provider: latestCode.provider,
+        receivedAt: latestCode.receivedAt,
+        expiresAt: latestCode.expiresAt,
+        expired: latestCode.expiresAt <= Date.now(),
+    });
+}
+async function clearAppStoreVerificationCode(body) {
+    var _a, _b;
+    const codeId = sanitizeText(body.codeId, 80);
+    const email = normalizeAppStoreEmail(body.email);
+    if (!codeId) {
+        return fail(400, '缺少验证码记录');
+    }
+    if (!email || !isValidAppStoreEmail(email)) {
+        return fail(400, '缺少或错误的 Apple 邮箱');
+    }
+    const result = await (0, db_1.collection)('appstoreEmailVerificationCodes').doc(codeId).get();
+    const codeRecord = (_a = result.data) !== null && _a !== void 0 ? _a : undefined;
+    if (!codeRecord || normalizeAppStoreEmail((_b = codeRecord.email) !== null && _b !== void 0 ? _b : '') !== email) {
+        return fail(404, '验证码记录不存在');
+    }
+    await (0, db_1.collection)('appstoreEmailVerificationCodes').doc(codeId).update({
+        data: {
+            usedAt: Date.now(),
+        },
+    });
+    return ok({ success: true });
+}
 async function generateAppStoreAccount(body) {
     const mobile = normalizeAppStoreMobile(body.mobile);
     const email = await generateUniqueAppStoreEmail();
@@ -953,6 +1038,12 @@ async function main(event) {
         }
         if (route.action === 'getVerificationCode') {
             return getVerificationCode(route.orderNo);
+        }
+        if (route.action === 'getAppStoreVerificationCode') {
+            return getAppStoreVerificationCode(event);
+        }
+        if (route.action === 'clearAppStoreVerificationCode') {
+            return clearAppStoreVerificationCode(parseBody(event));
         }
         if (route.action === 'getAvailableAppStoreAccount') {
             return getAvailableAppStoreAccount(route.orderNo, (_a = event.queryStringParameters) === null || _a === void 0 ? void 0 : _a.mobile);

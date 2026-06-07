@@ -156,6 +156,18 @@ export interface EmailVerificationCodeRecord {
   createdAt: number;
 }
 
+export interface AppStoreEmailVerificationCodeRecord {
+  _id?: string;
+  email: string;
+  code: string;
+  from: string;
+  subject: string;
+  receivedAt: number;
+  expiresAt: number;
+  usedAt?: number | null;
+  createdAt: number;
+}
+
 export interface AppStoreAccountRecord {
   _id?: string;
   email: string;

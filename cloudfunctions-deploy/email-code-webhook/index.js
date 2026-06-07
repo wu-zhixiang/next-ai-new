@@ -10,12 +10,35 @@ async function main(event = {}) {
     const payload = normalizeEvent(event);
     assertWebhookSecret(event);
     const email = normalizeEmail(payload.to);
-    const code = normalizeCode(payload.code, payload.subject, payload.text, payload.html, payload.content);
+    const appleEmail = isAppleEmail(payload.from, payload.subject);
+    const code = appleEmail ? normalizeAppleCode(payload) : normalizeCode(payload.code, payload.subject, payload.text, payload.html, payload.content);
     if (!email.endsWith(EMAIL_DOMAIN)) {
         throw new Error('邮箱域名不合法');
     }
     if (!code) {
         throw new Error('验证码格式不合法');
+    }
+    const receivedAt = normalizeReceivedAt(payload.receivedAt);
+    if (appleEmail) {
+        const record = {
+            email,
+            code,
+            from: (_a = payload.from) !== null && _a !== void 0 ? _a : '',
+            subject: (_b = payload.subject) !== null && _b !== void 0 ? _b : '',
+            receivedAt,
+            expiresAt: receivedAt + CODE_TTL_MS,
+            usedAt: null,
+            createdAt: Date.now(),
+        };
+        await (0, db_1.ensureCollection)('appstoreEmailVerificationCodes');
+        await (0, db_1.collection)('appstoreEmailVerificationCodes').add({ data: record });
+        console.info(JSON.stringify({
+            tag: 'appleEmailCode.saved',
+            email,
+            provider: 'apple',
+            receivedAt,
+        }));
+        return (0, utils_1.ok)({ success: true });
     }
     const user = await (0, db_1.getUserByAiAccountEmail)(email);
     if (!user) {
@@ -26,7 +49,6 @@ async function main(event = {}) {
         }));
         return (0, utils_1.ok)({ success: true, ignored: true, reason: 'user_missing' });
     }
-    const receivedAt = normalizeReceivedAt(payload.receivedAt);
     const record = {
         email,
         userId: user._id,
@@ -96,6 +118,40 @@ function normalizeCode(...values) {
     }
     return '';
 }
+function normalizeAppleCode(payload) {
+    const keywordCode = normalizeKeywordCode(payload.subject, payload.text, payload.html, payload.content);
+    if (keywordCode) {
+        return keywordCode;
+    }
+    const firstCandidate = normalizeCandidates(payload.candidates)[0];
+    if (firstCandidate) {
+        return firstCandidate;
+    }
+    return normalizeCode(payload.code);
+}
+function normalizeKeywordCode(...values) {
+    const patterns = [
+        /(?:验证码|驗證碼|临时验证码|一次性代码)[^\d]{0,120}(\d{6})/i,
+        /(?:verification code|temporary code|one-time code|login code|code)[^\d]{0,120}(\d{6})/i,
+        /(\d{6})[^\d]{0,120}(?:验证码|驗證碼|verification code|temporary code|one-time code|login code)/i,
+    ];
+    for (const value of values) {
+        const text = (value !== null && value !== void 0 ? value : '').replace(/\s+/g, ' ');
+        for (const pattern of patterns) {
+            const match = text.match(pattern);
+            if (match === null || match === void 0 ? void 0 : match[1]) {
+                return match[1];
+            }
+        }
+    }
+    return '';
+}
+function normalizeCandidates(value) {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+    return Array.from(new Set(value.map((item) => String(item).trim()).filter((item) => /^\d{6}$/.test(item))));
+}
 function normalizeReceivedAt(value) {
     if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
         return Date.now();
@@ -105,4 +161,9 @@ function normalizeReceivedAt(value) {
 function isOpenAiEmail(value) {
     const from = (value !== null && value !== void 0 ? value : '').toLowerCase();
     return from.includes('openai.com');
+}
+function isAppleEmail(from, subject) {
+    const normalizedFrom = (from !== null && from !== void 0 ? from : '').toLowerCase();
+    const normalizedSubject = (subject !== null && subject !== void 0 ? subject : '').toLowerCase();
+    return normalizedFrom.includes('apple') || normalizedSubject.includes('apple');
 }

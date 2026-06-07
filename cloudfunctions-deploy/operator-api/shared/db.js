@@ -21,6 +21,8 @@ exports.listPendingOrdersByUserId = listPendingOrdersByUserId;
 exports.listInviteRelationsByInviterId = listInviteRelationsByInviterId;
 exports.getLatestEmailVerificationCode = getLatestEmailVerificationCode;
 exports.getLatestUnusedEmailVerificationCode = getLatestUnusedEmailVerificationCode;
+exports.getLatestAppStoreEmailVerificationCode = getLatestAppStoreEmailVerificationCode;
+exports.getLatestUnusedAppStoreEmailVerificationCode = getLatestUnusedAppStoreEmailVerificationCode;
 const wx_server_sdk_1 = __importDefault(require("wx-server-sdk"));
 const constants_1 = require("./constants");
 wx_server_sdk_1.default.init({
@@ -127,6 +129,20 @@ async function getLatestUnusedEmailVerificationCode(emailOrUserId, currentEmail)
         .filter((item) => !item.usedAt)
         .sort(sortEmailVerificationCodes)[0]) !== null && _a !== void 0 ? _a : null;
 }
+async function getLatestAppStoreEmailVerificationCode(email, now = Date.now()) {
+    var _a;
+    const codes = await listAppStoreEmailVerificationCodes(email);
+    return (_a = codes
+        .filter((item) => item.expiresAt > now && !item.usedAt)
+        .sort(sortAppStoreEmailVerificationCodes)[0]) !== null && _a !== void 0 ? _a : null;
+}
+async function getLatestUnusedAppStoreEmailVerificationCode(email) {
+    var _a;
+    const codes = await listAppStoreEmailVerificationCodes(email);
+    return (_a = codes
+        .filter((item) => !item.usedAt)
+        .sort(sortAppStoreEmailVerificationCodes)[0]) !== null && _a !== void 0 ? _a : null;
+}
 async function listEmailVerificationCodes(emailOrUserId, currentEmail) {
     const normalizedInput = emailOrUserId.trim().toLowerCase();
     const normalizedEmail = (currentEmail !== null && currentEmail !== void 0 ? currentEmail : (normalizedInput.includes('@') ? normalizedInput : '')).trim().toLowerCase();
@@ -146,7 +162,29 @@ async function listEmailVerificationCodes(emailOrUserId, currentEmail) {
     }
     return userCodes;
 }
+async function listAppStoreEmailVerificationCodes(email) {
+    const normalizedEmail = email.trim().toLowerCase();
+    try {
+        const result = await collection('appstoreEmailVerificationCodes').where({ email: normalizedEmail }).get();
+        return result.data;
+    }
+    catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (message.includes('collection not exists') || message.includes('DATABASE_COLLECTION_NOT_EXIST') || message.includes('Table not exist')) {
+            return [];
+        }
+        throw error;
+    }
+}
 function sortEmailVerificationCodes(left, right) {
+    const leftReceivedAt = left.receivedAt || left.createdAt || 0;
+    const rightReceivedAt = right.receivedAt || right.createdAt || 0;
+    if (rightReceivedAt !== leftReceivedAt) {
+        return rightReceivedAt - leftReceivedAt;
+    }
+    return (right.createdAt || 0) - (left.createdAt || 0);
+}
+function sortAppStoreEmailVerificationCodes(left, right) {
     const leftReceivedAt = left.receivedAt || left.createdAt || 0;
     const rightReceivedAt = right.receivedAt || right.createdAt || 0;
     if (rightReceivedAt !== leftReceivedAt) {

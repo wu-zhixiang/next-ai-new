@@ -153,6 +153,16 @@
             </div>
           </label>
 
+          <label class="field">
+            <span>邮箱验证码</span>
+            <div class="copy-row">
+              <input id="appleAccountVerificationCode" readonly placeholder="点击获取最近验证码" />
+              <button id="fetchAppleVerificationCodeBtn" type="button">获取</button>
+              <button id="copyAppleVerificationCodeBtn" type="button">复制</button>
+            </div>
+            <p id="appleAccountVerificationStatus" class="helper-text">用于 Apple 账户注册邮箱验证，点击获取可手动刷新最近验证码；过期验证码会在下次刷新前自动清理。</p>
+          </label>
+
           <p class="helper-text">
             注册完成后点击保存，该账号会进入可用池；后续订单开通时会自动从可用池获取未绑定账号。
           </p>

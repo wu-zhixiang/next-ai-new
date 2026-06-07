@@ -63,9 +63,13 @@ const els = {
   appleAccountEmail: document.querySelector('#appleAccountEmail'),
   appleAccountMobile: document.querySelector('#appleAccountMobile'),
   appleAccountPassword: document.querySelector('#appleAccountPassword'),
+  appleAccountVerificationCode: document.querySelector('#appleAccountVerificationCode'),
+  appleAccountVerificationStatus: document.querySelector('#appleAccountVerificationStatus'),
   copyAppleAccountEmailBtn: document.querySelector('#copyAppleAccountEmailBtn'),
   copyAppleAccountMobileBtn: document.querySelector('#copyAppleAccountMobileBtn'),
   copyAppleAccountPasswordBtn: document.querySelector('#copyAppleAccountPasswordBtn'),
+  fetchAppleVerificationCodeBtn: document.querySelector('#fetchAppleVerificationCodeBtn'),
+  copyAppleVerificationCodeBtn: document.querySelector('#copyAppleVerificationCodeBtn'),
   taskList: document.querySelector('#taskList'),
   taskTemplate: document.querySelector('#taskTemplate'),
   emptyState: document.querySelector('#emptyState'),
@@ -84,11 +88,15 @@ let toastTimer = null;
 let pastedCoverDataUrl = '';
 let coverPreviewObjectUrl = '';
 let selectedNewsTags = new Set();
+let lastAppleVerificationCodeId = '';
+let lastAppleVerificationEmail = '';
+let lastAppleVerificationExpired = false;
 
 document.addEventListener('DOMContentLoaded', async () => {
   settings = await getSettings();
   updateSetupNotice();
   syncAppleAccountMobile(settings.appstoreMobile);
+  resetAppleVerificationState();
   bindActions();
   renderNewsTagsOptions();
   updateNewsTagsTrigger();
@@ -124,6 +132,9 @@ function bindActions() {
   els.copyAppleAccountEmailBtn.addEventListener('click', () => copyText(els.appleAccountEmail.value, 'Apple 邮箱已复制'));
   els.copyAppleAccountMobileBtn.addEventListener('click', () => copyText(els.appleAccountMobile.value, '手机号已复制'));
   els.copyAppleAccountPasswordBtn.addEventListener('click', () => copyText(els.appleAccountPassword.value, 'Apple 密码已复制'));
+  els.fetchAppleVerificationCodeBtn.addEventListener('click', () => void fetchAppleVerificationCode());
+  els.copyAppleVerificationCodeBtn.addEventListener('click', () => copyText(els.appleAccountVerificationCode.value, '验证码已复制'));
+  els.appleAccountEmail.addEventListener('input', () => resetAppleVerificationState());
   els.cancelFulfillBtn.addEventListener('click', closeFulfillConfirm);
   els.confirmDialog.addEventListener('click', (event) => {
     if (event.target === els.confirmDialog) {
@@ -223,6 +234,15 @@ function updateSetupNotice() {
 
 function syncAppleAccountMobile(mobile) {
   els.appleAccountMobile.value = mobile || DEFAULT_SETTINGS.appstoreMobile;
+}
+
+function resetAppleVerificationState() {
+  lastAppleVerificationCodeId = '';
+  lastAppleVerificationEmail = '';
+  lastAppleVerificationExpired = false;
+  els.appleAccountVerificationCode.value = '';
+  els.copyAppleVerificationCodeBtn.disabled = true;
+  els.appleAccountVerificationStatus.textContent = '用于 Apple 账户注册邮箱验证，点击获取可手动刷新最近验证码；过期验证码会在下次刷新前自动清理。';
 }
 
 async function loadTasks() {
@@ -411,6 +431,7 @@ async function generateAppleAccount() {
     els.appleAccountEmail.value = account.email || '';
     els.appleAccountMobile.value = account.mobile || mobile;
     els.appleAccountPassword.value = account.password || '';
+    resetAppleVerificationState();
     showToast('账号已生成');
   } catch (error) {
     showError(error);
@@ -456,6 +477,83 @@ function clearAppleAccountForm() {
   els.appleAccountEmail.value = '';
   els.appleAccountMobile.value = (settings.appstoreMobile || DEFAULT_SETTINGS.appstoreMobile).trim();
   els.appleAccountPassword.value = '';
+  resetAppleVerificationState();
+}
+
+function updateAppleVerificationStatus(result) {
+  if (!result?.hasCode) {
+    els.appleAccountVerificationCode.value = '';
+    els.copyAppleVerificationCodeBtn.disabled = true;
+    els.appleAccountVerificationStatus.textContent = '暂无验证码，请先在 Apple 验证页面发送邮件。';
+    return;
+  }
+  if (result.expired) {
+    els.appleAccountVerificationStatus.textContent = '验证码已过期，下一次刷新前会先清理旧记录。';
+    return;
+  }
+  els.appleAccountVerificationStatus.textContent = '已获取最近验证码，可直接复制使用。';
+}
+
+async function clearExpiredAppleVerificationCodeIfNeeded(email) {
+  if (!lastAppleVerificationExpired || !lastAppleVerificationCodeId || !lastAppleVerificationEmail || lastAppleVerificationEmail !== email) {
+    return;
+  }
+  try {
+    await apiRequest('/operator/appstore-accounts/email-code/clear', {
+      method: 'POST',
+      body: JSON.stringify({
+        codeId: lastAppleVerificationCodeId,
+        email,
+      }),
+    });
+  } catch (error) {
+    console.warn('清理过期 Apple 验证码失败', error);
+  } finally {
+    lastAppleVerificationCodeId = '';
+    lastAppleVerificationEmail = '';
+    lastAppleVerificationExpired = false;
+  }
+}
+
+async function fetchAppleVerificationCode() {
+  settings = await getSettings();
+  updateSetupNotice();
+  if (!isConfigured()) return;
+
+  const email = els.appleAccountEmail.value.trim().toLowerCase();
+  if (!email) {
+    showToast('请先生成或填写 Apple 邮箱');
+    return;
+  }
+
+  const originalText = els.fetchAppleVerificationCodeBtn.textContent;
+  els.fetchAppleVerificationCodeBtn.disabled = true;
+  els.fetchAppleVerificationCodeBtn.textContent = '刷新中';
+  try {
+    await clearExpiredAppleVerificationCodeIfNeeded(email);
+    const result = await apiRequest(`/operator/appstore-accounts/email-code?email=${encodeURIComponent(email)}`, {
+      method: 'GET',
+    });
+    const code = result.code || '';
+    els.appleAccountVerificationCode.value = code;
+    els.copyAppleVerificationCodeBtn.disabled = !code;
+    lastAppleVerificationCodeId = result.codeId || '';
+    lastAppleVerificationEmail = result.email || email;
+    lastAppleVerificationExpired = Boolean(result.expired);
+    updateAppleVerificationStatus(result);
+    if (code) {
+      await copyText(code, result.expired ? '验证码已复制（已过期）' : '验证码已复制');
+    } else {
+      els.appleAccountVerificationCode.value = '';
+      els.copyAppleVerificationCodeBtn.disabled = true;
+      showToast('暂无验证码');
+    }
+  } catch (error) {
+    showError(error);
+  } finally {
+    els.fetchAppleVerificationCodeBtn.disabled = false;
+    els.fetchAppleVerificationCodeBtn.textContent = originalText;
+  }
 }
 
 async function fillNewsFromCurrentTab() {

@@ -3,7 +3,7 @@ import { decryptAiAccountPassword } from '../shared/ai-account';
 import { _, app, collection, ensureCollection, getLatestUnusedEmailVerificationCode, getOrderByNo, getUserById } from '../shared/db';
 import { fulfillPaidOrderMembership } from '../shared/orders';
 import { isValidMainlandMobile, normalizeMobile } from '../shared/utils';
-import type { AiNewsRecord, AppStoreAccountRecord, FulfillmentStatus, OrderRecord, UserRecord } from '../shared/types';
+import type { AiNewsRecord, AppStoreAccountRecord, AppStoreEmailVerificationCodeRecord, FulfillmentStatus, OrderRecord, UserRecord } from '../shared/types';
 
 interface Event {
   httpMethod?: string;
@@ -18,6 +18,8 @@ interface Event {
     | 'listTasks'
     | 'updateTask'
     | 'getVerificationCode'
+    | 'getAppStoreVerificationCode'
+    | 'clearAppStoreVerificationCode'
     | 'getAvailableAppStoreAccount'
     | 'generateAppStoreAccount'
     | 'saveAppStoreAccount'
@@ -128,6 +130,8 @@ function matchTaskRoute(event: Event): {
     | 'listTasks'
     | 'updateTask'
     | 'getVerificationCode'
+    | 'getAppStoreVerificationCode'
+    | 'clearAppStoreVerificationCode'
     | 'getAvailableAppStoreAccount'
     | 'generateAppStoreAccount'
     | 'saveAppStoreAccount'
@@ -143,6 +147,12 @@ function matchTaskRoute(event: Event): {
   }
   if (event.action === 'getVerificationCode' && event.orderNo) {
     return { action: 'getVerificationCode', orderNo: event.orderNo };
+  }
+  if (event.action === 'getAppStoreVerificationCode') {
+    return { action: 'getAppStoreVerificationCode' };
+  }
+  if (event.action === 'clearAppStoreVerificationCode') {
+    return { action: 'clearAppStoreVerificationCode' };
   }
   if (event.action === 'getAvailableAppStoreAccount' && event.orderNo) {
     return { action: 'getAvailableAppStoreAccount', orderNo: event.orderNo };
@@ -180,6 +190,14 @@ function matchTaskRoute(event: Event): {
 
   if (method === 'POST' && /(?:^|\/)(?:operator\/)?appstore-accounts$/.test(path)) {
     return { action: 'saveAppStoreAccount' };
+  }
+
+  if (method === 'GET' && /(?:^|\/)(?:operator\/)?appstore-accounts\/email-code$/.test(path)) {
+    return { action: 'getAppStoreVerificationCode' };
+  }
+
+  if (method === 'POST' && /(?:^|\/)(?:operator\/)?appstore-accounts\/email-code\/clear$/.test(path)) {
+    return { action: 'clearAppStoreVerificationCode' };
   }
 
   const codeMatched = path.match(/(?:^|\/)(?:operator\/)?tasks\/([^/]+)\/verification-code$/);
@@ -908,6 +926,85 @@ async function getVerificationCode(orderNo: string): Promise<HttpResponse> {
   });
 }
 
+async function getAppStoreVerificationCode(event: Event): Promise<HttpResponse> {
+  const email = normalizeAppStoreEmail(event.queryStringParameters?.email ?? '');
+  if (!email || !isValidAppStoreEmail(email)) {
+    return fail(400, '缺少或错误的 Apple 邮箱');
+  }
+
+  await ensureCollection('appstoreEmailVerificationCodes');
+  let result: { data: Array<AppStoreEmailVerificationCodeRecord & { _id: string }> };
+  try {
+    result = await collection('appstoreEmailVerificationCodes').where({ email }).get() as { data: Array<AppStoreEmailVerificationCodeRecord & { _id: string }> };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes('collection not exists') || message.includes('DATABASE_COLLECTION_NOT_EXIST') || message.includes('Table not exist')) {
+      return ok({ hasCode: false, email });
+    }
+    throw error;
+  }
+
+  const latestCode = result.data
+    .filter((item) => !item.usedAt)
+    .sort((left, right) => (right.receivedAt || right.createdAt || 0) - (left.receivedAt || left.createdAt || 0))[0] ?? null;
+  const expiredCodes = result.data.filter((item) => !item.usedAt && item.expiresAt <= Date.now());
+  await Promise.all(expiredCodes.map((item) => collection('appstoreEmailVerificationCodes').doc(item._id).update({
+    data: {
+      usedAt: Date.now(),
+    },
+  })));
+  if (!latestCode) {
+    return ok({
+      hasCode: false,
+      email,
+    });
+  }
+
+  if (latestCode.expiresAt <= Date.now()) {
+    return ok({
+      hasCode: false,
+      email,
+      expired: true,
+    });
+  }
+
+  return ok({
+    hasCode: true,
+    codeId: latestCode._id,
+    email: latestCode.email,
+    code: latestCode.code,
+    provider: latestCode.provider,
+    receivedAt: latestCode.receivedAt,
+    expiresAt: latestCode.expiresAt,
+    expired: latestCode.expiresAt <= Date.now(),
+  });
+}
+
+async function clearAppStoreVerificationCode(body: Record<string, unknown>): Promise<HttpResponse> {
+  const codeId = sanitizeText(body.codeId, 80);
+  const email = normalizeAppStoreEmail(body.email ?? '');
+  if (!codeId) {
+    return fail(400, '缺少验证码记录');
+  }
+  if (!email || !isValidAppStoreEmail(email)) {
+    return fail(400, '缺少或错误的 Apple 邮箱');
+  }
+
+  const result = await collection('appstoreEmailVerificationCodes').doc(codeId).get();
+  const codeRecord = result.data as ({ email?: string } & { _id: string }) | undefined;
+  if (!codeRecord || normalizeAppStoreEmail(codeRecord.email ?? '') !== email) {
+    return fail(404, '验证码记录不存在');
+  }
+
+  await collection('appstoreEmailVerificationCodes').doc(codeId).update({
+    data: {
+      usedAt: Date.now(),
+    },
+  });
+
+  return ok({ success: true });
+}
+
 async function generateAppStoreAccount(body: Record<string, unknown>): Promise<HttpResponse> {
   const mobile = normalizeAppStoreMobile(body.mobile);
   const email = await generateUniqueAppStoreEmail();
@@ -1069,6 +1166,12 @@ export async function main(event: Event) {
     }
     if (route.action === 'getVerificationCode') {
       return getVerificationCode(route.orderNo as string);
+    }
+    if (route.action === 'getAppStoreVerificationCode') {
+      return getAppStoreVerificationCode(event);
+    }
+    if (route.action === 'clearAppStoreVerificationCode') {
+      return clearAppStoreVerificationCode(parseBody(event));
     }
     if (route.action === 'getAvailableAppStoreAccount') {
       return getAvailableAppStoreAccount(route.orderNo as string, event.queryStringParameters?.mobile);

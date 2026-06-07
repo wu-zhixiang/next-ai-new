@@ -9,6 +9,7 @@ exports.COLLECTIONS = {
     inviteRelations: 'invite_relations',
     pointsLedger: 'points_ledger',
     emailVerificationCodes: 'email_verification_codes',
+    appstoreEmailVerificationCodes: 'appstore_email_verification_codes',
     aiNews: 'ai_news',
     deliveries: 'deliveries',
     reminderLogs: 'reminder_logs',

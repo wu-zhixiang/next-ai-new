@@ -1,5 +1,5 @@
-import { collection, getUserByAiAccountEmail } from '../shared/db';
-import type { EmailVerificationCodeRecord } from '../shared/types';
+import { collection, ensureCollection, getUserByAiAccountEmail } from '../shared/db';
+import type { AppStoreEmailVerificationCodeRecord, EmailVerificationCodeRecord } from '../shared/types';
 import { ok } from '../shared/utils';
 
 interface Event {
@@ -8,6 +8,7 @@ interface Event {
   from?: string;
   subject?: string;
   code?: string;
+  candidates?: string[];
   text?: string;
   html?: string;
   content?: string;
@@ -16,6 +17,7 @@ interface Event {
 }
 
 type EmailCodePayload = Required<Pick<Event, 'to' | 'from' | 'subject' | 'code'>> & {
+  candidates?: string[];
   text?: string;
   html?: string;
   content?: string;
@@ -30,12 +32,40 @@ export async function main(event: Event = {}) {
   assertWebhookSecret(event);
 
   const email = normalizeEmail(payload.to);
-  const code = normalizeCode(payload.code, payload.subject, payload.text, payload.html, payload.content);
+  const appleEmail = isAppleEmail(payload.from, payload.subject);
+  const code = appleEmail ? normalizeAppleCode(payload) : normalizeCode(payload.code, payload.subject, payload.text, payload.html, payload.content);
   if (!email.endsWith(EMAIL_DOMAIN)) {
     throw new Error('邮箱域名不合法');
   }
   if (!code) {
     throw new Error('验证码格式不合法');
+  }
+
+  const receivedAt = normalizeReceivedAt(payload.receivedAt);
+  if (appleEmail) {
+    const record: AppStoreEmailVerificationCodeRecord = {
+      email,
+      code,
+      from: payload.from ?? '',
+      subject: payload.subject ?? '',
+      receivedAt,
+      expiresAt: receivedAt + CODE_TTL_MS,
+      usedAt: null,
+      createdAt: Date.now(),
+    };
+    await ensureCollection('appstoreEmailVerificationCodes');
+    await collection('appstoreEmailVerificationCodes').add({ data: record });
+
+    console.info(
+      JSON.stringify({
+        tag: 'appleEmailCode.saved',
+        email,
+        provider: 'apple',
+        receivedAt,
+      }),
+    );
+
+    return ok({ success: true });
   }
 
   const user = await getUserByAiAccountEmail(email);
@@ -50,7 +80,6 @@ export async function main(event: Event = {}) {
     return ok({ success: true, ignored: true, reason: 'user_missing' });
   }
 
-  const receivedAt = normalizeReceivedAt(payload.receivedAt);
   const record: EmailVerificationCodeRecord = {
     email,
     userId: user._id,
@@ -125,6 +154,47 @@ function normalizeCode(...values: Array<string | undefined>): string {
   return '';
 }
 
+function normalizeAppleCode(payload: EmailCodePayload): string {
+  const keywordCode = normalizeKeywordCode(payload.subject, payload.text, payload.html, payload.content);
+  if (keywordCode) {
+    return keywordCode;
+  }
+
+  const firstCandidate = normalizeCandidates(payload.candidates)[0];
+  if (firstCandidate) {
+    return firstCandidate;
+  }
+
+  return normalizeCode(payload.code);
+}
+
+function normalizeKeywordCode(...values: Array<string | undefined>): string {
+  const patterns = [
+    /(?:验证码|驗證碼|临时验证码|一次性代码)[^\d]{0,120}(\d{6})/i,
+    /(?:verification code|temporary code|one-time code|login code|code)[^\d]{0,120}(\d{6})/i,
+    /(\d{6})[^\d]{0,120}(?:验证码|驗證碼|verification code|temporary code|one-time code|login code)/i,
+  ];
+
+  for (const value of values) {
+    const text = (value ?? '').replace(/\s+/g, ' ');
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match?.[1]) {
+        return match[1];
+      }
+    }
+  }
+
+  return '';
+}
+
+function normalizeCandidates(value?: string[]): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return Array.from(new Set(value.map((item) => String(item).trim()).filter((item) => /^\d{6}$/.test(item))));
+}
+
 function normalizeReceivedAt(value?: number): number {
   if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
     return Date.now();
@@ -135,4 +205,10 @@ function normalizeReceivedAt(value?: number): number {
 function isOpenAiEmail(value?: string): boolean {
   const from = (value ?? '').toLowerCase();
   return from.includes('openai.com');
+}
+
+function isAppleEmail(from?: string, subject?: string): boolean {
+  const normalizedFrom = (from ?? '').toLowerCase();
+  const normalizedSubject = (subject ?? '').toLowerCase();
+  return normalizedFrom.includes('apple') || normalizedSubject.includes('apple');
 }
