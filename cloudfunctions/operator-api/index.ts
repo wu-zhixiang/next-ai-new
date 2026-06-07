@@ -2,6 +2,7 @@ import https from 'node:https';
 import { decryptAiAccountPassword } from '../shared/ai-account';
 import { _, app, collection, ensureCollection, getLatestUnusedEmailVerificationCode, getOrderByNo, getUserById } from '../shared/db';
 import { fulfillPaidOrderMembership } from '../shared/orders';
+import { isValidMainlandMobile, normalizeMobile } from '../shared/utils';
 import type { AiNewsRecord, AppStoreAccountRecord, FulfillmentStatus, OrderRecord, UserRecord } from '../shared/types';
 
 interface Event {
@@ -37,7 +38,8 @@ type OperatorTaskStatus = 'opening' | 'processing' | 'fulfilled' | 'failed';
 
 const DEFAULT_NEWS_REMINDER_TEMPLATE_ID = 'm7Cb5rMgtJtFdyVn3YvR671tWZwyK87qe6qKr7KPZrQ';
 const APPSTORE_EMAIL_DOMAIN = 'mraclpivot.com';
-const DEFAULT_APPSTORE_MOBILE = '1581090117';
+const DEFAULT_APPSTORE_MOBILE = '15810901111';
+const SUPER_OPERATOR_MOBILE = '15501130351';
 const APPSTORE_PASSWORD_SPECIALS = '!@#$%^&*';
 
 const CORS_HEADERS = {
@@ -223,6 +225,26 @@ function sanitizeText(value: unknown, maxLength: number): string {
   return typeof value === 'string' ? value.trim().slice(0, maxLength) : '';
 }
 
+function normalizeAppStoreMobile(value: unknown): string {
+  const mobile = normalizeMobile(sanitizeText(value, 20));
+  if (!mobile) {
+    return DEFAULT_APPSTORE_MOBILE;
+  }
+  if (!isValidMainlandMobile(mobile)) {
+    throw new Error('Apple Store 手机号格式不正确');
+  }
+  return mobile;
+}
+
+function getAppStoreMobileTail(value: unknown): string {
+  const mobile = normalizeAppStoreMobile(value);
+  return mobile.slice(-4);
+}
+
+function isSuperOperatorMobile(value: unknown): boolean {
+  return normalizeMobile(sanitizeText(value, 20)) === SUPER_OPERATOR_MOBILE;
+}
+
 function sanitizeNumber(value: unknown): number {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? Math.max(0, Math.floor(numeric)) : 0;
@@ -315,6 +337,27 @@ async function getAppStoreAccountByOrderNo(orderNo: string): Promise<(AppStoreAc
   await ensureCollection('appstoreAccounts');
   const result = await collection('appstoreAccounts').where({ orderNo }).limit(1).get();
   return (result.data[0] as (AppStoreAccountRecord & { _id: string }) | undefined) ?? null;
+}
+
+async function getAppStoreAccountByChatgptEmail(chatgptAccountEmail: string): Promise<(AppStoreAccountRecord & { _id: string }) | null> {
+  if (!chatgptAccountEmail) {
+    return null;
+  }
+  await ensureCollection('appstoreAccounts');
+  const result = await collection('appstoreAccounts').where({ chatgptAccountEmail }).limit(1).get();
+  return (result.data[0] as (AppStoreAccountRecord & { _id: string }) | undefined) ?? null;
+}
+
+async function resolveOrderAppStoreAccount(order: OrderRecord, user?: UserRecord | null): Promise<(AppStoreAccountRecord & { _id: string }) | null> {
+  const byOrderNo = await getAppStoreAccountByOrderNo(order.orderNo);
+  if (byOrderNo) {
+    return byOrderNo;
+  }
+  const email = user?.aiAccountEmail ?? '';
+  if (!email) {
+    return null;
+  }
+  return getAppStoreAccountByChatgptEmail(email);
 }
 
 async function generateUniqueAppStoreEmail(): Promise<string> {
@@ -674,7 +717,7 @@ async function sendNewsReminderToSubscribers(newsId: string, record: AiNewsRecor
 
 async function buildTask(order: OrderRecord & { _id: string }) {
   const user = await getUserById(order.userId);
-  const appStoreAccount = await getAppStoreAccountByOrderNo(order.orderNo);
+  const appStoreAccount = await resolveOrderAppStoreAccount(order, user);
   let password = '';
   if (user?.aiAccountPasswordEncrypted) {
     try {
@@ -710,13 +753,33 @@ async function buildTask(order: OrderRecord & { _id: string }) {
 
 async function listTasks(event: Event): Promise<HttpResponse> {
   const status = normalizeStatus(event.queryStringParameters?.status ?? event.status);
+  const operatorMobile = normalizeAppStoreMobile(event.queryStringParameters?.mobile ?? DEFAULT_APPSTORE_MOBILE);
   const result = await collection('orders')
     .where({
       payStatus: 'paid',
     })
     .get();
-  const orders = (result.data as Array<OrderRecord & { _id: string }>)
-    .filter((order) => isOrderVisibleForStatus(order, status))
+  const orderRecords = result.data as Array<OrderRecord & { _id: string }>;
+  const visibleOrders = [];
+  for (const order of orderRecords) {
+    if (!isOrderVisibleForStatus(order, status)) {
+      continue;
+    }
+    if (isSuperOperatorMobile(operatorMobile)) {
+      visibleOrders.push(order);
+      continue;
+    }
+    const user = await getUserById(order.userId);
+    const linkedAccount = await resolveOrderAppStoreAccount(order, user);
+    if (!linkedAccount) {
+      visibleOrders.push(order);
+      continue;
+    }
+    if (normalizeMobile(linkedAccount.mobile).endsWith(getAppStoreMobileTail(operatorMobile))) {
+      visibleOrders.push(order);
+    }
+  }
+  const orders = visibleOrders
     .sort((left, right) => (right.paidAt ?? right.createdAt) - (left.paidAt ?? left.createdAt))
     .slice(0, 50);
   const tasks = await Promise.all(orders.map(buildTask));
@@ -727,6 +790,9 @@ async function updateTask(orderNo: string, body: Record<string, unknown>, event:
   const status = normalizeStatus(String(body.status ?? event.status ?? ''));
   const note = sanitizeNote(body.note ?? event.note);
   const appStoreAccountId = sanitizeText(body.appleStoreAccountId, 80);
+  const operatorMobile = normalizeAppStoreMobile(body.mobile ?? event.queryStringParameters?.mobile ?? DEFAULT_APPSTORE_MOBILE);
+  const operatorTail = getAppStoreMobileTail(operatorMobile);
+  const privileged = isSuperOperatorMobile(operatorMobile);
   const order = await getOrderByNo(orderNo);
   if (!order) {
     return fail(404, '订单不存在');
@@ -748,10 +814,13 @@ async function updateTask(orderNo: string, body: Record<string, unknown>, event:
     if (!appStoreAccount) {
       return fail(404, 'Apple Store 账号不存在');
     }
+    if (!privileged && !normalizeMobile(appStoreAccount.mobile).endsWith(operatorTail)) {
+      return fail(403, '只能使用本手机号注册的 Apple Store 账号');
+    }
     if (appStoreAccount.status === 'disabled') {
       return fail(400, 'Apple Store 账号已停用');
     }
-    if (appStoreAccount.status === 'bound' && appStoreAccount.orderNo !== order.orderNo) {
+    if (appStoreAccount.status === 'bound' && appStoreAccount.orderNo !== order.orderNo && appStoreAccount.chatgptAccountEmail !== user.aiAccountEmail) {
       return fail(400, 'Apple Store 账号已绑定其他订单');
     }
     await collection('appstoreAccounts').doc(appStoreAccount._id).update({
@@ -839,11 +908,12 @@ async function getVerificationCode(orderNo: string): Promise<HttpResponse> {
   });
 }
 
-async function generateAppStoreAccount(): Promise<HttpResponse> {
+async function generateAppStoreAccount(body: Record<string, unknown>): Promise<HttpResponse> {
+  const mobile = normalizeAppStoreMobile(body.mobile);
   const email = await generateUniqueAppStoreEmail();
   return ok({
     email,
-    mobile: DEFAULT_APPSTORE_MOBILE,
+    mobile,
     password: generateAppStorePassword(),
   });
 }
@@ -851,7 +921,7 @@ async function generateAppStoreAccount(): Promise<HttpResponse> {
 async function saveAppStoreAccount(body: Record<string, unknown>): Promise<HttpResponse> {
   const now = Date.now();
   const email = normalizeAppStoreEmail(body.email);
-  const mobile = sanitizeText(body.mobile, 20) || DEFAULT_APPSTORE_MOBILE;
+  const mobile = normalizeAppStoreMobile(body.mobile);
   const password = sanitizeText(body.password, 80);
   if (!isValidAppStoreEmail(email)) {
     return fail(400, `Apple Store 邮箱必须以 @${APPSTORE_EMAIL_DOMAIN} 结尾`);
@@ -880,7 +950,7 @@ async function saveAppStoreAccount(body: Record<string, unknown>): Promise<HttpR
   });
 }
 
-async function getAvailableAppStoreAccount(orderNo: string): Promise<HttpResponse> {
+async function getAvailableAppStoreAccount(orderNo: string, mobile?: string): Promise<HttpResponse> {
   const order = await getOrderByNo(orderNo);
   if (!order) {
     return fail(404, '订单不存在');
@@ -888,22 +958,30 @@ async function getAvailableAppStoreAccount(orderNo: string): Promise<HttpRespons
   if (order.payStatus !== 'paid') {
     return fail(400, '订单未支付，不能获取 Apple Store 账号');
   }
-  const bound = await getAppStoreAccountByOrderNo(order.orderNo);
+  const operatorMobile = normalizeAppStoreMobile(mobile);
+  const operatorTail = getAppStoreMobileTail(operatorMobile);
+  const privileged = isSuperOperatorMobile(operatorMobile);
+  const user = await getUserById(order.userId);
+  const bound = await resolveOrderAppStoreAccount(order, user);
   if (bound) {
+    if (!privileged && !normalizeMobile(bound.mobile).endsWith(operatorTail)) {
+      return fail(403, '该订单已关联其他 Apple Store 账号');
+    }
     return ok({ account: serializeAppStoreAccount(bound), reused: true });
   }
 
+  const targetTail = operatorTail;
   await ensureCollection('appstoreAccounts');
   const result = await collection('appstoreAccounts')
     .where({
       status: 'available',
     })
-    .limit(20)
     .get();
   const account = (result.data as Array<AppStoreAccountRecord & { _id: string }>)
-    .find((item) => !item.orderNo && !item.chatgptAccountEmail);
+    .filter((item) => !item.orderNo && !item.chatgptAccountEmail && normalizeMobile(item.mobile).endsWith(targetTail))
+    .sort((left, right) => (left.createdAt ?? 0) - (right.createdAt ?? 0))[0];
   if (!account) {
-    return fail(404, '暂无可用 Apple Store 账号，请先到注册页保存账号');
+    return fail(404, `暂无尾号为 ${targetTail} 的可用 Apple Store 账号，请先到注册页保存账号`);
   }
 
   return ok({ account: serializeAppStoreAccount(account), reused: false });
@@ -993,10 +1071,10 @@ export async function main(event: Event) {
       return getVerificationCode(route.orderNo as string);
     }
     if (route.action === 'getAvailableAppStoreAccount') {
-      return getAvailableAppStoreAccount(route.orderNo as string);
+      return getAvailableAppStoreAccount(route.orderNo as string, event.queryStringParameters?.mobile);
     }
     if (route.action === 'generateAppStoreAccount') {
-      return generateAppStoreAccount();
+      return generateAppStoreAccount(parseBody(event));
     }
     if (route.action === 'saveAppStoreAccount') {
       return saveAppStoreAccount(parseBody(event));

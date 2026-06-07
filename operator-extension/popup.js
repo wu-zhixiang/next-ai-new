@@ -1,7 +1,8 @@
 const DEFAULT_SETTINGS = {
   apiBaseUrl: '',
   operatorToken: '',
-  chatgptUrl: 'https://chatgpt.com/'
+  chatgptUrl: 'https://chatgpt.com/',
+  appstoreMobile: '15810901111'
 };
 const MAX_COVER_DATA_URL_LENGTH = 2 * 1024 * 1024;
 const NEWS_TAG_TREE = [
@@ -87,6 +88,7 @@ let selectedNewsTags = new Set();
 document.addEventListener('DOMContentLoaded', async () => {
   settings = await getSettings();
   updateSetupNotice();
+  syncAppleAccountMobile(settings.appstoreMobile);
   bindActions();
   renderNewsTagsOptions();
   updateNewsTagsTrigger();
@@ -102,7 +104,12 @@ function bindActions() {
   els.openChatgptBtn.addEventListener('click', () => openTab(settings.chatgptUrl || DEFAULT_SETTINGS.chatgptUrl));
   els.ordersTabBtn.addEventListener('click', () => switchPanel('orders'));
   els.newsTabBtn.addEventListener('click', () => switchPanel('news'));
-  els.registerTabBtn.addEventListener('click', () => switchPanel('register'));
+  els.registerTabBtn.addEventListener('click', async () => {
+    settings = await getSettings();
+    updateSetupNotice();
+    syncAppleAccountMobile(settings.appstoreMobile);
+    switchPanel('register');
+  });
   els.fillCurrentTabBtn.addEventListener('click', fillNewsFromCurrentTab);
   els.clearNewsFormBtn.addEventListener('click', clearNewsForm);
   els.submitNewsBtn.addEventListener('click', submitNews);
@@ -214,6 +221,10 @@ function updateSetupNotice() {
   els.setupNotice.classList.toggle('hidden', isConfigured());
 }
 
+function syncAppleAccountMobile(mobile) {
+  els.appleAccountMobile.value = mobile || DEFAULT_SETTINGS.appstoreMobile;
+}
+
 async function loadTasks() {
   settings = await getSettings();
   updateSetupNotice();
@@ -221,7 +232,9 @@ async function loadTasks() {
 
   setLoading(true);
   try {
-    const data = await apiRequest('/operator/tasks?status=opening', { method: 'GET' });
+    const mobile = (settings.appstoreMobile || DEFAULT_SETTINGS.appstoreMobile).trim();
+    const query = mobile ? `?status=opening&mobile=${encodeURIComponent(mobile)}` : '?status=opening';
+    const data = await apiRequest(`/operator/tasks${query}`, { method: 'GET' });
     const tasks = Array.isArray(data.tasks) ? data.tasks : [];
     renderTasks(tasks);
   } catch (error) {
@@ -289,7 +302,8 @@ function applyAppleStoreAccountToTask(node, account) {
   node.dataset.appleStoreAccountId = normalized?.id || '';
   emailInput.value = normalized?.email || '';
   passwordInput.value = normalized?.password || '';
-  fetchButton.textContent = normalized?.email ? '已取' : '获取';
+  fetchButton.classList.toggle('hidden', Boolean(normalized?.email));
+  fetchButton.textContent = normalized?.email ? '已关联' : '获取';
 }
 
 async function fetchAppleStoreAccount(orderNo, node, button) {
@@ -298,7 +312,9 @@ async function fetchAppleStoreAccount(orderNo, node, button) {
   button.disabled = true;
   button.textContent = '获取中';
   try {
-    const result = await apiRequest(`/operator/tasks/${encodeURIComponent(orderNo)}/appstore-account`, { method: 'GET' });
+    const mobile = (settings.appstoreMobile || DEFAULT_SETTINGS.appstoreMobile).trim();
+    const query = mobile ? `?mobile=${encodeURIComponent(mobile)}` : '';
+    const result = await apiRequest(`/operator/tasks/${encodeURIComponent(orderNo)}/appstore-account${query}`, { method: 'GET' });
     applyAppleStoreAccountToTask(node, result.account);
     await copyText(result.account?.email || '', result.reused ? '已复用并复制 Apple 邮箱' : '已获取并复制 Apple 邮箱');
   } catch (error) {
@@ -343,7 +359,7 @@ async function updateTask(orderNo, status, node) {
   try {
     await apiRequest(`/operator/tasks/${encodeURIComponent(orderNo)}`, {
       method: 'POST',
-      body: JSON.stringify({ status, note, appleStoreAccountId })
+      body: JSON.stringify({ status, note, appleStoreAccountId, mobile: (settings.appstoreMobile || DEFAULT_SETTINGS.appstoreMobile).trim() })
     });
     if (status === 'fulfilled') {
       node.remove();
@@ -382,13 +398,18 @@ async function generateAppleAccount() {
   updateSetupNotice();
   if (!isConfigured()) return;
 
+  const mobile = (settings.appstoreMobile || DEFAULT_SETTINGS.appstoreMobile).trim();
+  syncAppleAccountMobile(mobile);
   const originalText = els.generateAppleAccountBtn.textContent;
   els.generateAppleAccountBtn.disabled = true;
   els.generateAppleAccountBtn.textContent = '生成中';
   try {
-    const account = await apiRequest('/operator/appstore-accounts/generate', { method: 'POST' });
+    const account = await apiRequest('/operator/appstore-accounts/generate', {
+      method: 'POST',
+      body: JSON.stringify({ mobile }),
+    });
     els.appleAccountEmail.value = account.email || '';
-    els.appleAccountMobile.value = account.mobile || '1581090117';
+    els.appleAccountMobile.value = account.mobile || mobile;
     els.appleAccountPassword.value = account.password || '';
     showToast('账号已生成');
   } catch (error) {
@@ -405,7 +426,8 @@ async function saveAppleAccount() {
   if (!isConfigured()) return;
 
   const email = els.appleAccountEmail.value.trim();
-  const mobile = els.appleAccountMobile.value.trim() || '1581090117';
+  const mobile = (settings.appstoreMobile || DEFAULT_SETTINGS.appstoreMobile).trim();
+  syncAppleAccountMobile(mobile);
   const password = els.appleAccountPassword.value.trim();
   if (!email || !password) {
     showToast('请先生成账号和密码');
@@ -432,7 +454,7 @@ async function saveAppleAccount() {
 
 function clearAppleAccountForm() {
   els.appleAccountEmail.value = '';
-  els.appleAccountMobile.value = '1581090117';
+  els.appleAccountMobile.value = (settings.appstoreMobile || DEFAULT_SETTINGS.appstoreMobile).trim();
   els.appleAccountPassword.value = '';
 }
 

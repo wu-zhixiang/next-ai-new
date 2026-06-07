@@ -8,9 +8,19 @@ interface Event {
   from?: string;
   subject?: string;
   code?: string;
+  text?: string;
+  html?: string;
+  content?: string;
   receivedAt?: number;
   headers?: Record<string, string>;
 }
+
+type EmailCodePayload = Required<Pick<Event, 'to' | 'from' | 'subject' | 'code'>> & {
+  text?: string;
+  html?: string;
+  content?: string;
+  receivedAt?: number;
+};
 
 const CODE_TTL_MS = 10 * 60 * 1000;
 const EMAIL_DOMAIN = '@mraclpivot.com';
@@ -20,7 +30,7 @@ export async function main(event: Event = {}) {
   assertWebhookSecret(event);
 
   const email = normalizeEmail(payload.to);
-  const code = normalizeCode(payload.code);
+  const code = normalizeCode(payload.code, payload.subject, payload.text, payload.html, payload.content);
   if (!email.endsWith(EMAIL_DOMAIN)) {
     throw new Error('邮箱域名不合法');
   }
@@ -40,7 +50,7 @@ export async function main(event: Event = {}) {
     return ok({ success: true, ignored: true, reason: 'user_missing' });
   }
 
-  const receivedAt = typeof payload.receivedAt === 'number' ? payload.receivedAt : Date.now();
+  const receivedAt = normalizeReceivedAt(payload.receivedAt);
   const record: EmailVerificationCodeRecord = {
     email,
     userId: user._id,
@@ -68,7 +78,7 @@ export async function main(event: Event = {}) {
   return ok({ success: true });
 }
 
-function normalizeEvent(event: Event): Required<Pick<Event, 'to' | 'from' | 'subject' | 'code'>> & { receivedAt?: number } {
+function normalizeEvent(event: Event): EmailCodePayload {
   if (event.body) {
     try {
       return {
@@ -76,10 +86,10 @@ function normalizeEvent(event: Event): Required<Pick<Event, 'to' | 'from' | 'sub
         ...JSON.parse(event.body),
       };
     } catch {
-      return event as Required<Pick<Event, 'to' | 'from' | 'subject' | 'code'>> & { receivedAt?: number };
+      return event as EmailCodePayload;
     }
   }
-  return event as Required<Pick<Event, 'to' | 'from' | 'subject' | 'code'>> & { receivedAt?: number };
+  return event as EmailCodePayload;
 }
 
 function assertWebhookSecret(event: Event): void {
@@ -95,12 +105,31 @@ function assertWebhookSecret(event: Event): void {
 }
 
 function normalizeEmail(value?: string): string {
-  return (value ?? '').trim().toLowerCase();
+  const raw = (value ?? '').trim().toLowerCase();
+  const matched = raw.match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i);
+  return (matched?.[0] ?? raw).toLowerCase();
 }
 
-function normalizeCode(value?: string): string {
-  const code = (value ?? '').trim();
-  return /^\d{6}$/.test(code) ? code : '';
+function normalizeCode(...values: Array<string | undefined>): string {
+  for (const value of values) {
+    const text = (value ?? '').trim();
+    const directCode = text.match(/^\d{6}$/)?.[0];
+    if (directCode) {
+      return directCode;
+    }
+    const embeddedCode = text.match(/(?:^|[^\d])(\d{6})(?:[^\d]|$)/)?.[1];
+    if (embeddedCode) {
+      return embeddedCode;
+    }
+  }
+  return '';
+}
+
+function normalizeReceivedAt(value?: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    return Date.now();
+  }
+  return value < 1000000000000 ? value * 1000 : value;
 }
 
 function isOpenAiEmail(value?: string): boolean {

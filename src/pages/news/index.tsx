@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Button, Image, Text, View } from '@tarojs/components';
-import Taro, { useDidShow, usePullDownRefresh, useRouter, useShareAppMessage, useShareTimeline } from '@tarojs/taro';
+import Taro, { useDidShow, usePullDownRefresh, useReachBottom, useRouter, useShareAppMessage, useShareTimeline } from '@tarojs/taro';
 import { AppTransparentHeader } from '@/components/AppTransparentHeader';
 import AuthModal, { type AuthUserInfo } from '@/components/AuthModal';
 import { callCloudFunction } from '@/services/api';
@@ -29,6 +29,8 @@ interface LoginResult extends CachedUserInfo {
 
 interface NewsListResult {
   items: AiNewsView[];
+  hasMore?: boolean;
+  total?: number;
 }
 
 interface AppConfigResult {
@@ -51,6 +53,7 @@ const NEWS_FILTERS: NewsFilterOption[] = [
   { key: 'tools', label: '工具', sort: 'latest', tag: '工具' },
   { key: 'tutorials', label: '教程', sort: 'latest', tag: '教程' },
 ];
+const NEWS_PAGE_SIZE = 12;
 
 function getNewsFilterLabel(filterKey: NewsFilterKey): string {
   return NEWS_FILTERS.find((item) => item.key === filterKey)?.label ?? NEWS_FILTERS[0].label;
@@ -83,6 +86,9 @@ export default function NewsPage() {
   const [activeInviteCode, setActiveInviteCode] = useState('');
   const [newsList, setNewsList] = useState<AiNewsView[]>([]);
   const [newsLoading, setNewsLoading] = useState(true);
+  const [newsLoadingMore, setNewsLoadingMore] = useState(false);
+  const [newsPage, setNewsPage] = useState(0);
+  const [newsHasMore, setNewsHasMore] = useState(true);
   const [activeFilterKey, setActiveFilterKey] = useState<NewsFilterKey>('latest');
   const [filterOpen, setFilterOpen] = useState(false);
   const [sharePanelVisible, setSharePanelVisible] = useState(false);
@@ -99,6 +105,10 @@ export default function NewsPage() {
 
   usePullDownRefresh(() => {
     void refreshNews();
+  });
+
+  useReachBottom(() => {
+    void loadMoreNews();
   });
 
   useShareAppMessage(() => getShareAppMessage(shareItem));
@@ -126,7 +136,7 @@ export default function NewsPage() {
     } else if (inviteCode) {
       syncCachedLoginState(inviteCode);
     }
-    void loadNews('latest');
+    void loadNews('latest', true);
   }
 
   async function loadAppConfig(): Promise<Required<AppConfigResult>> {
@@ -168,31 +178,42 @@ export default function NewsPage() {
     };
   }
 
-  async function loadNews(filterKey = activeFilterKey, showSkeleton = true): Promise<void> {
-    if (showSkeleton) {
+  async function loadNews(filterKey = activeFilterKey, reset = true, page = 1): Promise<void> {
+    if (reset) {
       setNewsLoading(true);
       setNewsList([]);
+      setNewsHasMore(true);
+      setNewsPage(0);
+    } else {
+      setNewsLoadingMore(true);
     }
     try {
       const filter = NEWS_FILTERS.find((item) => item.key === filterKey) ?? NEWS_FILTERS[0];
       const result = await callCloudFunction<NewsListResult>('list-ai-news', {
-        limit: 20,
+        limit: NEWS_PAGE_SIZE,
+        offset: (page - 1) * NEWS_PAGE_SIZE,
         sort: filter.sort ?? 'hot',
         tag: filter.tag,
       });
-      setNewsList(result.items);
+      setNewsList((prev) => (reset ? result.items : [...prev, ...result.items]));
+      setNewsPage(page);
+      setNewsHasMore(result.hasMore ?? result.items.length === NEWS_PAGE_SIZE);
     } catch {
-      setNewsList([]);
+      if (reset) {
+        setNewsList([]);
+      }
     } finally {
-      if (showSkeleton) {
+      if (reset) {
         setNewsLoading(false);
+      } else {
+        setNewsLoadingMore(false);
       }
     }
   }
 
   async function refreshNews(): Promise<void> {
     try {
-      await loadNews(activeFilterKey, false);
+      await loadNews(activeFilterKey, true, 1);
     } finally {
       Taro.stopPullDownRefresh();
     }
@@ -286,7 +307,14 @@ export default function NewsPage() {
     setFilterOpen(false);
     if (filter.key === activeFilterKey) return;
     setActiveFilterKey(filter.key);
-    void loadNews(filter.key);
+    void loadNews(filter.key, true, 1);
+  }
+
+  async function loadMoreNews(): Promise<void> {
+    if (newsLoading || newsLoadingMore || !newsHasMore) {
+      return;
+    }
+    await loadNews(activeFilterKey, false, newsPage + 1);
   }
 
   function openSharePanel(item: AiNewsView, event?: { stopPropagation?: () => void }): void {
@@ -376,6 +404,17 @@ export default function NewsPage() {
                 </View>
               </View>
             )) : null}
+            {!newsLoading && newsList.length > 0 ? (
+              <View className='news-list-footer'>
+                {newsLoadingMore ? (
+                  <Text className='news-list-footer__text'>加载中...</Text>
+                ) : newsHasMore ? (
+                  <Text className='news-list-footer__text'>上拉或滚动到底部加载更多</Text>
+                ) : (
+                  <Text className='news-list-footer__text'>没有更多资讯了</Text>
+                )}
+              </View>
+            ) : null}
           </View>
         </View>
       </View>

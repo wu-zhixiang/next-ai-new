@@ -13,8 +13,8 @@ async function main() {
     if (!user.aiAccountEmail) {
         throw new Error('当前用户未绑定 AI 账号');
     }
-    const latestValidCode = await (0, db_1.getLatestEmailVerificationCode)(user._id);
-    const latestCode = latestValidCode !== null && latestValidCode !== void 0 ? latestValidCode : await (0, db_1.getLatestUnusedEmailVerificationCode)(user._id);
+    const latestValidCode = await (0, db_1.getLatestEmailVerificationCode)(user._id, Date.now(), user.aiAccountEmail);
+    const latestCode = latestValidCode !== null && latestValidCode !== void 0 ? latestValidCode : await (0, db_1.getLatestUnusedEmailVerificationCode)(user._id, user.aiAccountEmail);
     if (!latestCode) {
         console.info(JSON.stringify({
             tag: 'emailCode.latest.missing',

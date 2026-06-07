@@ -8,9 +8,11 @@ const node_https_1 = __importDefault(require("node:https"));
 const ai_account_1 = require("./shared/ai-account");
 const db_1 = require("./shared/db");
 const orders_1 = require("./shared/orders");
+const utils_1 = require("./shared/utils");
 const DEFAULT_NEWS_REMINDER_TEMPLATE_ID = 'm7Cb5rMgtJtFdyVn3YvR671tWZwyK87qe6qKr7KPZrQ';
 const APPSTORE_EMAIL_DOMAIN = 'mraclpivot.com';
-const DEFAULT_APPSTORE_MOBILE = '1581090117';
+const DEFAULT_APPSTORE_MOBILE = '15810901111';
+const SUPER_OPERATOR_MOBILE = '15501130351';
 const APPSTORE_PASSWORD_SPECIALS = '!@#$%^&*';
 const CORS_HEADERS = {
     'access-control-allow-origin': '*',
@@ -165,6 +167,22 @@ function sanitizeNote(value) {
 function sanitizeText(value, maxLength) {
     return typeof value === 'string' ? value.trim().slice(0, maxLength) : '';
 }
+function normalizeAppStoreMobile(value) {
+    const mobile = (0, utils_1.normalizeMobile)(sanitizeText(value, 20));
+    if (!mobile) {
+        return DEFAULT_APPSTORE_MOBILE;
+    }
+    if (!(0, utils_1.isValidMainlandMobile)(mobile)) {
+        throw new Error('Apple Store 手机号格式不正确');
+    }
+    return mobile;
+}
+function getAppStoreMobileTail(value) {
+    return normalizeAppStoreMobile(value).slice(-4);
+}
+function isSuperOperatorMobile(value) {
+    return (0, utils_1.normalizeMobile)(sanitizeText(value, 20)) === SUPER_OPERATOR_MOBILE;
+}
 function sanitizeNumber(value) {
     const numeric = Number(value);
     return Number.isFinite(numeric) ? Math.max(0, Math.floor(numeric)) : 0;
@@ -250,6 +268,26 @@ async function getAppStoreAccountByOrderNo(orderNo) {
     await (0, db_1.ensureCollection)('appstoreAccounts');
     const result = await (0, db_1.collection)('appstoreAccounts').where({ orderNo }).limit(1).get();
     return (_a = result.data[0]) !== null && _a !== void 0 ? _a : null;
+}
+async function getAppStoreAccountByChatgptEmail(chatgptAccountEmail) {
+    var _a;
+    if (!chatgptAccountEmail) {
+        return null;
+    }
+    await (0, db_1.ensureCollection)('appstoreAccounts');
+    const result = await (0, db_1.collection)('appstoreAccounts').where({ chatgptAccountEmail }).limit(1).get();
+    return (_a = result.data[0]) !== null && _a !== void 0 ? _a : null;
+}
+async function resolveOrderAppStoreAccount(order, user) {
+    const byOrderNo = await getAppStoreAccountByOrderNo(order.orderNo);
+    if (byOrderNo) {
+        return byOrderNo;
+    }
+    const email = (user === null || user === void 0 ? void 0 : user.aiAccountEmail) || '';
+    if (!email) {
+        return null;
+    }
+    return getAppStoreAccountByChatgptEmail(email);
 }
 async function generateUniqueAppStoreEmail() {
     await (0, db_1.ensureCollection)('appstoreAccounts');
@@ -578,7 +616,7 @@ async function sendNewsReminderToSubscribers(newsId, record) {
 async function buildTask(order) {
     var _a, _b, _c, _d, _e;
     const user = await (0, db_1.getUserById)(order.userId);
-    const appStoreAccount = await getAppStoreAccountByOrderNo(order.orderNo);
+    const appStoreAccount = await resolveOrderAppStoreAccount(order, user);
     let password = '';
     if (user === null || user === void 0 ? void 0 : user.aiAccountPasswordEncrypted) {
         try {
@@ -612,25 +650,48 @@ async function buildTask(order) {
     };
 }
 async function listTasks(event) {
-    var _a, _b;
+    var _a, _b, _c;
     const status = normalizeStatus((_b = (_a = event.queryStringParameters) === null || _a === void 0 ? void 0 : _a.status) !== null && _b !== void 0 ? _b : event.status);
+    const operatorMobile = normalizeAppStoreMobile(((_c = event.queryStringParameters) === null || _c === void 0 ? void 0 : _c.mobile) || DEFAULT_APPSTORE_MOBILE);
     const result = await (0, db_1.collection)('orders')
         .where({
         payStatus: 'paid',
     })
         .get();
-    const orders = result.data
-        .filter((order) => isOrderVisibleForStatus(order, status))
+    const orderRecords = result.data;
+    const visibleOrders = [];
+    for (const order of orderRecords) {
+        if (!isOrderVisibleForStatus(order, status)) {
+            continue;
+        }
+        if (isSuperOperatorMobile(operatorMobile)) {
+            visibleOrders.push(order);
+            continue;
+        }
+        const user = await (0, db_1.getUserById)(order.userId);
+        const linkedAccount = await resolveOrderAppStoreAccount(order, user);
+        if (!linkedAccount) {
+            visibleOrders.push(order);
+            continue;
+        }
+        if ((0, utils_1.normalizeMobile)(linkedAccount.mobile).endsWith(getAppStoreMobileTail(operatorMobile))) {
+            visibleOrders.push(order);
+        }
+    }
+    const orders = visibleOrders
         .sort((left, right) => { var _a, _b; return ((_a = right.paidAt) !== null && _a !== void 0 ? _a : right.createdAt) - ((_b = left.paidAt) !== null && _b !== void 0 ? _b : left.createdAt); })
         .slice(0, 50);
     const tasks = await Promise.all(orders.map(buildTask));
     return ok({ tasks });
 }
 async function updateTask(orderNo, body, event) {
-    var _a, _b, _c;
+    var _a, _b, _c, _d;
     const status = normalizeStatus(String((_b = (_a = body.status) !== null && _a !== void 0 ? _a : event.status) !== null && _b !== void 0 ? _b : ''));
     const note = sanitizeNote((_c = body.note) !== null && _c !== void 0 ? _c : event.note);
     const appStoreAccountId = sanitizeText(body.appleStoreAccountId, 80);
+    const operatorMobile = normalizeAppStoreMobile(body.mobile || ((_d = event.queryStringParameters) === null || _d === void 0 ? void 0 : _d.mobile) || DEFAULT_APPSTORE_MOBILE);
+    const operatorTail = getAppStoreMobileTail(operatorMobile);
+    const privileged = isSuperOperatorMobile(operatorMobile);
     const order = await (0, db_1.getOrderByNo)(orderNo);
     if (!order) {
         return fail(404, '订单不存在');
@@ -651,10 +712,13 @@ async function updateTask(orderNo, body, event) {
         if (!appStoreAccount) {
             return fail(404, 'Apple Store 账号不存在');
         }
+        if (!privileged && !(0, utils_1.normalizeMobile)(appStoreAccount.mobile).endsWith(operatorTail)) {
+            return fail(403, '只能使用本手机号注册的 Apple Store 账号');
+        }
         if (appStoreAccount.status === 'disabled') {
             return fail(400, 'Apple Store 账号已停用');
         }
-        if (appStoreAccount.status === 'bound' && appStoreAccount.orderNo !== order.orderNo) {
+        if (appStoreAccount.status === 'bound' && appStoreAccount.orderNo !== order.orderNo && appStoreAccount.chatgptAccountEmail !== (user === null || user === void 0 ? void 0 : user.aiAccountEmail)) {
             return fail(400, 'Apple Store 账号已绑定其他订单');
         }
         await (0, db_1.collection)('appstoreAccounts').doc(appStoreAccount._id).update({
@@ -735,11 +799,12 @@ async function getVerificationCode(orderNo) {
         expiresAt: codeRecord.expiresAt,
     });
 }
-async function generateAppStoreAccount() {
+async function generateAppStoreAccount(body) {
+    const mobile = normalizeAppStoreMobile(body.mobile);
     const email = await generateUniqueAppStoreEmail();
     return ok({
         email,
-        mobile: DEFAULT_APPSTORE_MOBILE,
+        mobile,
         password: generateAppStorePassword(),
     });
 }
@@ -747,7 +812,7 @@ async function saveAppStoreAccount(body) {
     var _a, _b;
     const now = Date.now();
     const email = normalizeAppStoreEmail(body.email);
-    const mobile = sanitizeText(body.mobile, 20) || DEFAULT_APPSTORE_MOBILE;
+    const mobile = normalizeAppStoreMobile(body.mobile);
     const password = sanitizeText(body.password, 80);
     if (!isValidAppStoreEmail(email)) {
         return fail(400, `Apple Store 邮箱必须以 @${APPSTORE_EMAIL_DOMAIN} 结尾`);
@@ -774,7 +839,7 @@ async function saveAppStoreAccount(body) {
         account: serializeAppStoreAccount({ ...record, _id: id }),
     });
 }
-async function getAvailableAppStoreAccount(orderNo) {
+async function getAvailableAppStoreAccount(orderNo, mobile) {
     const order = await (0, db_1.getOrderByNo)(orderNo);
     if (!order) {
         return fail(404, '订单不存在');
@@ -782,21 +847,29 @@ async function getAvailableAppStoreAccount(orderNo) {
     if (order.payStatus !== 'paid') {
         return fail(400, '订单未支付，不能获取 Apple Store 账号');
     }
-    const bound = await getAppStoreAccountByOrderNo(order.orderNo);
+    const operatorMobile = normalizeAppStoreMobile(mobile);
+    const operatorTail = getAppStoreMobileTail(operatorMobile);
+    const privileged = isSuperOperatorMobile(operatorMobile);
+    const user = await (0, db_1.getUserById)(order.userId);
+    const bound = await resolveOrderAppStoreAccount(order, user);
     if (bound) {
+        if (!privileged && !(0, utils_1.normalizeMobile)(bound.mobile).endsWith(operatorTail)) {
+            return fail(403, '该订单已关联其他 Apple Store 账号');
+        }
         return ok({ account: serializeAppStoreAccount(bound), reused: true });
     }
+    const targetTail = operatorTail;
     await (0, db_1.ensureCollection)('appstoreAccounts');
     const result = await (0, db_1.collection)('appstoreAccounts')
         .where({
         status: 'available',
-    })
-        .limit(20)
+        })
         .get();
     const account = result.data
-        .find((item) => !item.orderNo && !item.chatgptAccountEmail);
+        .filter((item) => !item.orderNo && !item.chatgptAccountEmail && (0, utils_1.normalizeMobile)(item.mobile).endsWith(targetTail))
+        .sort((left, right) => ((left.createdAt !== null && left.createdAt !== void 0 ? left.createdAt : 0) - (right.createdAt !== null && right.createdAt !== void 0 ? right.createdAt : 0)))[0];
     if (!account) {
-        return fail(404, '暂无可用 Apple Store 账号，请先到注册页保存账号');
+        return fail(404, `暂无尾号为 ${targetTail} 的可用 Apple Store 账号，请先到注册页保存账号`);
     }
     return ok({ account: serializeAppStoreAccount(account), reused: false });
 }
@@ -882,10 +955,10 @@ async function main(event) {
             return getVerificationCode(route.orderNo);
         }
         if (route.action === 'getAvailableAppStoreAccount') {
-            return getAvailableAppStoreAccount(route.orderNo);
+            return getAvailableAppStoreAccount(route.orderNo, (_a = event.queryStringParameters) === null || _a === void 0 ? void 0 : _a.mobile);
         }
         if (route.action === 'generateAppStoreAccount') {
-            return generateAppStoreAccount();
+            return generateAppStoreAccount(parseBody(event));
         }
         if (route.action === 'saveAppStoreAccount') {
             return saveAppStoreAccount(parseBody(event));

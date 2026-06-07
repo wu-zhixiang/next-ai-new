@@ -56,6 +56,7 @@ export async function main(event: Event) {
     productName: plan.productName,
     planCode: plan.planCode,
     planName: plan.planName,
+    virtualPaymentProductId: plan.virtualPaymentProductId,
     orderType: existingMembership ? 'renew' : 'purchase',
     amount: payableAmount,
     originalAmount: normalizeAmount(plan.price),

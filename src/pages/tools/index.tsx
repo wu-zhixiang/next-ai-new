@@ -2,12 +2,12 @@ import { Text, View } from '@tarojs/components';
 import Taro, { useDidShow } from '@tarojs/taro';
 import { AppTransparentHeader } from '@/components/AppTransparentHeader';
 import { showTabBarSafely } from '@/utils/tabbar';
-import { TOOLS, type ToolDefinition } from './definitions';
+import { VISIBLE_TOOLS, type ToolDefinition } from './definitions';
 
 function showComingSoon(tool: ToolDefinition): void {
   void Taro.showModal({
     title: tool.name,
-    content: `${tool.desc}能力正在接入中，当前先开放文章总结和文案生成。`,
+    content: `${tool.desc}能力正在接入中，当前先开放摘要总结。`,
     showCancel: false,
     confirmText: '知道了',
   });
@@ -37,7 +37,7 @@ export default function ToolsPage(): JSX.Element {
             <View>
               <Text className='saas-chip'>AI工具箱</Text>
               <Text className='tools-hero__title'>内容整理与创作</Text>
-              <Text className='tools-hero__desc'>先开放文章总结和文案生成。后续接入图像生成、图片编辑、翻译润色等能力。</Text>
+              <Text className='tools-hero__desc'>先开放摘要总结。后续接入 AI 生图、图片修复等能力。</Text>
             </View>
             <View className='tools-hero__meter'>
               <Text className='tools-hero__meter-value'>1次</Text>
@@ -51,7 +51,7 @@ export default function ToolsPage(): JSX.Element {
               <Text className='tools-section__hint'>点击进入独立工具页</Text>
             </View>
             <View className='tools-grid'>
-              {TOOLS.map((tool) => (
+              {VISIBLE_TOOLS.map((tool) => (
                 <View
                   className={`tool-card ${tool.enabled ? 'tool-card--enabled' : 'tool-card--disabled'}`}
                   key={tool.id}

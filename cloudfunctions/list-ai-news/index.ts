@@ -4,6 +4,7 @@ import type { AiNewsRecord, AiNewsView } from '../shared/types';
 
 interface Event {
   limit?: number;
+  offset?: number;
   tag?: string;
   sort?: 'hot' | 'latest';
 }
@@ -87,6 +88,7 @@ function matchesCategory(record: AiNewsRecord, tag: string): boolean {
 
 export async function main(event: Event = {}) {
   const limit = Math.max(1, Math.min(Number(event.limit) || 20, 50));
+  const offset = Math.max(0, Number(event.offset) || 0);
   let result: { data: Array<AiNewsRecord & { _id: string }> };
   try {
     result = await collection('aiNews')
@@ -104,7 +106,7 @@ export async function main(event: Event = {}) {
 
   const tag = event.tag?.trim();
   const sort = event.sort === 'latest' ? 'latest' : 'hot';
-  const items = result.data
+  const orderedItems = result.data
     .filter((item) => !tag || matchesCategory(item, tag))
     .sort((left, right) => {
       if (sort === 'latest') {
@@ -112,9 +114,14 @@ export async function main(event: Event = {}) {
       }
       const scoreDiff = (right.score || 0) - (left.score || 0);
       return scoreDiff || (right.publishedAt || right.createdAt) - (left.publishedAt || left.createdAt);
-    })
-    .slice(0, limit)
+    });
+  const items = orderedItems
+    .slice(offset, offset + limit)
     .map(toView);
 
-  return ok({ items });
+  return ok({
+    items,
+    hasMore: offset + items.length < orderedItems.length,
+    total: orderedItems.length,
+  });
 }

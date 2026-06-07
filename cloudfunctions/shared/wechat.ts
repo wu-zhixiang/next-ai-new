@@ -489,6 +489,9 @@ function getWechatVirtualPayConfig(): WechatVirtualPayConfig {
 }
 
 function getVirtualPaymentProductId(order: OrderRecord): string {
+  if (order.virtualPaymentProductId) {
+    return order.virtualPaymentProductId;
+  }
   const key = `WX_VIRTUAL_PAY_PRODUCT_ID_${order.planCode.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase()}`;
   return process.env[key] || process.env.WX_VIRTUAL_PAY_PRODUCT_ID || order.planCode;
 }

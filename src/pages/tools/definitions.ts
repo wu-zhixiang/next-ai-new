@@ -1,5 +1,5 @@
 export type OutputType = 'summary' | 'bullets' | 'xiaohongshu' | 'moments';
-export type ToolId = 'articleSummary' | 'copywriting' | 'imageGenerate' | 'imageEdit' | 'translation' | 'script';
+export type ToolId = 'copywriting' | 'articleSummary' | 'imageGenerate' | 'imageRepair';
 
 export interface ToolDefinition {
   id: ToolId;
@@ -8,27 +8,29 @@ export interface ToolDefinition {
   badge: string;
   icon: string;
   enabled: boolean;
+  visible?: boolean;
   outputType: OutputType;
 }
 
 export const TOOLS: ToolDefinition[] = [
   {
+    id: 'copywriting',
+    name: '文案生成',
+    desc: '小红书、朋友圈文案改写',
+    badge: '已上线',
+    icon: '写',
+    enabled: true,
+    visible: false,
+    outputType: 'xiaohongshu',
+  },
+  {
     id: 'articleSummary',
-    name: '文章总结',
+    name: '摘要总结',
     desc: '长文、帖子、会议记录提炼结论',
     badge: '已上线',
     icon: '总',
     enabled: true,
     outputType: 'summary',
-  },
-  {
-    id: 'copywriting',
-    name: '文案生成',
-    desc: '小红书、朋友圈内容改写',
-    badge: '已上线',
-    icon: '写',
-    enabled: true,
-    outputType: 'xiaohongshu',
   },
   {
     id: 'imageGenerate',
@@ -40,34 +42,18 @@ export const TOOLS: ToolDefinition[] = [
     outputType: 'summary',
   },
   {
-    id: 'imageEdit',
-    name: '图片编辑',
-    desc: '抠图、换背景、扩图',
+    id: 'imageRepair',
+    name: '图片修复',
+    desc: '去水印、瑕疵修复、画质增强',
     badge: '接入中',
     icon: '修',
     enabled: false,
     outputType: 'summary',
   },
-  {
-    id: 'translation',
-    name: '翻译润色',
-    desc: '中英互译、语气优化',
-    badge: '规划中',
-    icon: '译',
-    enabled: false,
-    outputType: 'summary',
-  },
-  {
-    id: 'script',
-    name: '短视频脚本',
-    desc: '钩子、分镜、口播稿',
-    badge: '规划中',
-    icon: '脚',
-    enabled: false,
-    outputType: 'summary',
-  },
 ];
 
+export const VISIBLE_TOOLS = TOOLS.filter((item) => item.visible !== false);
+
 export function getToolById(id?: string): ToolDefinition {
-  return TOOLS.find((item) => item.id === id) ?? TOOLS[0];
+  return TOOLS.find((item) => item.id === id) ?? VISIBLE_TOOLS[0] ?? TOOLS[0];
 }

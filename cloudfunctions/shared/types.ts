@@ -56,6 +56,7 @@ export interface MemberPlanRecord {
   productName: string;
   planCode: string;
   planName: string;
+  virtualPaymentProductId?: string;
   price: number;
   durationDays: number;
   autoRenewEnabled: boolean;
@@ -90,6 +91,7 @@ export interface OrderRecord {
   productName: string;
   planCode: string;
   planName: string;
+  virtualPaymentProductId?: string;
   orderType: 'purchase' | 'renew';
   amount: number;
   originalAmount?: number;

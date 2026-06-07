@@ -10,7 +10,7 @@ async function main(event = {}) {
     const payload = normalizeEvent(event);
     assertWebhookSecret(event);
     const email = normalizeEmail(payload.to);
-    const code = normalizeCode(payload.code);
+    const code = normalizeCode(payload.code, payload.subject, payload.text, payload.html, payload.content);
     if (!email.endsWith(EMAIL_DOMAIN)) {
         throw new Error('邮箱域名不合法');
     }
@@ -26,7 +26,7 @@ async function main(event = {}) {
         }));
         return (0, utils_1.ok)({ success: true, ignored: true, reason: 'user_missing' });
     }
-    const receivedAt = typeof payload.receivedAt === 'number' ? payload.receivedAt : Date.now();
+    const receivedAt = normalizeReceivedAt(payload.receivedAt);
     const record = {
         email,
         userId: user._id,
@@ -76,11 +76,31 @@ function assertWebhookSecret(event) {
     }
 }
 function normalizeEmail(value) {
-    return (value !== null && value !== void 0 ? value : '').trim().toLowerCase();
+    var _a;
+    const raw = (value !== null && value !== void 0 ? value : '').trim().toLowerCase();
+    const matched = raw.match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i);
+    return ((_a = matched === null || matched === void 0 ? void 0 : matched[0]) !== null && _a !== void 0 ? _a : raw).toLowerCase();
 }
-function normalizeCode(value) {
-    const code = (value !== null && value !== void 0 ? value : '').trim();
-    return /^\d{6}$/.test(code) ? code : '';
+function normalizeCode(...values) {
+    var _a, _b;
+    for (const value of values) {
+        const text = (value !== null && value !== void 0 ? value : '').trim();
+        const directCode = (_a = text.match(/^\d{6}$/)) === null || _a === void 0 ? void 0 : _a[0];
+        if (directCode) {
+            return directCode;
+        }
+        const embeddedCode = (_b = text.match(/(?:^|[^\d])(\d{6})(?:[^\d]|$)/)) === null || _b === void 0 ? void 0 : _b[1];
+        if (embeddedCode) {
+            return embeddedCode;
+        }
+    }
+    return '';
+}
+function normalizeReceivedAt(value) {
+    if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+        return Date.now();
+    }
+    return value < 1000000000000 ? value * 1000 : value;
 }
 function isOpenAiEmail(value) {
     const from = (value !== null && value !== void 0 ? value : '').toLowerCase();

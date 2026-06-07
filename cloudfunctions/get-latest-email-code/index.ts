@@ -12,8 +12,8 @@ export async function main() {
     throw new Error('当前用户未绑定 AI 账号');
   }
 
-  const latestValidCode = await getLatestEmailVerificationCode(user._id);
-  const latestCode = latestValidCode ?? await getLatestUnusedEmailVerificationCode(user._id);
+  const latestValidCode = await getLatestEmailVerificationCode(user._id, Date.now(), user.aiAccountEmail);
+  const latestCode = latestValidCode ?? await getLatestUnusedEmailVerificationCode(user._id, user.aiAccountEmail);
   if (!latestCode) {
     console.info(
       JSON.stringify({

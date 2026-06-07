@@ -130,44 +130,56 @@ export async function listInviteRelationsByInviterId(
 export async function getLatestEmailVerificationCode(
   emailOrUserId: string,
   now = Date.now(),
+  currentEmail?: string,
 ): Promise<(EmailVerificationCodeRecord & { _id: string }) | null> {
-  const result = await collection('emailVerificationCodes')
-    .where({
-      userId: emailOrUserId,
-    })
-    .get();
-  const userCodes = result.data as Array<EmailVerificationCodeRecord & { _id: string }>;
-  const fallbackResult = userCodes.length > 0
-    ? { data: userCodes }
-    : await collection('emailVerificationCodes')
-      .where({
-        email: emailOrUserId.trim().toLowerCase(),
-      })
-      .get();
-  const codes = (fallbackResult.data as Array<EmailVerificationCodeRecord & { _id: string }>)
+  const codes = await listEmailVerificationCodes(emailOrUserId, currentEmail);
+  return codes
     .filter((item) => item.expiresAt > now && !item.usedAt)
-    .sort((left, right) => right.receivedAt - left.receivedAt);
-  return codes[0] ?? null;
+    .sort(sortEmailVerificationCodes)[0] ?? null;
 }
 
 export async function getLatestUnusedEmailVerificationCode(
   emailOrUserId: string,
+  currentEmail?: string,
 ): Promise<(EmailVerificationCodeRecord & { _id: string }) | null> {
-  const result = await collection('emailVerificationCodes')
-    .where({
-      userId: emailOrUserId,
-    })
-    .get();
-  const userCodes = result.data as Array<EmailVerificationCodeRecord & { _id: string }>;
-  const fallbackResult = userCodes.length > 0
-    ? { data: userCodes }
-    : await collection('emailVerificationCodes')
-      .where({
-        email: emailOrUserId.trim().toLowerCase(),
-      })
-      .get();
-  const codes = (fallbackResult.data as Array<EmailVerificationCodeRecord & { _id: string }>)
+  const codes = await listEmailVerificationCodes(emailOrUserId, currentEmail);
+  return codes
     .filter((item) => !item.usedAt)
-    .sort((left, right) => right.receivedAt - left.receivedAt);
-  return codes[0] ?? null;
+    .sort(sortEmailVerificationCodes)[0] ?? null;
+}
+
+async function listEmailVerificationCodes(
+  emailOrUserId: string,
+  currentEmail?: string,
+): Promise<Array<EmailVerificationCodeRecord & { _id: string }>> {
+  const normalizedInput = emailOrUserId.trim().toLowerCase();
+  const normalizedEmail = (currentEmail ?? (normalizedInput.includes('@') ? normalizedInput : '')).trim().toLowerCase();
+  if (normalizedInput.includes('@')) {
+    const result = await collection('emailVerificationCodes').where({ email: normalizedInput }).get();
+    return result.data as Array<EmailVerificationCodeRecord & { _id: string }>;
+  }
+
+  const result = await collection('emailVerificationCodes').where({ userId: emailOrUserId }).get();
+  const userCodes = result.data as Array<EmailVerificationCodeRecord & { _id: string }>;
+  if (normalizedEmail) {
+    const matchedCodes = userCodes.filter((item) => item.email === normalizedEmail);
+    if (matchedCodes.length > 0) {
+      return matchedCodes;
+    }
+    const fallbackResult = await collection('emailVerificationCodes').where({ email: normalizedEmail }).get();
+    return fallbackResult.data as Array<EmailVerificationCodeRecord & { _id: string }>;
+  }
+  return userCodes;
+}
+
+function sortEmailVerificationCodes(
+  left: EmailVerificationCodeRecord,
+  right: EmailVerificationCodeRecord,
+): number {
+  const leftReceivedAt = left.receivedAt || left.createdAt || 0;
+  const rightReceivedAt = right.receivedAt || right.createdAt || 0;
+  if (rightReceivedAt !== leftReceivedAt) {
+    return rightReceivedAt - leftReceivedAt;
+  }
+  return (right.createdAt || 0) - (left.createdAt || 0);
 }

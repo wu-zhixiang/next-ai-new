@@ -113,7 +113,7 @@ export default function AuthModal({ visible, inviteCode, onAuthSuccess }: AuthMo
       <View className='auth-modal__mask' />
       <View className='auth-modal__card'>
         <View className='auth-modal__icon'>AI</View>
-        <Text className='auth-modal__title'>欢迎进入 Open AI 资讯会员</Text>
+        <Text className='auth-modal__title'>欢迎进入 AIO Version</Text>
         <Text className='auth-modal__desc'>登录后同步会员状态、邀请积分与服务记录</Text>
         <Button
           className={`auth-modal__button ${agreementAccepted ? '' : 'auth-modal__button--disabled'}`}

@@ -146,7 +146,7 @@ interface WechatPhoneEvent {
 const PRODUCT_OPTIONS: ProductOption[] = [
   {
     code: 'ai_news',
-    label: 'Open AI 资讯会员',
+    label: 'AIO Version',
     tag: '已上线',
     available: true,
     description: '适合 Open AI 资讯订阅、精选内容与会员权益场景。',
@@ -205,6 +205,8 @@ export default function MemberPage(): JSX.Element {
   const [introProductCode, setIntroProductCode] = useState('ai_news');
   const [aiAccountSheetVisible, setAiAccountSheetVisible] = useState(false);
   const [aiAccountSheetSource, setAiAccountSheetSource] = useState<AiAccountSheetSource>('purchase');
+  const [aiAccountInfoVisible, setAiAccountInfoVisible] = useState(false);
+  const [aiAccountInfo, setAiAccountInfo] = useState<AiAccountResult | null>(null);
   const [pendingProductCode, setPendingProductCode] = useState('ai_news');
   const [aiAccountName, setAiAccountName] = useState('');
   const [aiAccountPassword, setAiAccountPassword] = useState('');
@@ -654,15 +656,8 @@ export default function MemberPage(): JSX.Element {
       });
       const result = await callCloudFunction<AiAccountResult>('get-ai-account');
       Taro.hideLoading();
-      const modalResult = await Taro.showModal({
-        title: 'AI账号信息',
-        content: `账号：\n${result.email}\n\n密码：\n${result.password}`,
-        confirmText: '复制',
-        cancelText: '关闭',
-      });
-      if (modalResult.confirm) {
-        await Taro.setClipboardData({ data: result.password });
-      }
+      setAiAccountInfo(result);
+      setAiAccountInfoVisible(true);
     } catch (error) {
       Taro.hideLoading();
       const message = error instanceof Error ? error.message : '账号信息获取失败';
@@ -673,6 +668,16 @@ export default function MemberPage(): JSX.Element {
       }
       Taro.showToast({ title: message, icon: 'none' });
     }
+  }
+
+  function closeAiAccountInfo(): void {
+    setAiAccountInfoVisible(false);
+    setAiAccountInfo(null);
+  }
+
+  async function copyAiAccountValue(value: string, label: string): Promise<void> {
+    await Taro.setClipboardData({ data: value });
+    Taro.showToast({ title: `${label}已复制`, icon: 'none' });
   }
 
   async function handleShowLatestEmailCode(): Promise<void> {
@@ -957,6 +962,57 @@ export default function MemberPage(): JSX.Element {
         <Button className='saas-button plan-sheet__button' loading={submitting} onClick={() => void handleSaveAiAccount()}>
           立即注册
         </Button>
+      </PopLayout>
+
+      <PopLayout visible={aiAccountInfoVisible} onClose={closeAiAccountInfo} panelClassName='ai-account-info-sheet'>
+        <View className='ai-account-info__head'>
+          <View>
+            <Text className='plan-sheet__label'>AI 账号信息</Text>
+            <Text className='plan-sheet__title'>账号与密码</Text>
+          </View>
+          <Text className='plan-sheet__close' onClick={closeAiAccountInfo}>
+            ×
+          </Text>
+        </View>
+        <Text className='plan-sheet__desc'>账号和密码分开复制，方便直接登录或转发到电脑端使用。</Text>
+        <View className='ai-account-info__list'>
+          <View className='ai-account-info__item'>
+            <View className='ai-account-info__row'>
+              <View>
+                <Text className='ai-account-info__label'>账号</Text>
+                <Text className='ai-account-info__value'>{aiAccountInfo?.email ?? '--'}</Text>
+              </View>
+              <Button
+                className='ai-account-info__copy'
+                disabled={!aiAccountInfo?.email}
+                onClick={() => {
+                  if (!aiAccountInfo?.email) return;
+                  void copyAiAccountValue(aiAccountInfo.email, '账号');
+                }}
+              >
+                复制账号
+              </Button>
+            </View>
+          </View>
+          <View className='ai-account-info__item'>
+            <View className='ai-account-info__row'>
+              <View>
+                <Text className='ai-account-info__label'>密码</Text>
+                <Text className='ai-account-info__value ai-account-info__value--secret'>{aiAccountInfo?.password ?? '--'}</Text>
+              </View>
+              <Button
+                className='ai-account-info__copy'
+                disabled={!aiAccountInfo?.password}
+                onClick={() => {
+                  if (!aiAccountInfo?.password) return;
+                  void copyAiAccountValue(aiAccountInfo.password, '密码');
+                }}
+              >
+                复制密码
+              </Button>
+            </View>
+          </View>
+        </View>
       </PopLayout>
 
       <PopLayout visible={planSheetVisible} onClose={closePlanSheet} panelClassName='plan-sheet'>

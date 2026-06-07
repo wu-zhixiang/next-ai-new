@@ -1,0 +1,602 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>ChatGPT Plus 会员开通流程</title>
+  <style>
+    :root {
+      --bg: #edf4f0;
+      --bg-2: #f7faf8;
+      --surface: rgba(255, 255, 255, 0.84);
+      --surface-strong: #ffffff;
+      --text: #14222b;
+      --muted: #5f6d76;
+      --line: rgba(20, 34, 43, 0.12);
+      --primary: #2f6f5f;
+      --primary-2: #dbefe7;
+      --accent: #c9a25f;
+      --shadow: 0 22px 60px rgba(20, 34, 43, 0.10);
+      --radius: 24px;
+      --radius-sm: 16px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+      line-height: 1.75;
+      background:
+        radial-gradient(circle at top left, rgba(47, 111, 95, 0.16), transparent 24%),
+        radial-gradient(circle at top right, rgba(201, 162, 95, 0.14), transparent 20%),
+        linear-gradient(180deg, var(--bg-2), var(--bg));
+    }
+
+    img {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    .page {
+      width: min(1180px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 28px 0 52px;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.08fr) minmax(320px, 0.92fr);
+      gap: 24px;
+      align-items: stretch;
+      padding: 24px;
+      border: 1px solid var(--line);
+      border-radius: 32px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.92), rgba(255,255,255,0.76));
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      width: fit-content;
+      margin-bottom: 14px;
+      padding: 7px 12px;
+      border: 1px solid rgba(47, 111, 95, 0.18);
+      border-radius: 999px;
+      background: var(--primary-2);
+      color: var(--primary);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .hero h1 {
+      margin: 0;
+      font-size: clamp(30px, 4.8vw, 56px);
+      line-height: 1.08;
+      letter-spacing: 0;
+    }
+
+    .hero p {
+      margin: 14px 0 0;
+      color: var(--muted);
+      font-size: 16px;
+      line-height: 1.8;
+    }
+
+    .hero-points {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      min-height: 34px;
+      padding: 6px 12px;
+      border: 1px solid rgba(20, 34, 43, 0.10);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.86);
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .hero-card {
+      position: relative;
+      min-height: 360px;
+      padding: 14px;
+      border-radius: 28px;
+      background:
+        linear-gradient(180deg, rgba(14, 24, 28, 0.06), rgba(14, 24, 28, 0.02)),
+        linear-gradient(180deg, rgba(47, 111, 95, 0.12), rgba(255, 255, 255, 0.94));
+      border: 1px solid rgba(47, 111, 95, 0.14);
+      overflow: hidden;
+    }
+
+    .hero-card::before {
+      content: "";
+      position: absolute;
+      inset: auto -18% -24% auto;
+      width: 220px;
+      height: 220px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(201, 162, 95, 0.26), transparent 64%);
+      pointer-events: none;
+    }
+
+    .hero-shot {
+      position: relative;
+      z-index: 1;
+      height: 100%;
+      min-height: 330px;
+      border-radius: 22px;
+      overflow: hidden;
+      background: #dde7e2;
+      box-shadow: 0 18px 38px rgba(20, 34, 43, 0.12);
+    }
+
+    .hero-shot img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .hero-card .badge {
+      position: absolute;
+      z-index: 2;
+      left: 28px;
+      bottom: 24px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(20, 34, 43, 0.84);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      backdrop-filter: blur(8px);
+    }
+
+    .section {
+      margin-top: 22px;
+      padding: 24px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(16px);
+    }
+
+    .section-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .section h2 {
+      margin: 0;
+      font-size: 24px;
+      line-height: 1.25;
+    }
+
+    .section-subtitle {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .timeline {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .step {
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      background: var(--surface-strong);
+    }
+
+    .step-top {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .step-index {
+      flex: none;
+      width: 36px;
+      height: 36px;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      background: var(--primary);
+      color: #fff;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .step-title {
+      margin: 0;
+      font-size: 18px;
+      line-height: 1.3;
+    }
+
+    .step p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.8;
+    }
+
+    .gallery {
+      display: grid;
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .shot {
+      margin: 0;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      background: rgba(255, 255, 255, 0.92);
+      box-shadow: 0 12px 28px rgba(20, 34, 43, 0.06);
+    }
+
+    .shot img {
+      border-radius: 16px;
+      aspect-ratio: 0.56;
+      object-fit: cover;
+      background: #e5ece8;
+    }
+
+    .shot figcaption {
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .shot.wide {
+      grid-column: span 6;
+    }
+
+    .shot.narrow {
+      grid-column: span 3;
+    }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+      gap: 16px;
+    }
+
+    .card {
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      background: rgba(255, 255, 255, 0.94);
+    }
+
+    .card h3 {
+      margin: 0 0 10px;
+      font-size: 18px;
+      line-height: 1.3;
+    }
+
+    .card p,
+    .card li {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.8;
+    }
+
+    .card ul {
+      margin: 0;
+      padding-left: 18px;
+    }
+
+    .problem-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .problem {
+      padding: 18px;
+      border-radius: 20px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.96), rgba(247, 250, 248, 0.88));
+      border: 1px solid rgba(20, 34, 43, 0.09);
+    }
+
+    .problem h3 {
+      margin: 0 0 8px;
+      font-size: 16px;
+    }
+
+    .problem p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.85;
+    }
+
+    .notice {
+      margin-top: 16px;
+      padding: 16px 18px;
+      border-left: 4px solid var(--accent);
+      border-radius: 0 16px 16px 0;
+      background: rgba(201, 162, 95, 0.10);
+      color: #54411d;
+      font-size: 14px;
+      line-height: 1.8;
+    }
+
+    .footer {
+      margin-top: 22px;
+      padding: 18px 22px;
+      border-radius: 18px;
+      color: var(--muted);
+      background: rgba(255, 255, 255, 0.72);
+      border: 1px solid var(--line);
+      font-size: 13px;
+      line-height: 1.8;
+      text-align: center;
+    }
+
+    @media (max-width: 960px) {
+      .hero,
+      .two-col {
+        grid-template-columns: 1fr;
+      }
+
+      .timeline,
+      .problem-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .gallery {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .shot.wide,
+      .shot.narrow {
+        grid-column: span 1;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .page {
+        width: min(100vw - 20px, 1180px);
+        padding: 12px 0 28px;
+      }
+
+      .hero,
+      .section {
+        padding: 16px;
+        border-radius: 20px;
+      }
+
+      .hero-card {
+        min-height: 300px;
+      }
+
+      .section h2 {
+        font-size: 20px;
+      }
+
+      .gallery {
+        grid-template-columns: 1fr;
+      }
+
+      .shot img {
+        aspect-ratio: 0.72;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <div>
+        <div class="eyebrow">OPEN AI 资讯会员 · ChatGPT PLUS</div>
+        <h1>ChatGPT Plus 会员开通流程</h1>
+        <p>结合当前小程序的会员中心、账号注册、授权支付与服务记录，整理成一页式流程说明。适合首次开通、续费，或遇到验证问题时快速排查。</p>
+        <div class="hero-points">
+          <span class="chip">会员中心完成下单</span>
+          <span class="chip">账号注册与交付</span>
+          <span class="chip">手机号与邮箱验证</span>
+          <span class="chip">服务记录可追踪</span>
+        </div>
+      </div>
+      <div class="hero-card">
+        <div class="hero-shot">
+          <img src="./images/20260607-100457.jpeg" alt="微信授权登录弹窗示意" />
+        </div>
+        <div class="badge">从登录开始，进入会员开通链路</div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <div>
+          <h2>开通流程</h2>
+          <p class="section-subtitle">按当前项目的实际操作路径整理，尽量减少跳转和重复操作。</p>
+        </div>
+      </div>
+      <div class="timeline">
+        <article class="step">
+          <div class="step-top">
+            <div class="step-index">01</div>
+            <h3 class="step-title">先登录，再进入会员中心</h3>
+          </div>
+          <p>用户先完成微信授权登录，进入会员中心后再查看方案和订单状态，不做进门即拦截。</p>
+        </article>
+        <article class="step">
+          <div class="step-top">
+            <div class="step-index">02</div>
+            <h3 class="step-title">选择 ChatGPT Plus 方案</h3>
+          </div>
+          <p>在方案弹窗里选择适合自己的套餐，确认协议后，按微信支付流程完成付款。</p>
+        </article>
+        <article class="step">
+          <div class="step-top">
+            <div class="step-index">03</div>
+            <h3 class="step-title">提交账号并等待开通</h3>
+          </div>
+          <p>订单进入处理后，按要求补充账号信息。完成后可在服务记录中查看结果和后续状态。</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <div>
+          <h2>流程截图</h2>
+          <p class="section-subtitle">这些图片来自同级目录，用于展示真实操作步骤，而不是抽象示意图。</p>
+        </div>
+      </div>
+      <div class="gallery">
+        <figure class="shot wide">
+          <img src="./images/微信图片_20260607132017_2076_1.jpg" alt="微信搜索 AIO Version 小程序入口" />
+          <figcaption>1. 微信搜索 AIO Version：先找到小程序入口，再进入后续开通流程。</figcaption>
+        </figure>
+        <figure class="shot wide">
+          <img src="./images/20260607-100457.jpeg" alt="微信授权登录页面" />
+          <figcaption>2. 登录入口：先授权登录，再同步会员状态、邀请积分与服务记录。</figcaption>
+        </figure>
+        <figure class="shot wide">
+          <img src="./images/20260607-100518.jpeg" alt="微信授权登录状态示意" />
+          <figcaption>3. 登录状态：保留最少信息，用户只需要完成授权并继续进入会员中心。</figcaption>
+        </figure>
+        <figure class="shot narrow">
+          <img src="./images/20260607-100528.jpeg" alt="会员中心首页" />
+          <figcaption>4. 会员中心：先看当前方案，再进入服务记录与账号管理。</figcaption>
+        </figure>
+        <figure class="shot narrow">
+          <img src="./images/20260607-100536.jpeg" alt="会员方案选择弹窗" />
+          <figcaption>5. 方案弹窗：选择 PLUS 或 GO 会员，确认协议后支付。</figcaption>
+        </figure>
+        <figure class="shot narrow">
+          <img src="./images/20260607-100626.jpeg" alt="账号注册弹窗" />
+          <figcaption>6. 注册交付账号：填写账号前缀和密码，便于后续开通。</figcaption>
+        </figure>
+        <figure class="shot narrow">
+          <img src="./images/20260607-100637.jpeg" alt="手机号授权弹窗" />
+          <figcaption>7. 手机号授权：部分流程会触发手机号确认，用于订单和账号校验。</figcaption>
+        </figure>
+        <figure class="shot wide">
+          <img src="./images/20260607-100650.jpeg" alt="授权手机号并支付弹窗" />
+          <figcaption>8. 确认支付：授权手机号后继续支付，完成后订单进入开通处理。</figcaption>
+        </figure>
+        <figure class="shot wide">
+          <img src="./images/微信图片_20260607140423_2078_1.jpg" alt="添加工作人员企业微信示意图" />
+          <figcaption>9. 企业微信联系：如有疑问，可添加工作人员企业微信咨询开通进度。</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <div>
+          <h2>开通后可能遇到的问题</h2>
+          <p class="section-subtitle">把高频卡点提前列出来，减少反复沟通。</p>
+        </div>
+      </div>
+      <div class="two-col">
+        <div class="card">
+          <h3>常见问题</h3>
+          <ul>
+            <li>邮箱验证码延迟：先检查垃圾箱和邮件过滤，再重新触发验证。</li>
+            <li>支付后状态未变：订单通常会先显示“开通中”，等待人工处理即可。</li>
+            <li>账号密码不确定：优先从会员中心的账号信息里复制，不要手工抄写。</li>
+            <li>页面显示异常：退出后重新进入会员中心，刷新服务记录。</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>手机号验证</h3>
+          <p>如果 ChatGPT 或相关服务要求手机号验证，优先使用你当前可控、可回收的合规号码。部分用户会评估第三方短信接收服务，例如 <strong>5sim.net</strong>，但是否能用、能否长期稳定，取决于地区法规、平台规则和账号风险。</p>
+          <div class="notice">
+            这里只做信息参考，不提供规避平台限制的操作方法。实际开通时，请以平台规则与当地法律为准。
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <div>
+          <h2>支付后说明</h2>
+          <p class="section-subtitle">订单量较大时，开通会有排队，这是正常情况。</p>
+        </div>
+      </div>
+      <div class="two-col">
+        <div class="card">
+          <h3>开通时效</h3>
+          <p>支付后会进入一段开通过程。当订单堆积较多时，处理会有延迟，通常在 <strong>30 分钟到 2 个小时</strong> 之间。请先耐心等待服务记录更新。</p>
+          <p>如果超过预计时间仍未完成，可以添加工作人员企业微信咨询，确认当前订单状态和处理进度。</p>
+        </div>
+        <div class="card">
+          <h3>咨询方式</h3>
+          <p>如果你对订单状态、手机号验证或支付后开通进度有疑问，可以直接联系工作人员企业微信。请优先说明订单时间、当前状态和遇到的问题，方便快速处理。</p>
+          <div class="notice">
+            企业微信图已放在上方流程截图的最后一张，方便用户按顺序浏览完整链路。
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <div>
+          <h2>使用建议</h2>
+          <p class="section-subtitle">开通之后，重点是稳定登录、保存信息、降低后续风险。</p>
+        </div>
+      </div>
+      <div class="problem-grid">
+        <div class="problem">
+          <h3>保留账号信息</h3>
+          <p>把注册邮箱、账号前缀、密码、验证码接收方式统一保存，避免后续找不到入口。</p>
+        </div>
+        <div class="problem">
+          <h3>先确认网络环境</h3>
+          <p>如果页面反复打不开，先检查本地网络、DNS 和浏览器状态，同时确认设备具备可用的外网环境，再处理账号问题。</p>
+        </div>
+        <div class="problem">
+          <h3>先看服务记录</h3>
+          <p>支付完成后，优先查看服务记录中的状态，不要频繁重复下单或刷新多个入口。</p>
+        </div>
+        <div class="problem">
+          <h3>不要共享敏感信息</h3>
+          <p>账号和密码只在必要场景下使用，避免在聊天记录里长期暴露完整凭证。</p>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      本页为当前项目内的用户说明页，围绕 ChatGPT Plus 会员开通流程、验证问题和使用建议整理而成。请遵守 OpenAI 及相关平台规则，并以实际服务条款为准。
+    </footer>
+  </main>
+</body>
+</html>

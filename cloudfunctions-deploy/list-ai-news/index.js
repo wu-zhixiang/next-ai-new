@@ -81,6 +81,7 @@ function matchesCategory(record, tag) {
 async function main(event = {}) {
     var _a;
     const limit = Math.max(1, Math.min(Number(event.limit) || 20, 50));
+    const offset = Math.max(0, Number(event.offset) || 0);
     let result;
     try {
         result = await (0, db_1.collection)('aiNews')
@@ -98,7 +99,7 @@ async function main(event = {}) {
     }
     const tag = (_a = event.tag) === null || _a === void 0 ? void 0 : _a.trim();
     const sort = event.sort === 'latest' ? 'latest' : 'hot';
-    const items = result.data
+    const orderedItems = result.data
         .filter((item) => !tag || matchesCategory(item, tag))
         .sort((left, right) => {
         if (sort === 'latest') {
@@ -106,8 +107,13 @@ async function main(event = {}) {
         }
         const scoreDiff = (right.score || 0) - (left.score || 0);
         return scoreDiff || (right.publishedAt || right.createdAt) - (left.publishedAt || left.createdAt);
-    })
-        .slice(0, limit)
+    });
+    const items = orderedItems
+        .slice(offset, offset + limit)
         .map(toView);
-    return (0, utils_1.ok)({ items });
+    return (0, utils_1.ok)({
+        items,
+        hasMore: offset + items.length < orderedItems.length,
+        total: orderedItems.length,
+    });
 }

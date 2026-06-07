@@ -41,6 +41,7 @@ POST /operator/news
 
 - `API Base URL` 填 `operator-api` 的 HTTP 访问地址。
 - `运营密钥` 填云函数环境变量 `OPERATOR_API_TOKEN` 的值。
+- `Apple Store 手机号` 填当前注册池要使用的手机号。系统会按手机号尾号隔离账号池，生成账号和取号都会按尾号过滤。
 
 `operator-api` 还需要配置 `AI_ACCOUNT_SECRET`，并且必须与小程序保存账号密码时使用的密钥一致。
 
