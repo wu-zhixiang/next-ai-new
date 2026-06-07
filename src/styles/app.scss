@@ -419,12 +419,15 @@ button::after {
 .pay-detail-page {
   position: relative;
   z-index: 1;
-    flex-grow: 1;
-    height: 50px;
-    overflow-y: scroll;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
 }
 
 .news-page {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
@@ -433,6 +436,15 @@ button::after {
   width: 0;
   height: 0;
   display: none;
+}
+
+.news-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.news-shell {
+  padding-bottom: 32rpx;
 }
 
 .news-tabs__item {

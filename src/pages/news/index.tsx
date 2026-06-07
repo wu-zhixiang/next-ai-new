@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Button, Image, Text, View } from '@tarojs/components';
+import { Button, Image, ScrollView, Text, View } from '@tarojs/components';
 import Taro, { useDidShow, usePullDownRefresh, useReachBottom, useRouter, useShareAppMessage, useShareTimeline } from '@tarojs/taro';
 import { AppTransparentHeader } from '@/components/AppTransparentHeader';
 import AuthModal, { type AuthUserInfo } from '@/components/AuthModal';
@@ -342,81 +342,89 @@ export default function NewsPage() {
       <AppTransparentHeader title='AI资讯' showBack={false} />
 
       <View className='news-page'>
-        <View className='saas-shell news-shell'>
-          <View className='news-feed'>
-            {newsLoading ? (
-              <>
-                {[0, 1, 2].map((item) => (
-                  <View className='news-card news-card--skeleton' key={item}>
-                    <View className='news-card__top'>
-                      <View className='news-card__title-block'>
-                        <View className='news-card__meta'>
-                          <View className='skeleton news-skeleton__tag' />
-                          <View className='skeleton news-skeleton__time' />
+        <ScrollView
+          className='news-scroll'
+          scrollY
+          lowerThreshold={160}
+          showScrollbar={false}
+          onScrollToLower={() => void loadMoreNews()}
+        >
+          <View className='saas-shell news-shell'>
+            <View className='news-feed'>
+              {newsLoading ? (
+                <>
+                  {[0, 1, 2].map((item) => (
+                    <View className='news-card news-card--skeleton' key={item}>
+                      <View className='news-card__top'>
+                        <View className='news-card__title-block'>
+                          <View className='news-card__meta'>
+                            <View className='skeleton news-skeleton__tag' />
+                            <View className='skeleton news-skeleton__time' />
+                          </View>
+                          <View className='skeleton news-skeleton__title' />
                         </View>
-                        <View className='skeleton news-skeleton__title' />
+                        <View className='skeleton news-skeleton__thumb' />
                       </View>
-                      <View className='skeleton news-skeleton__thumb' />
+                      <View className='skeleton news-skeleton__line' />
+                      <View className='skeleton news-skeleton__line news-skeleton__line--short' />
+                      <View className='news-card__foot'>
+                        <View className='skeleton news-skeleton__source' />
+                        <View className='skeleton news-skeleton__heat' />
+                      </View>
                     </View>
-                    <View className='skeleton news-skeleton__line' />
-                    <View className='skeleton news-skeleton__line news-skeleton__line--short' />
-                    <View className='news-card__foot'>
-                      <View className='skeleton news-skeleton__source' />
-                      <View className='skeleton news-skeleton__heat' />
+                  ))}
+                </>
+              ) : null}
+              {!newsLoading && newsList.length === 0 ? (
+                <View className='news-empty'>
+                  <Text className='news-empty__title'>暂无最新资讯</Text>
+                  <Text className='news-empty__desc'>运营端上传后会在这里展示。</Text>
+                </View>
+              ) : null}
+              {!newsLoading ? newsList.map((item, index) => (
+                <View className='news-card' key={item.id} onClick={() => void openNews(item)}>
+                  <View className='news-card__top'>
+                    <View className='news-card__title-block'>
+                      <View className='news-card__meta'>
+                        <Text className='saas-chip news-card__tag'>{getNewsDisplayTag(item.tags)}</Text>
+                        <Text className='news-card__time'>{formatRelativeTime(item.publishedAt)}</Text>
+                      </View>
+                      <Text className='news-card__title'>{item.title}</Text>
+                    </View>
+                    {item.coverFileId ? (
+                      <Image className='news-card__cover' src={item.coverFileId} mode='aspectFill' />
+                    ) : (
+                      <View className={`news-card__thumb news-card__thumb--${index % 2 === 0 ? 'cube' : 'desk'}`}>
+                        <View className='news-card__shape' />
+                      </View>
+                    )}
+                  </View>
+                  <Text className='news-card__desc'>{item.summary}</Text>
+                  <View className='news-card__foot'>
+                    <Text className='news-card__source'>{item.sourceName}{item.authorName ? ` / ${item.authorName}` : ''}</Text>
+                    <View className='news-card__foot-actions'>
+                      <Text className='news-card__views'>热度 {formatHeat(item.heat)}</Text>
+                      <Button className='news-card__share' onClick={(event) => openSharePanel(item, event)}>
+                        <View className='wechat-share-icon' />
+                      </Button>
                     </View>
                   </View>
-                ))}
-              </>
-            ) : null}
-            {!newsLoading && newsList.length === 0 ? (
-              <View className='news-empty'>
-                <Text className='news-empty__title'>暂无最新资讯</Text>
-                <Text className='news-empty__desc'>运营端上传后会在这里展示。</Text>
-              </View>
-            ) : null}
-            {!newsLoading ? newsList.map((item, index) => (
-              <View className='news-card' key={item.id} onClick={() => void openNews(item)}>
-                <View className='news-card__top'>
-                  <View className='news-card__title-block'>
-                    <View className='news-card__meta'>
-                      <Text className='saas-chip news-card__tag'>{getNewsDisplayTag(item.tags)}</Text>
-                      <Text className='news-card__time'>{formatRelativeTime(item.publishedAt)}</Text>
-                    </View>
-                    <Text className='news-card__title'>{item.title}</Text>
-                  </View>
-                  {item.coverFileId ? (
-                    <Image className='news-card__cover' src={item.coverFileId} mode='aspectFill' />
+                </View>
+              )) : null}
+              {!newsLoading && newsList.length > 0 ? (
+                <View className='news-list-footer'>
+                  {newsLoadingMore ? (
+                    <Text className='news-list-footer__text'>加载中...</Text>
+                  ) : newsHasMore ? (
+                    <Text className='news-list-footer__text'>上拉或滚动到底部加载更多</Text>
                   ) : (
-                    <View className={`news-card__thumb news-card__thumb--${index % 2 === 0 ? 'cube' : 'desk'}`}>
-                      <View className='news-card__shape' />
-                    </View>
+                    <Text className='news-list-footer__text'>没有更多资讯了</Text>
                   )}
                 </View>
-                <Text className='news-card__desc'>{item.summary}</Text>
-                <View className='news-card__foot'>
-                  <Text className='news-card__source'>{item.sourceName}{item.authorName ? ` / ${item.authorName}` : ''}</Text>
-                  <View className='news-card__foot-actions'>
-                    <Text className='news-card__views'>热度 {formatHeat(item.heat)}</Text>
-                    <Button className='news-card__share' onClick={(event) => openSharePanel(item, event)}>
-                      <View className='wechat-share-icon' />
-                    </Button>
-                  </View>
-                </View>
-              </View>
-            )) : null}
-            {!newsLoading && newsList.length > 0 ? (
-              <View className='news-list-footer'>
-                {newsLoadingMore ? (
-                  <Text className='news-list-footer__text'>加载中...</Text>
-                ) : newsHasMore ? (
-                  <Text className='news-list-footer__text'>上拉或滚动到底部加载更多</Text>
-                ) : (
-                  <Text className='news-list-footer__text'>没有更多资讯了</Text>
-                )}
-              </View>
-            ) : null}
+              ) : null}
+            </View>
           </View>
-        </View>
+        </ScrollView>
       </View>
 
       {sharePanelVisible ? (
