@@ -552,14 +552,21 @@ export default function MemberPage(): JSX.Element {
   }
 
   async function handleToggleReminder(): Promise<void> {
-    const changed = data.subscribeMsgAuth
-      ? await disableReminderSubscription()
-      : await enableReminderSubscription();
-    if (!changed) {
-      return;
+    try {
+      const changed = data.subscribeMsgAuth
+        ? await disableReminderSubscription()
+        : await enableReminderSubscription();
+      if (!changed) {
+        return;
+      }
+      setData((prev) => ({ ...prev, subscribeMsgAuth: !prev.subscribeMsgAuth }));
+      void loadData();
+    } catch (error) {
+      Taro.showToast({
+        title: error instanceof Error ? error.message.slice(0, 18) : '消息提醒设置失败',
+        icon: 'none',
+      });
     }
-    setData((prev) => ({ ...prev, subscribeMsgAuth: !prev.subscribeMsgAuth }));
-    void loadData();
   }
 
   async function handleTogglePlanReminder(): Promise<void> {
@@ -572,13 +579,21 @@ export default function MemberPage(): JSX.Element {
       return;
     }
 
-    const changed = await enableReminderSubscription({ source: 'afterPay' });
-    if (!changed) {
+    try {
+      const changed = await enableReminderSubscription({ source: 'afterPay' });
+      if (!changed) {
+        setMessageReminderEnabled(false);
+        return;
+      }
+      setMessageReminderEnabled(true);
+      setData((prev) => ({ ...prev, subscribeMsgAuth: true }));
+    } catch (error) {
       setMessageReminderEnabled(false);
-      return;
+      Taro.showToast({
+        title: error instanceof Error ? error.message.slice(0, 18) : '消息提醒设置失败',
+        icon: 'none',
+      });
     }
-    setMessageReminderEnabled(true);
-    setData((prev) => ({ ...prev, subscribeMsgAuth: true }));
   }
 
   async function handlePlanPay(): Promise<void> {

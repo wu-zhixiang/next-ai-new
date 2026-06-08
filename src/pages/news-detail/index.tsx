@@ -157,8 +157,13 @@ export default function NewsDetailPage(): JSX.Element {
     enableShareMenu();
     setIsDirectEntry(Taro.getCurrentPages().length <= 1);
     const id = typeof options.id === 'string' ? options.id : '';
+    const fromNewsReminder = options.from === 'newsReminder';
     void loadDetail(id);
-    void loadNewsReminderState();
+    if (fromNewsReminder) {
+      setNewsReminderVisible(false);
+    } else {
+      void loadNewsReminderState();
+    }
   });
 
   useShareAppMessage(() => getShareAppMessage());

@@ -660,7 +660,7 @@ async function sendNewsReminderToSubscribers(newsId, record) {
             await sendWechatSubscribeMessage({
                 touser: user.openid,
                 template_id: templateId,
-                page: `pages/news-detail/index?id=${encodeURIComponent(newsId)}`,
+                page: `pages/news-detail/index?id=${encodeURIComponent(newsId)}&from=newsReminder`,
                 data: {
                     thing1: { value: truncateTemplateText(record.title, 20) },
                     time2: { value: formatTemplateTime(record.publishedAt) },

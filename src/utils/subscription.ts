@@ -7,19 +7,38 @@ declare const NEWS_REMINDER_TEMPLATE_ID: string;
 
 const DEFAULT_NEWS_REMINDER_TEMPLATE_ID = 'm7Cb5rMgtJtFdyVn3YvR671tWZwyK87qe6qKr7KPZrQ';
 
+function getReminderTemplateIds(): string[] {
+  const memberOpenedTemplateId = typeof MEMBER_OPENED_TEMPLATE_ID === 'string' ? MEMBER_OPENED_TEMPLATE_ID : '';
+  const renewReminderTemplateId = typeof RENEW_REMINDER_TEMPLATE_ID === 'string' ? RENEW_REMINDER_TEMPLATE_ID : '';
+  return [memberOpenedTemplateId, renewReminderTemplateId].filter(Boolean);
+}
+
 export async function enableReminderSubscription(options: { source?: 'manual' | 'afterPay' } = {}): Promise<boolean> {
-  const templateIds = [MEMBER_OPENED_TEMPLATE_ID, RENEW_REMINDER_TEMPLATE_ID].filter(Boolean);
+  const templateIds = getReminderTemplateIds();
   if (templateIds.length > 0 && typeof Taro.requestSubscribeMessage === 'function') {
     const requestSubscribeMessage = Taro.requestSubscribeMessage as unknown as (payload: {
       tmplIds: string[];
     }) => Promise<Record<string, string>>;
-    const result = await requestSubscribeMessage({
-      tmplIds: templateIds,
-    });
-    const accepted = templateIds.some((templateId) => result[templateId] === 'accept');
-    await callCloudFunction<{ success: true }>('save-subscribe-auth', { accepted });
-    Taro.showToast({ title: accepted ? '提醒已开启' : '未开启提醒', icon: accepted ? 'success' : 'none' });
-    return accepted;
+    try {
+      const result = await requestSubscribeMessage({
+        tmplIds: templateIds,
+      });
+      const accepted = templateIds.some((templateId) => result[templateId] === 'accept');
+      await callCloudFunction<{ success: true }>('save-subscribe-auth', { accepted });
+      Taro.showToast({ title: accepted ? '提醒已开启' : '未开启提醒', icon: accepted ? 'success' : 'none' });
+      return accepted;
+    } catch (error) {
+      Taro.showToast({
+        title: error instanceof Error ? error.message.slice(0, 18) : '订阅授权失败',
+        icon: 'none',
+      });
+      return false;
+    }
+  }
+
+  if (templateIds.length === 0) {
+    Taro.showToast({ title: '消息提醒模板未配置', icon: 'none' });
+    return false;
   }
 
   const result = await Taro.showModal({
