@@ -47,6 +47,7 @@ POST /operator/appstore-accounts/email-code/clear
 - `Apple Store 手机号` 填当前注册池要使用的手机号。系统会按手机号尾号隔离账号池，生成账号和取号都会按尾号过滤。
 
 `operator-api` 还需要配置 `AI_ACCOUNT_SECRET`，并且必须与小程序保存账号密码时使用的密钥一致。
+AI 资讯订阅通知由 `operator-api` 在发布文章后发送；因为运营插件通过 HTTP 触发云函数，不能依赖小程序端云调用，需要给 `operator-api` 配置 `WX_APPID`、`WX_APP_SECRET`，并确认 `WX_NEWS_REMINDER_TEMPLATE_ID` 与小程序端使用的模板 ID 一致。
 
 建议后端返回格式：
 

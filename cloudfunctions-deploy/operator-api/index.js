@@ -14,6 +14,8 @@ const APPSTORE_EMAIL_DOMAIN = 'mraclpivot.com';
 const DEFAULT_APPSTORE_MOBILE = '15810901111';
 const SUPER_OPERATOR_MOBILE = '15501130351';
 const APPSTORE_PASSWORD_SPECIALS = '!@#$%^&*';
+let cachedWechatAccessToken = '';
+let cachedWechatAccessTokenExpireAt = 0;
 const CORS_HEADERS = {
     'access-control-allow-origin': '*',
     'access-control-allow-methods': 'GET,POST,OPTIONS',
@@ -455,6 +457,65 @@ function postJson(url, headers, body) {
         request.end();
     });
 }
+function getJson(url) {
+    return new Promise((resolve, reject) => {
+        node_https_1.default.get(url, (response) => {
+            const chunks = [];
+            response.on('data', (chunk) => chunks.push(chunk));
+            response.on('end', () => {
+                var _a;
+                const text = Buffer.concat(chunks).toString('utf8');
+                if (((_a = response.statusCode) !== null && _a !== void 0 ? _a : 500) >= 400) {
+                    reject(new Error(`HTTP 请求失败：${response.statusCode} ${text.slice(0, 200)}`));
+                    return;
+                }
+                try {
+                    resolve(JSON.parse(text));
+                }
+                catch (_b) {
+                    reject(new Error('HTTP 返回非 JSON'));
+                }
+            });
+        }).on('error', reject);
+    });
+}
+function getWechatOpenApiConfig() {
+    return {
+        appid: process.env.WX_APPID || process.env.WX_PAY_APPID || '',
+        secret: process.env.WX_APP_SECRET || '',
+    };
+}
+async function getWechatAccessToken() {
+    var _a, _b;
+    const now = Date.now();
+    if (cachedWechatAccessToken && cachedWechatAccessTokenExpireAt - now > 5 * 60 * 1000) {
+        return cachedWechatAccessToken;
+    }
+    const config = getWechatOpenApiConfig();
+    if (!config.appid || !config.secret) {
+        throw new Error('缺少微信 OpenAPI 配置：WX_APPID/WX_APP_SECRET');
+    }
+    const url = `https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=${encodeURIComponent(config.appid)}&secret=${encodeURIComponent(config.secret)}`;
+    const result = await getJson(url);
+    if (!result.access_token) {
+        throw new Error(`微信 access_token 获取失败：${(_a = result.errcode) !== null && _a !== void 0 ? _a : 'unknown'} ${(_b = result.errmsg) !== null && _b !== void 0 ? _b : ''}`.trim());
+    }
+    cachedWechatAccessToken = result.access_token;
+    cachedWechatAccessTokenExpireAt = now + Math.max(60, (_a = result.expires_in) !== null && _a !== void 0 ? _a : 7200) * 1000;
+    return cachedWechatAccessToken;
+}
+async function sendWechatSubscribeMessage(payload) {
+    var _a;
+    const accessToken = await getWechatAccessToken();
+    const result = await postJson(`https://api.weixin.qq.com/cgi-bin/message/subscribe/send?access_token=${encodeURIComponent(accessToken)}`, { 'content-type': 'application/json' }, payload);
+    if (typeof result.errcode === 'number' && result.errcode !== 0) {
+        if (result.errcode === 40001 || result.errcode === 42001) {
+            cachedWechatAccessToken = '';
+            cachedWechatAccessTokenExpireAt = 0;
+        }
+        throw new Error(`subscribeMessage.send ${result.errcode}: ${(_a = result.errmsg) !== null && _a !== void 0 ? _a : ''}`.trim());
+    }
+}
 async function generateNewsMetaByTencentAi(markdown) {
     var _a, _b, _c, _d;
     const apiKey = process.env.TCB_AI_API_KEY;
@@ -570,16 +631,16 @@ function truncateTemplateText(value, maxLength) {
     return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
 }
 async function sendNewsReminderToSubscribers(newsId, record) {
-    var _a;
     const templateId = process.env.WX_NEWS_REMINDER_TEMPLATE_ID || DEFAULT_NEWS_REMINDER_TEMPLATE_ID;
-    const openapi = (_a = db_1.app.openapi) !== null && _a !== void 0 ? _a : undefined;
-    if (!templateId || !((_a = openapi === null || openapi === void 0 ? void 0 : openapi.subscribeMessage) === null || _a === void 0 ? void 0 : _a.send)) {
+    const wechatConfig = getWechatOpenApiConfig();
+    if (!templateId || !wechatConfig.appid || !wechatConfig.secret) {
+        const skippedReason = !templateId ? 'missingTemplateId' : 'missingWechatOpenApiConfig';
         console.warn(JSON.stringify({
             tag: 'aiNews.reminder.skipped',
-            reason: !templateId ? 'missingTemplateId' : 'missingSubscribeMessageOpenapi',
+            reason: skippedReason,
             newsId,
         }));
-        return { sent: 0, failed: 0 };
+        return { sent: 0, failed: 0, eligible: 0, skippedReason };
     }
     const result = await (0, db_1.collection)('users')
         .where({
@@ -591,13 +652,14 @@ async function sendNewsReminderToSubscribers(newsId, record) {
     const users = result.data;
     let sent = 0;
     let failed = 0;
+    let lastError = '';
     for (const user of users) {
         if (!user.openid)
             continue;
         try {
-            await openapi.subscribeMessage.send({
+            await sendWechatSubscribeMessage({
                 touser: user.openid,
-                templateId,
+                template_id: templateId,
                 page: `pages/news-detail/index?id=${encodeURIComponent(newsId)}`,
                 data: {
                     thing1: { value: truncateTemplateText(record.title, 20) },
@@ -615,15 +677,16 @@ async function sendNewsReminderToSubscribers(newsId, record) {
         }
         catch (error) {
             failed += 1;
+            lastError = error instanceof Error ? error.message : String(error);
             console.error(JSON.stringify({
                 tag: 'aiNews.reminder.send.failed',
                 newsId,
                 userId: user._id,
-                message: error instanceof Error ? error.message : String(error),
+                message: lastError,
             }));
         }
     }
-    return { sent, failed };
+    return { sent, failed, eligible: users.length, lastError: lastError || undefined };
 }
 async function buildTask(order) {
     var _a, _b, _c, _d, _e;
@@ -1009,13 +1072,16 @@ async function createNews(body) {
     const newsId = (_b = (_a = result._id) !== null && _a !== void 0 ? _a : result.id) !== null && _b !== void 0 ? _b : '';
     const reminderResult = record.status === 'published' && newsId
         ? await sendNewsReminderToSubscribers(newsId, record)
-        : { sent: 0, failed: 0 };
+        : { sent: 0, failed: 0, eligible: 0 };
     return ok({
         success: true,
         id: newsId,
         score: record.score,
         reminderSent: reminderResult.sent,
         reminderFailed: reminderResult.failed,
+        reminderEligible: reminderResult.eligible,
+        reminderSkippedReason: reminderResult.skippedReason,
+        reminderLastError: reminderResult.lastError,
     });
 }
 async function main(event) {

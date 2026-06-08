@@ -774,7 +774,7 @@ async function submitNews() {
       method: 'POST',
       body: JSON.stringify(payload)
     });
-    showToast(`已发布，热度 ${result.score || 0}`);
+    showToast(formatNewsPublishResult(result));
     clearNewsForm();
   } catch (error) {
     showError(error);
@@ -782,6 +782,27 @@ async function submitNews() {
     els.submitNewsBtn.disabled = false;
     els.submitNewsBtn.textContent = '上传发布';
   }
+}
+
+function formatNewsPublishResult(result) {
+  const score = result.score || 0;
+  const sent = result.reminderSent || 0;
+  const failed = result.reminderFailed || 0;
+  const eligible = result.reminderEligible || 0;
+  const skippedReason = result.reminderSkippedReason || '';
+  const lastError = result.reminderLastError || '';
+
+  if (skippedReason) {
+    return truncateToastText(`已发布，热度 ${score}，通知未发送：${skippedReason}`);
+  }
+  if (failed > 0) {
+    return truncateToastText(`已发布，热度 ${score}，通知 ${sent}/${eligible}，失败 ${failed}${lastError ? `：${lastError}` : ''}`);
+  }
+  return truncateToastText(`已发布，热度 ${score}，通知 ${sent}/${eligible}`);
+}
+
+function truncateToastText(value) {
+  return value.length > 80 ? `${value.slice(0, 77)}...` : value;
 }
 
 async function uploadCoverToCloudStorage() {
