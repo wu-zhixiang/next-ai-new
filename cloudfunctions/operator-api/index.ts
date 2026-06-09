@@ -762,11 +762,17 @@ async function sendNewsReminderToSubscribers(newsId: string, record: AiNewsRecor
   const result = await collection('users')
     .where({
       newsSubscribeMsgAuth: true,
-      newsSubscribeMsgQuota: _.gt(0),
     })
     .limit(50)
     .get();
-  const users = result.data as Array<UserRecord & { _id: string }>;
+  const subscribedUsers = result.data as Array<UserRecord & { _id: string }>;
+  const users = subscribedUsers.filter((user) => Number(user.newsSubscribeMsgQuota ?? 0) > 0);
+  console.info(JSON.stringify({
+    tag: 'aiNews.reminder.subscribers.loaded',
+    newsId,
+    subscribed: subscribedUsers.length,
+    eligible: users.length,
+  }));
   let sent = 0;
   let failed = 0;
   let lastError = '';

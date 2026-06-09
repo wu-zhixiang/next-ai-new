@@ -9,8 +9,18 @@ interface Event {
 
 export async function main(event: Event) {
   const { OPENID } = getWxContext();
+  console.info('subscribe-auth.save.request', {
+    openid: OPENID,
+    scene: event.scene || 'member',
+    accepted: event.accepted,
+  });
+
   const user = await getUserByOpenId(OPENID);
   if (!user) {
+    console.warn('subscribe-auth.save.user-missing', {
+      openid: OPENID,
+      scene: event.scene || 'member',
+    });
     throw new Error('用户未登录');
   }
 
@@ -30,6 +40,13 @@ export async function main(event: Event) {
 
   await collection('users').doc(user._id).update({
     data,
+  });
+
+  console.info('subscribe-auth.save.success', {
+    openid: OPENID,
+    userId: user._id,
+    scene: event.scene || 'member',
+    accepted: event.accepted,
   });
 
   return ok({ success: true });

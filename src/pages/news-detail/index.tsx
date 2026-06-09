@@ -284,7 +284,7 @@ export default function NewsDetailPage(): JSX.Element {
   async function enableNewsReminder(): Promise<void> {
     const accepted = await enableNewsReminderSubscription();
     if (accepted) {
-      setNewsReminderVisible(false);
+      await loadNewsReminderState();
     }
   }
 

@@ -7,6 +7,22 @@ declare const NEWS_REMINDER_TEMPLATE_ID: string;
 
 const DEFAULT_NEWS_REMINDER_TEMPLATE_ID = 'm7Cb5rMgtJtFdyVn3YvR671tWZwyK87qe6qKr7KPZrQ';
 
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (error && typeof error === 'object' && 'errMsg' in error) {
+    const errMsg = (error as { errMsg?: unknown }).errMsg;
+    return typeof errMsg === 'string' ? errMsg : String(errMsg ?? '');
+  }
+  return String(error ?? '');
+}
+
+function getToastMessage(message: string, fallback: string): string {
+  const text = message.trim() || fallback;
+  return text.length > 28 ? `${text.slice(0, 25)}...` : text;
+}
+
 function getReminderTemplateIds(): string[] {
   const memberOpenedTemplateId = typeof MEMBER_OPENED_TEMPLATE_ID === 'string' ? MEMBER_OPENED_TEMPLATE_ID : '';
   const renewReminderTemplateId = typeof RENEW_REMINDER_TEMPLATE_ID === 'string' ? RENEW_REMINDER_TEMPLATE_ID : '';
@@ -23,13 +39,34 @@ export async function enableReminderSubscription(options: { source?: 'manual' | 
       const result = await requestSubscribeMessage({
         tmplIds: templateIds,
       });
+      console.info('member.reminder.subscribe.result', {
+        source: options.source ?? 'manual',
+        templateIds,
+        result,
+      });
       const accepted = templateIds.some((templateId) => result[templateId] === 'accept');
-      await callCloudFunction<{ success: true }>('save-subscribe-auth', { accepted });
+      try {
+        await callCloudFunction<{ success: true }>('save-subscribe-auth', { accepted });
+      } catch (error) {
+        console.warn('member.reminder.subscribe.save.failed', {
+          source: options.source ?? 'manual',
+          accepted,
+          message: getErrorMessage(error),
+        });
+        Taro.showToast({ title: '订阅状态保存失败', icon: 'none' });
+        return false;
+      }
       Taro.showToast({ title: accepted ? '提醒已开启' : '未开启提醒', icon: accepted ? 'success' : 'none' });
       return accepted;
     } catch (error) {
+      const message = getErrorMessage(error);
+      console.warn('member.reminder.subscribe.request.failed', {
+        source: options.source ?? 'manual',
+        templateIds,
+        message,
+      });
       Taro.showToast({
-        title: error instanceof Error ? error.message.slice(0, 18) : '订阅授权失败',
+        title: getToastMessage(message, '订阅授权失败'),
         icon: 'none',
       });
       return false;
@@ -94,17 +131,44 @@ export async function enableNewsReminderSubscription(): Promise<boolean> {
   const requestSubscribeMessage = Taro.requestSubscribeMessage as unknown as (payload: {
     tmplIds: string[];
   }) => Promise<Record<string, string>>;
-  const result = await requestSubscribeMessage({
-    tmplIds: [newsReminderTemplateId],
-  });
-  const accepted = result[newsReminderTemplateId] === 'accept';
-  await callCloudFunction<{ success: true }>('save-subscribe-auth', {
-    accepted,
-    scene: 'news',
-  });
-  Taro.showToast({
-    title: accepted ? '资讯提醒已开启' : '未开启资讯提醒',
-    icon: accepted ? 'success' : 'none',
-  });
-  return accepted;
+  try {
+    const result = await requestSubscribeMessage({
+      tmplIds: [newsReminderTemplateId],
+    });
+    console.info('news.reminder.subscribe.result', {
+      templateId: newsReminderTemplateId,
+      result,
+    });
+    const accepted = result[newsReminderTemplateId] === 'accept';
+    try {
+      await callCloudFunction<{ success: true }>('save-subscribe-auth', {
+        accepted,
+        scene: 'news',
+      });
+    } catch (error) {
+      console.warn('news.reminder.subscribe.save.failed', {
+        accepted,
+        templateId: newsReminderTemplateId,
+        message: getErrorMessage(error),
+      });
+      Taro.showToast({ title: '资讯订阅保存失败', icon: 'none' });
+      return false;
+    }
+    Taro.showToast({
+      title: accepted ? '资讯提醒已开启' : '未开启资讯提醒',
+      icon: accepted ? 'success' : 'none',
+    });
+    return accepted;
+  } catch (error) {
+    const message = getErrorMessage(error);
+    console.warn('news.reminder.subscribe.request.failed', {
+      templateId: newsReminderTemplateId,
+      message,
+    });
+    Taro.showToast({
+      title: getToastMessage(message, '资讯订阅授权失败'),
+      icon: 'none',
+    });
+    return false;
+  }
 }

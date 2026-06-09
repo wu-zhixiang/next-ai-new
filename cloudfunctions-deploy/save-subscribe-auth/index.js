@@ -6,8 +6,17 @@ const context_1 = require("./_lib/context");
 const utils_1 = require("./shared/utils");
 async function main(event) {
     const { OPENID } = (0, context_1.getWxContext)();
+    console.info('subscribe-auth.save.request', {
+        openid: OPENID,
+        scene: event.scene || 'member',
+        accepted: event.accepted,
+    });
     const user = await (0, db_1.getUserByOpenId)(OPENID);
     if (!user) {
+        console.warn('subscribe-auth.save.user-missing', {
+            openid: OPENID,
+            scene: event.scene || 'member',
+        });
         throw new Error('用户未登录');
     }
     const now = Date.now();
@@ -25,6 +34,12 @@ async function main(event) {
         };
     await (0, db_1.collection)('users').doc(user._id).update({
         data,
+    });
+    console.info('subscribe-auth.save.success', {
+        openid: OPENID,
+        userId: user._id,
+        scene: event.scene || 'member',
+        accepted: event.accepted,
     });
     return (0, utils_1.ok)({ success: true });
 }
