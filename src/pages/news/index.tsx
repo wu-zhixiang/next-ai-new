@@ -228,9 +228,6 @@ export default function NewsPage() {
           if (inviteCode || !cached.openId && !cached.openid) {
             void syncLoginState(cached, inviteCode);
           }
-          if (!hasUserProfile(cached)) {
-            setShowAuthModal(true);
-          }
           return;
         }
       } catch { /* ignore */ }
@@ -247,14 +244,14 @@ export default function NewsPage() {
     try {
       const cached: CachedUserInfo = JSON.parse(raw);
       if (cached.userId && (inviteCode || !cached.openId && !cached.openid)) {
-        void syncLoginState(cached, inviteCode, false);
+        void syncLoginState(cached, inviteCode);
       }
     } catch {
       // 缓存异常不影响资讯浏览。
     }
   }
 
-  async function syncLoginState(cached: CachedUserInfo, inviteCode: string, allowAuthModal = true): Promise<void> {
+  async function syncLoginState(cached: CachedUserInfo, inviteCode: string): Promise<void> {
     try {
       const loginResult = await callCloudFunction<LoginResult>('user-login', {
         nickname: cached.nickname,
@@ -270,9 +267,7 @@ export default function NewsPage() {
         profileAuthed: Boolean(loginResult.nickname || loginResult.avatarUrl),
       };
       saveToCache(nextInfo);
-      if (allowAuthModal && !hasUserProfile(nextInfo)) {
-        setShowAuthModal(true);
-      }
+      setShowAuthModal(false);
       if (inviteCode && loginResult.inviterUserId) {
         clearStoredInviteCode();
       }
@@ -283,10 +278,6 @@ export default function NewsPage() {
 
   function saveToCache(info: CachedUserInfo) {
     Taro.setStorageSync(CACHE_KEY, JSON.stringify(info));
-  }
-
-  function hasUserProfile(info: Pick<CachedUserInfo, 'nickname' | 'avatarUrl' | 'profileAuthed'>): boolean {
-    return Boolean(info.profileAuthed && (info.nickname || info.avatarUrl));
   }
 
   function handleAuthSuccess(info: AuthUserInfo) {

@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Button, Image, Input, Text, View } from '@tarojs/components';
 import Taro, { useDidShow } from '@tarojs/taro';
+import AuthModal, { type AuthUserInfo } from '@/components/AuthModal';
 import { PaymentLockOverlay } from '@/components/PaymentLockOverlay';
 import { PopLayout } from '@/components/PopLayout';
 import { SaasPageFrame } from '@/components/SaasPageFrame';
 import { callCloudFunction } from '@/services/api';
 import type { MembershipView, PlanView } from '@/types';
+import { AUTH_CACHE_KEY, getCachedUserInfo, saveCachedUserInfo, type CachedUserInfo, type LoginResult } from '@/utils/auth';
 import { formatDate } from '@/utils/format';
 import { isMobileBound } from '@/utils/mobile';
 import { createPayOrderPayload, requestMiniProgramPayment, type PayOrderResult } from '@/utils/payment';
@@ -110,22 +112,6 @@ interface LatestEmailCodeResult {
   expired?: boolean;
 }
 
-interface CachedUserInfo {
-  userId: string;
-  openid?: string;
-  openId?: string;
-  nickname?: string;
-  avatarUrl?: string;
-  inviteCode?: string;
-  pointsBalance?: number;
-  aiAccountRegistered?: boolean;
-  profileAuthed?: boolean;
-}
-
-interface LoginResult extends CachedUserInfo {
-  mobileBound?: boolean;
-}
-
 interface AiAccountFormErrors {
   accountName?: string;
   password?: string;
@@ -133,6 +119,9 @@ interface AiAccountFormErrors {
 }
 
 type AiAccountSheetSource = 'purchase' | 'profile';
+type PendingAuthAction =
+  | { type: 'subscribe'; productCode: string }
+  | { type: 'saveAiAccount' };
 
 interface WechatPhoneEvent {
   detail?: {
@@ -174,7 +163,7 @@ const ACCOUNT_INFO_ICON = require('../../assets/member/account-info.svg') as str
 const CUSTOMER_SUPPORT_ICON = require('../../assets/member/customer-support.svg') as string;
 const VERIFICATION_CODE_ICON = require('../../assets/member/verification-code.svg') as string;
 const CHEVRON_RIGHT_ICON = require('../../assets/icons/chevron-right.svg') as string;
-const CACHE_KEY = 'gpt_pay_user_info';
+const CACHE_KEY = AUTH_CACHE_KEY;
 const AI_ACCOUNT_DOMAIN = '@mraclpivot.com';
 const USER_AGREEMENT_URL = 'https://cloud1-d3gbrpive8611514c-1348953433.tcloudbaseapp.com/cloud-admin/htmls/%E7%94%A8%E6%88%B7%E5%8D%8F%E8%AE%AE.html?sign=55a2a34c2317b48fc09603658d7a64b1&t=1779005578';
 const PRIVACY_AGREEMENT_URL = 'https://cloud1-d3gbrpive8611514c-1348953433.tcloudbaseapp.com/cloud-admin/htmls/%E9%9A%90%E7%A7%81%E5%8D%8F%E8%AE%AE.html?sign=3626cb47334346612df3a4d34746e859&t=1779005613';
@@ -219,6 +208,8 @@ export default function MemberPage(): JSX.Element {
   const [submitting, setSubmitting] = useState(false);
   const [paymentLocked, setPaymentLocked] = useState(false);
   const [clockNow, setClockNow] = useState(Date.now());
+  const [authModalVisible, setAuthModalVisible] = useState(false);
+  const [pendingAuthAction, setPendingAuthAction] = useState<PendingAuthAction | null>(null);
 
   useDidShow(() => {
     showTabBarSafely();
@@ -248,19 +239,10 @@ export default function MemberPage(): JSX.Element {
   }, [data.membership.status, data.membership.endAt]);
 
   function loadCachedUserInfo(): void {
-    const raw = Taro.getStorageSync(CACHE_KEY) as string;
-    if (!raw) {
-      setCachedUserInfo(null);
-      return;
-    }
-    try {
-      const cached = JSON.parse(raw) as CachedUserInfo;
-      setCachedUserInfo(cached);
-      if (cached.userId && !cached.openId && !cached.openid) {
-        void refreshCachedOpenId(cached);
-      }
-    } catch {
-      setCachedUserInfo(null);
+    const cached = getCachedUserInfo();
+    setCachedUserInfo(cached);
+    if (cached?.userId && !cached.openId && !cached.openid) {
+      void refreshCachedOpenId(cached);
     }
   }
 
@@ -277,7 +259,7 @@ export default function MemberPage(): JSX.Element {
         openId: loginResult.openId ?? loginResult.openid,
         profileAuthed: Boolean(loginResult.nickname || loginResult.avatarUrl),
       };
-      Taro.setStorageSync(CACHE_KEY, JSON.stringify(nextInfo));
+      saveCachedUserInfo(nextInfo);
       setCachedUserInfo(nextInfo);
     } catch {
       // 不阻断会员中心渲染；重新授权登录后也会写入 openId。
@@ -376,10 +358,47 @@ export default function MemberPage(): JSX.Element {
     });
   }
 
+  function hasLoggedInUser(): boolean {
+    const cached = getCachedUserInfo() ?? cachedUserInfo;
+    return Boolean(cached?.userId);
+  }
+
+  function requireAuth(action: PendingAuthAction): boolean {
+    if (hasLoggedInUser()) {
+      return true;
+    }
+    setPendingAuthAction(action);
+    setAuthModalVisible(true);
+    return false;
+  }
+
+  function handleAuthSuccess(info: AuthUserInfo): void {
+    saveCachedUserInfo(info);
+    setCachedUserInfo(info);
+    setAuthModalVisible(false);
+    void loadData();
+
+    const action = pendingAuthAction;
+    setPendingAuthAction(null);
+    if (!action) {
+      return;
+    }
+    if (action.type === 'subscribe') {
+      openSubscriptionFlow(action.productCode);
+      return;
+    }
+    if (action.type === 'saveAiAccount') {
+      void handleSaveAiAccount();
+    }
+  }
+
   function openSubscriptionFlow(productCode: string): void {
     const product = PRODUCT_OPTIONS.find((item) => item.code === productCode);
     if (!product?.available) {
       Taro.showToast({ title: product?.tag || '暂不支持购买', icon: 'none' });
+      return;
+    }
+    if (!requireAuth({ type: 'subscribe', productCode })) {
       return;
     }
     setPendingProductCode(productCode);
@@ -402,6 +421,9 @@ export default function MemberPage(): JSX.Element {
 
   async function handleSaveAiAccount(): Promise<void> {
     if (submitting) {
+      return;
+    }
+    if (!requireAuth({ type: 'saveAiAccount' })) {
       return;
     }
     const validationErrors = validateAiAccountForm(aiAccountName, aiAccountPassword);
@@ -448,15 +470,7 @@ export default function MemberPage(): JSX.Element {
   }
 
   function updateCachedUserInfo(partial: Partial<CachedUserInfo>): void {
-    const raw = Taro.getStorageSync(CACHE_KEY) as string;
-    let current: CachedUserInfo | null = null;
-    if (raw) {
-      try {
-        current = JSON.parse(raw) as CachedUserInfo;
-      } catch {
-        current = null;
-      }
-    }
+    const current = getCachedUserInfo();
     if (!current?.userId && !cachedUserInfo?.userId) {
       return;
     }
@@ -464,7 +478,7 @@ export default function MemberPage(): JSX.Element {
       ...(current ?? cachedUserInfo),
       ...partial,
     } as CachedUserInfo;
-    Taro.setStorageSync(CACHE_KEY, JSON.stringify(nextInfo));
+    saveCachedUserInfo(nextInfo);
     setCachedUserInfo(nextInfo);
   }
 
@@ -601,6 +615,9 @@ export default function MemberPage(): JSX.Element {
       Taro.showToast({ title: '该会员方案即将上线', icon: 'none' });
       return;
     }
+    if (!requireAuth({ type: 'subscribe', productCode: activeProductCode })) {
+      return;
+    }
     if (!purchaseAgreementAccepted) {
       Taro.showToast({ title: '请先阅读并同意协议', icon: 'none' });
       return;
@@ -625,6 +642,9 @@ export default function MemberPage(): JSX.Element {
   }
 
   async function handleGetPhoneNumber(event: WechatPhoneEvent): Promise<void> {
+    if (!requireAuth({ type: 'subscribe', productCode: activeProductCode })) {
+      return;
+    }
     if (!purchaseAgreementAccepted) {
       Taro.showToast({ title: '请先阅读并同意协议', icon: 'none' });
       return;
@@ -1135,6 +1155,11 @@ export default function MemberPage(): JSX.Element {
               </Button>
             )}
       </PopLayout>
+
+      <AuthModal
+        visible={authModalVisible}
+        onAuthSuccess={handleAuthSuccess}
+      />
 
       <PaymentLockOverlay visible={paymentLocked} />
       </View>
