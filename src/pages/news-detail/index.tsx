@@ -4,6 +4,7 @@ import Taro, { useLoad, useShareAppMessage, useShareTimeline } from '@tarojs/tar
 import { SaasPageFrame } from '@/components/SaasPageFrame';
 import { callCloudFunction } from '@/services/api';
 import type { AiNewsDetailView } from '@/types';
+import { loginSilently } from '@/utils/auth';
 import { enableNewsReminderSubscription } from '@/utils/subscription';
 
 const NEWS_BELL_ICON = require('../../assets/icons/news-bell.svg') as string;
@@ -225,6 +226,7 @@ export default function NewsDetailPage(): JSX.Element {
 
   async function loadNewsReminderState(): Promise<void> {
     try {
+      await loginSilently({ source: 'news_detail' });
       const profile = await callCloudFunction<NewsReminderProfile>('get-profile');
       const hasActiveNewsReminder = Boolean(profile.newsSubscribeMsgAuth && (profile.newsSubscribeMsgQuota ?? 0) > 0);
       setNewsReminderVisible(!hasActiveNewsReminder);
