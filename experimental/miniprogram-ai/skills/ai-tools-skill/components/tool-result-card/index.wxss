@@ -1,0 +1,36 @@
+.ai-result-card {
+  padding: 24rpx;
+  border-radius: 16rpx;
+  background: #ffffff;
+}
+
+.ai-result-card__badge {
+  display: inline-block;
+  padding: 6rpx 12rpx;
+  border-radius: 8rpx;
+  background: #eef8f5;
+  color: #24584f;
+  font-size: 22rpx;
+}
+
+.ai-result-card__title {
+  margin-top: 16rpx;
+  font-size: 32rpx;
+  font-weight: 700;
+  color: #111827;
+}
+
+.ai-result-card__summary,
+.ai-result-card__output,
+.ai-result-card__point {
+  margin-top: 12rpx;
+  font-size: 26rpx;
+  line-height: 1.7;
+  color: #33403a;
+}
+
+.ai-result-card__copy {
+  margin-top: 20rpx;
+  background: #31685c;
+  color: #ffffff;
+}

@@ -1,0 +1,4 @@
+<view class="ai-error-card">
+  <view class="ai-error-card__title">{{data.title || '处理失败'}}</view>
+  <view class="ai-error-card__desc">{{data.summary || data.message || '请稍后重试。'}}</view>
+</view>

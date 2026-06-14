@@ -1,0 +1,136 @@
+{
+  "apis": [
+    {
+      "name": "listTools",
+      "description": "获取 AIO 可用 AI 工具列表（业务对象：AI 工具卡片）。调用前置条件：用户询问可用工具、想知道能做什么，或表达模糊 AI 工具需求。严禁场景：用户已经提供明确文本并要求总结/改写时，应直接调用 runTextTool。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string",
+            "description": "工具分类。用户未指定时使用 all。",
+            "enum": ["text", "image", "all"]
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "description": "工具列表",
+            "items": {
+              "type": "object",
+              "properties": {
+                "toolId": { "type": "string", "description": "工具 ID" },
+                "name": { "type": "string", "description": "工具名称" },
+                "description": { "type": "string", "description": "工具说明" },
+                "enabled": { "type": "boolean", "description": "是否可用" }
+              }
+            }
+          }
+        }
+      },
+      "_meta": {
+        "ui": {
+          "componentPath": "components/tool-list-card/index"
+        }
+      }
+    },
+    {
+      "name": "runTextTool",
+      "description": "执行文本类 AI 工具（业务对象：AI 生成结果卡片）。调用前置条件：用户已经提供明确文本内容，或小程序页面传入内容。严禁场景：用户没有提供文本时禁止调用，必须先反问用户补充内容；禁止编造链接、文件或图片内容。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "toolId": {
+            "type": "string",
+            "description": "工具 ID。仅允许 articleSummary 或 copywriting。",
+            "enum": ["articleSummary", "copywriting"]
+          },
+          "outputType": {
+            "type": "string",
+            "description": "输出类型。用户未指定时 summary。",
+            "enum": ["summary", "bullets", "xiaohongshu", "moments"]
+          },
+          "text": {
+            "type": "string",
+            "description": "用户提供的待处理文本。取值必须来自用户输入或页面传入，禁止编造。"
+          }
+        },
+        "required": ["toolId", "text"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "runId": { "type": "string", "description": "本次执行 ID" },
+          "status": { "type": "string", "description": "执行状态" },
+          "toolId": { "type": "string", "description": "工具 ID" },
+          "title": { "type": "string", "description": "结果标题" },
+          "summary": { "type": "string", "description": "摘要" },
+          "points": {
+            "type": "array",
+            "description": "要点",
+            "items": { "type": "string" }
+          },
+          "outputText": { "type": "string", "description": "可复制结果正文" },
+          "createdAt": { "type": "number", "description": "创建时间戳" }
+        }
+      },
+      "_meta": {
+        "ui": {
+          "componentPath": "components/tool-result-card/index"
+        }
+      }
+    },
+    {
+      "name": "getRunResult",
+      "description": "查询某次 AI 工具执行结果（业务对象：AI 生成结果卡片）。调用前置条件：上下文中已有 runId。严禁场景：禁止从用户自然语言推断 runId。",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string",
+            "description": "执行 ID，必须来自 runTextTool 返回值。"
+          }
+        },
+        "required": ["runId"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "runId": { "type": "string" },
+          "status": { "type": "string" },
+          "toolId": { "type": "string" },
+          "title": { "type": "string" },
+          "summary": { "type": "string" },
+          "points": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "outputText": { "type": "string" },
+          "createdAt": { "type": "number" }
+        }
+      },
+      "_meta": {
+        "ui": {
+          "componentPath": "components/tool-result-card/index"
+        }
+      }
+    }
+  ],
+  "components": [
+    {
+      "path": "components/tool-list-card/index",
+      "relatedPage": "/pages/tools/index"
+    },
+    {
+      "path": "components/tool-result-card/index",
+      "relatedPage": "/pages/tool-detail/index"
+    },
+    {
+      "path": "components/tool-error-card/index",
+      "relatedPage": "/pages/tools/index"
+    }
+  ]
+}

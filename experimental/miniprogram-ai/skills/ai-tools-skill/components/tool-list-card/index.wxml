@@ -1,0 +1,15 @@
+<view class="ai-tool-card">
+  <view class="ai-tool-card__title">AIO AI 工具</view>
+  <view class="ai-tool-card__list">
+    <view
+      wx:for="{{data.items}}"
+      wx:key="toolId"
+      class="ai-tool-card__item"
+      data-tool-id="{{item.toolId}}"
+      bindtap="openTool"
+    >
+      <view class="ai-tool-card__name">{{item.name}}</view>
+      <view class="ai-tool-card__desc">{{item.description}}</view>
+    </view>
+  </view>
+</view>

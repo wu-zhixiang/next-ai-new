@@ -1,0 +1,17 @@
+.ai-error-card {
+  padding: 24rpx;
+  border-radius: 16rpx;
+  background: #fff7ed;
+}
+
+.ai-error-card__title {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #9a3412;
+}
+
+.ai-error-card__desc {
+  margin-top: 10rpx;
+  font-size: 26rpx;
+  color: #7c2d12;
+}

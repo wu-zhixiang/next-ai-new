@@ -1,0 +1,10 @@
+<view class="ai-result-card">
+  <view class="ai-result-card__badge">AI 生成，仅供参考</view>
+  <view class="ai-result-card__title">{{data.title}}</view>
+  <view class="ai-result-card__summary">{{data.summary}}</view>
+  <view class="ai-result-card__points" wx:if="{{data.points && data.points.length}}">
+    <view wx:for="{{data.points}}" wx:key="*this" class="ai-result-card__point">{{index + 1}}. {{item}}</view>
+  </view>
+  <view class="ai-result-card__output">{{data.outputText}}</view>
+  <button class="ai-result-card__copy" size="mini" bindtap="copyResult">复制结果</button>
+</view>

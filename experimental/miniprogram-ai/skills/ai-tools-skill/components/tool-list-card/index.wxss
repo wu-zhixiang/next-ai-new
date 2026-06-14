@@ -1,0 +1,30 @@
+.ai-tool-card {
+  padding: 24rpx;
+  border-radius: 16rpx;
+  background: #ffffff;
+}
+
+.ai-tool-card__title {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: #111827;
+}
+
+.ai-tool-card__item {
+  margin-top: 18rpx;
+  padding: 18rpx;
+  border: 1rpx solid #d9e5df;
+  border-radius: 12rpx;
+}
+
+.ai-tool-card__name {
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #24584f;
+}
+
+.ai-tool-card__desc {
+  margin-top: 6rpx;
+  font-size: 24rpx;
+  color: #647067;
+}
