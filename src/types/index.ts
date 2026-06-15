@@ -29,6 +29,8 @@ export interface PlanView {
   productName: string;
   planCode: string;
   planName: string;
+  isFirstBuy?: boolean;
+  isFirstBay?: boolean;
   price: number;
   durationDays: number;
   description?: string;

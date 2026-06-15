@@ -7,6 +7,23 @@ const context_1 = require("./_lib/context");
 function normalizeAmount(amount) {
     return Number(amount.toFixed(2));
 }
+function isFirstBuyPlan(plan) {
+    return Boolean(plan.isFirstBuy || plan.isFirstBay);
+}
+async function hasPurchasedProductBefore(userId, productCode) {
+    const [memberships, orders] = await Promise.all([
+        (0, db_1.listMembershipsByUserId)(userId),
+        (0, db_1.listOrdersByUserId)(userId),
+    ]);
+    return memberships.some((membership) => membership.productCode === productCode)
+        || orders.some((order) => order.productCode === productCode && order.payStatus === 'paid');
+}
+async function hasFirstBuyPlan(productCode) {
+    const result = await (0, db_1.collection)('memberPlans')
+        .where({ status: 'on', productCode })
+        .get();
+    return result.data.some(isFirstBuyPlan);
+}
 async function main(event) {
     var _a;
     const { OPENID } = (0, context_1.getWxContext)();
@@ -21,7 +38,18 @@ async function main(event) {
     if (!plan) {
         throw new Error('套餐不存在或已下架');
     }
-    const existingMembership = await (0, db_1.getMembershipByUserId)(user._id, plan.productCode);
+    const [existingMembership, purchasedBefore, firstBuyPlanExists] = await Promise.all([
+        (0, db_1.getMembershipByUserId)(user._id, plan.productCode),
+        hasPurchasedProductBefore(user._id, plan.productCode),
+        hasFirstBuyPlan(plan.productCode),
+    ]);
+    const firstBuyPlan = isFirstBuyPlan(plan);
+    if (purchasedBefore && firstBuyPlan) {
+        throw new Error('该套餐仅限首次购买用户');
+    }
+    if (!purchasedBefore && firstBuyPlanExists && !firstBuyPlan) {
+        throw new Error('首次购买请使用首次购买套餐');
+    }
     const now = Date.now();
     const pendingOrders = await (0, db_1.listPendingOrdersByUserId)(user._id);
     await Promise.all(pendingOrders.map((pendingOrder) => (0, db_1.collection)('orders').doc(pendingOrder._id).update({
@@ -45,7 +73,7 @@ async function main(event) {
         planCode: plan.planCode,
         planName: plan.planName,
         virtualPaymentProductId: plan.virtualPaymentProductId,
-        orderType: existingMembership ? 'renew' : 'purchase',
+        orderType: purchasedBefore || existingMembership ? 'renew' : 'purchase',
         amount: payableAmount,
         originalAmount: normalizeAmount(plan.price),
         pointsDeductionEnabled: Boolean(event.usePointsDeduction),

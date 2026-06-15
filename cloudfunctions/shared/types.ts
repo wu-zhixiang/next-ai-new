@@ -57,6 +57,8 @@ export interface MemberPlanRecord {
   planCode: string;
   planName: string;
   virtualPaymentProductId?: string;
+  isFirstBuy?: boolean;
+  isFirstBay?: boolean;
   price: number;
   durationDays: number;
   autoRenewEnabled: boolean;
@@ -215,6 +217,8 @@ export interface PlanView {
   productName: string;
   planCode: string;
   planName: string;
+  isFirstBuy?: boolean;
+  isFirstBay?: boolean;
   price: number;
   durationDays: number;
   description?: string;
