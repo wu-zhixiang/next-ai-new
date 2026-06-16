@@ -2,9 +2,28 @@ import { collection, getUserByOpenId, listMembershipsByUserId, listOrdersByUserI
 import { getWxContext } from '../_lib/context';
 import { ok } from '../shared/utils';
 import type { MemberPlanRecord, OrderRecord } from '../shared/types';
+import { DEFAULT_PRODUCT_CODE } from '../shared/constants';
 
 interface Event {
   productCode?: string;
+}
+
+function normalizePurchasedProductCode(record: { productCode?: string }): string {
+  return record.productCode || DEFAULT_PRODUCT_CODE;
+}
+
+function isFirstBuyPlan(plan: Pick<MemberPlanRecord, 'isFirstBuy'>): boolean {
+  return normalizeBooleanFlag(plan.isFirstBuy);
+}
+
+function normalizeBooleanFlag(value: unknown): boolean {
+  if (value === true || value === 1) {
+    return true;
+  }
+  if (typeof value === 'string') {
+    return value.trim().toLowerCase() === 'true' || value.trim() === '1';
+  }
+  return false;
 }
 
 export async function main(event: Event = {}) {
@@ -24,33 +43,29 @@ export async function main(event: Event = {}) {
       listOrdersByUserId(user._id),
     ]);
     memberships.forEach((membership) => {
-      if (membership.productCode) {
-        purchasedProductCodes.add(membership.productCode);
-      }
+      purchasedProductCodes.add(normalizePurchasedProductCode(membership));
     });
     orders
       .filter((order: OrderRecord) => order.payStatus === 'paid')
       .forEach((order) => {
-        if (order.productCode) {
-          purchasedProductCodes.add(order.productCode);
-        }
+        purchasedProductCodes.add(normalizePurchasedProductCode(order));
       });
   }
 
   const productHasFirstBuyPlan = new Set(
     rawPlans
-      .filter((plan) => Boolean(plan.isFirstBuy || plan.isFirstBay))
+      .filter(isFirstBuyPlan)
       .map((plan) => plan.productCode),
   );
 
   const visiblePlans = rawPlans.filter((plan) => {
-    const isFirstBuyPlan = Boolean(plan.isFirstBuy || plan.isFirstBay);
+    const firstBuyPlan = isFirstBuyPlan(plan);
     const isFirstBuyer = !purchasedProductCodes.has(plan.productCode);
     if (isFirstBuyer && productHasFirstBuyPlan.has(plan.productCode)) {
-      return isFirstBuyPlan;
+      return firstBuyPlan;
     }
     if (!isFirstBuyer) {
-      return !isFirstBuyPlan;
+      return !firstBuyPlan;
     }
     return true;
   });
@@ -58,12 +73,12 @@ export async function main(event: Event = {}) {
   const plans = visiblePlans.map((item) => {
     const plan = item as MemberPlanRecord;
     return {
+      pid: plan.pid,
       productCode: plan.productCode,
       productName: plan.productName,
       planCode: plan.planCode,
       planName: plan.planName,
-      isFirstBuy: Boolean(plan.isFirstBuy || plan.isFirstBay),
-      isFirstBay: Boolean(plan.isFirstBay || plan.isFirstBuy),
+      isFirstBuy: isFirstBuyPlan(plan),
       price: plan.price,
       durationDays: plan.durationDays,
       description: plan.description,

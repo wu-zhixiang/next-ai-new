@@ -14,6 +14,7 @@ exports.getMembershipByUserId = getMembershipByUserId;
 exports.listMembershipsByUserId = listMembershipsByUserId;
 exports.getDeliveryByUserId = getDeliveryByUserId;
 exports.getPlanByCode = getPlanByCode;
+exports.getPlanByPid = getPlanByPid;
 exports.getOrderByNo = getOrderByNo;
 exports.getLatestPendingOrderByUserId = getLatestPendingOrderByUserId;
 exports.listOrdersByUserId = listOrdersByUserId;
@@ -87,6 +88,11 @@ async function getDeliveryByUserId(userId) {
 async function getPlanByCode(planCode) {
     var _a;
     const result = await collection('memberPlans').where({ planCode, status: 'on' }).limit(1).get();
+    return (_a = result.data[0]) !== null && _a !== void 0 ? _a : null;
+}
+async function getPlanByPid(pid) {
+    var _a;
+    const result = await collection('memberPlans').where({ pid, status: 'on' }).limit(1).get();
     return (_a = result.data[0]) !== null && _a !== void 0 ? _a : null;
 }
 async function getOrderByNo(orderNo) {

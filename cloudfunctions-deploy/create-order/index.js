@@ -4,19 +4,32 @@ exports.main = main;
 const db_1 = require("./shared/db");
 const utils_1 = require("./shared/utils");
 const context_1 = require("./_lib/context");
+const constants_1 = require("./shared/constants");
 function normalizeAmount(amount) {
     return Number(amount.toFixed(2));
 }
 function isFirstBuyPlan(plan) {
-    return Boolean(plan.isFirstBuy || plan.isFirstBay);
+    return normalizeBooleanFlag(plan.isFirstBuy);
+}
+function normalizeBooleanFlag(value) {
+    if (value === true || value === 1) {
+        return true;
+    }
+    if (typeof value === 'string') {
+        return value.trim().toLowerCase() === 'true' || value.trim() === '1';
+    }
+    return false;
+}
+function normalizePurchasedProductCode(record) {
+    return record.productCode || constants_1.DEFAULT_PRODUCT_CODE;
 }
 async function hasPurchasedProductBefore(userId, productCode) {
     const [memberships, orders] = await Promise.all([
         (0, db_1.listMembershipsByUserId)(userId),
         (0, db_1.listOrdersByUserId)(userId),
     ]);
-    return memberships.some((membership) => membership.productCode === productCode)
-        || orders.some((order) => order.productCode === productCode && order.payStatus === 'paid');
+    return memberships.some((membership) => normalizePurchasedProductCode(membership) === productCode)
+        || orders.some((order) => normalizePurchasedProductCode(order) === productCode && order.payStatus === 'paid');
 }
 async function hasFirstBuyPlan(productCode) {
     const result = await (0, db_1.collection)('memberPlans')
@@ -34,7 +47,10 @@ async function main(event) {
     if (!user.mobile) {
         throw new Error('请先完成手机号授权');
     }
-    const plan = await (0, db_1.getPlanByCode)(event.planCode);
+    if (!event.pid) {
+        throw new Error('套餐缺少 pid，请刷新后重试');
+    }
+    const plan = await (0, db_1.getPlanByPid)(event.pid);
     if (!plan) {
         throw new Error('套餐不存在或已下架');
     }
@@ -45,6 +61,13 @@ async function main(event) {
     ]);
     const firstBuyPlan = isFirstBuyPlan(plan);
     if (purchasedBefore && firstBuyPlan) {
+        console.warn(JSON.stringify({
+            tag: 'create-order.first-buy-plan-blocked',
+            userId: user._id,
+            planCode: plan.planCode,
+            productCode: plan.productCode,
+            isFirstBuy: plan.isFirstBuy,
+        }));
         throw new Error('该套餐仅限首次购买用户');
     }
     if (!purchasedBefore && firstBuyPlanExists && !firstBuyPlan) {

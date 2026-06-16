@@ -1,10 +1,11 @@
-import { collection, getMembershipByUserId, getPlanByCode, getUserByOpenId, listMembershipsByUserId, listOrdersByUserId, listPendingOrdersByUserId } from '../shared/db';
+import { collection, getMembershipByUserId, getPlanByPid, getUserByOpenId, listMembershipsByUserId, listOrdersByUserId, listPendingOrdersByUserId } from '../shared/db';
 import type { MemberPlanRecord, OrderRecord } from '../shared/types';
 import { createOrderNo, ok } from '../shared/utils';
 import { getWxContext } from '../_lib/context';
+import { DEFAULT_PRODUCT_CODE } from '../shared/constants';
 
 interface Event {
-  planCode: string;
+  pid: string;
   usePointsDeduction?: boolean;
 }
 
@@ -12,8 +13,22 @@ function normalizeAmount(amount: number): number {
   return Number(amount.toFixed(2));
 }
 
-function isFirstBuyPlan(plan: Pick<MemberPlanRecord, 'isFirstBuy' | 'isFirstBay'>): boolean {
-  return Boolean(plan.isFirstBuy || plan.isFirstBay);
+function isFirstBuyPlan(plan: Pick<MemberPlanRecord, 'isFirstBuy'>): boolean {
+  return normalizeBooleanFlag(plan.isFirstBuy);
+}
+
+function normalizeBooleanFlag(value: unknown): boolean {
+  if (value === true || value === 1) {
+    return true;
+  }
+  if (typeof value === 'string') {
+    return value.trim().toLowerCase() === 'true' || value.trim() === '1';
+  }
+  return false;
+}
+
+function normalizePurchasedProductCode(record: { productCode?: string }): string {
+  return record.productCode || DEFAULT_PRODUCT_CODE;
 }
 
 async function hasPurchasedProductBefore(userId: string, productCode: string): Promise<boolean> {
@@ -21,8 +36,8 @@ async function hasPurchasedProductBefore(userId: string, productCode: string): P
     listMembershipsByUserId(userId),
     listOrdersByUserId(userId),
   ]);
-  return memberships.some((membership) => membership.productCode === productCode)
-    || orders.some((order) => order.productCode === productCode && order.payStatus === 'paid');
+  return memberships.some((membership) => normalizePurchasedProductCode(membership) === productCode)
+    || orders.some((order) => normalizePurchasedProductCode(order) === productCode && order.payStatus === 'paid');
 }
 
 async function hasFirstBuyPlan(productCode: string): Promise<boolean> {
@@ -42,7 +57,11 @@ export async function main(event: Event) {
     throw new Error('请先完成手机号授权');
   }
 
-  const plan = await getPlanByCode(event.planCode);
+  if (!event.pid) {
+    throw new Error('套餐缺少 pid，请刷新后重试');
+  }
+
+  const plan = await getPlanByPid(event.pid);
   if (!plan) {
     throw new Error('套餐不存在或已下架');
   }
@@ -54,6 +73,13 @@ export async function main(event: Event) {
   ]);
   const firstBuyPlan = isFirstBuyPlan(plan);
   if (purchasedBefore && firstBuyPlan) {
+    console.warn(JSON.stringify({
+      tag: 'create-order.first-buy-plan-blocked',
+      userId: user._id,
+      planCode: plan.planCode,
+      productCode: plan.productCode,
+      isFirstBuy: plan.isFirstBuy,
+    }));
     throw new Error('该套餐仅限首次购买用户');
   }
   if (!purchasedBefore && firstBuyPlanExists && !firstBuyPlan) {

@@ -46,12 +46,14 @@ interface ProductOption {
 }
 
 interface ProductPlanOption {
+  pid?: string;
   planCode: string;
   displayName: string;
   price: number;
   priceLabel: string;
   durationLabel: string;
   periodLabel?: string;
+  isFirstBuy?: boolean;
   recommended?: boolean;
 }
 
@@ -170,15 +172,28 @@ const PRIVACY_AGREEMENT_URL = 'https://cloud1-d3gbrpive8611514c-1348953433.tclou
 
 function buildPlanOption(plan: PlanView, index: number): ProductPlanOption {
   const periodLabel = plan.durationDays >= 365 ? '年' : plan.durationDays >= 90 ? '季' : '月';
+  const isFirstBuy = normalizeBooleanFlag(plan.isFirstBuy);
   return {
+    pid: plan.pid,
     planCode: plan.planCode,
     displayName: plan.planName,
     price: plan.price,
     priceLabel: `¥${plan.price.toFixed(2)}`,
     durationLabel: `${plan.durationDays} 天`,
     periodLabel,
+    isFirstBuy,
     recommended: index === 0,
   };
+}
+
+function normalizeBooleanFlag(value: unknown): boolean {
+  if (value === true || value === 1) {
+    return true;
+  }
+  if (typeof value === 'string') {
+    return value.trim().toLowerCase() === 'true' || value.trim() === '1';
+  }
+  return false;
 }
 
 export default function MemberPage(): JSX.Element {
@@ -188,6 +203,7 @@ export default function MemberPage(): JSX.Element {
     deliverySummary: { hasDeliveryInfo: false },
   });
   const [backendPlans, setBackendPlans] = useState<PlanView[]>([]);
+  const [plansLoaded, setPlansLoaded] = useState(false);
   const [activeProductCode, setActiveProductCode] = useState('ai_news');
   const [planSheetVisible, setPlanSheetVisible] = useState(false);
   const [productIntroVisible, setProductIntroVisible] = useState(false);
@@ -283,6 +299,8 @@ export default function MemberPage(): JSX.Element {
       setSelectedPlanCode((prev) => prev || result.plans[0]?.planCode || '');
     } catch {
       setBackendPlans([]);
+    } finally {
+      setPlansLoaded(true);
     }
   }
 
@@ -314,7 +332,7 @@ export default function MemberPage(): JSX.Element {
     });
     return nextMap;
   }, [backendPlans]);
-  const activePlans = plansByProduct[activeProductCode] ?? FALLBACK_PLAN_MAP[activeProductCode] ?? [];
+  const activePlans = plansByProduct[activeProductCode] ?? (activeProduct.available ? [] : FALLBACK_PLAN_MAP[activeProductCode] ?? []);
   const activeProductAvailable = activeProduct.available && activePlans.some((plan) => plan.price > 0);
   const selectedPlan = activePlans.find((plan) => plan.planCode === selectedPlanCode) ?? activePlans[0];
   const pointsBalance = Math.max(0, Math.floor(data.userInfo?.pointsBalance ?? cachedUserInfo?.pointsBalance ?? 0));
@@ -327,7 +345,7 @@ export default function MemberPage(): JSX.Element {
 
   function openPlanSheet(productCode: string): void {
     const nextProduct = PRODUCT_OPTIONS.find((item) => item.code === productCode) ?? PRODUCT_OPTIONS[0];
-    const nextPlans = plansByProduct[nextProduct.code] ?? FALLBACK_PLAN_MAP[nextProduct.code] ?? [];
+    const nextPlans = plansByProduct[nextProduct.code] ?? (nextProduct.available ? [] : FALLBACK_PLAN_MAP[nextProduct.code] ?? []);
     setActiveProductCode(nextProduct.code);
     setSelectedPlanCode(nextPlans[0]?.planCode ?? '');
     setPurchaseAgreementAccepted(false);
@@ -515,10 +533,32 @@ export default function MemberPage(): JSX.Element {
       Taro.showToast({ title: '请选择会员方案', icon: 'none' });
       throw new Error('未选择会员方案');
     }
+    if (!selectedPlan?.pid) {
+      Taro.showToast({ title: '套餐缺少 pid，请联系管理员', icon: 'none' });
+      throw new Error('套餐缺少 pid');
+    }
+    const latestPlans = await callCloudFunction<PlanListResult>('list-member-plans');
+    setBackendPlans(latestPlans.plans);
+    const latestActivePlans = latestPlans.plans.filter((plan) => plan.productCode === activeProductCode);
+    if (!latestActivePlans.some((plan) => plan.pid === selectedPlan.pid)) {
+      setSelectedPlanCode(latestActivePlans[0]?.planCode ?? '');
+      Taro.showToast({ title: '套餐状态已更新，请重新选择', icon: 'none' });
+      throw new Error('套餐状态已更新，请重新选择');
+    }
     return callCloudFunction<CreateOrderResult>('create-order', {
-      planCode: selectedPlanCode,
+      pid: selectedPlan.pid,
       usePointsDeduction,
     });
+  }
+
+  async function refreshPlansAfterUnavailablePlan(error: unknown): Promise<boolean> {
+    const message = error instanceof Error ? error.message : '';
+    if (!message.includes('首次购买')) {
+      return false;
+    }
+    await loadPlans();
+    Taro.showToast({ title: '套餐状态已更新，请重新选择', icon: 'none' });
+    return true;
   }
 
   function togglePurchaseAgreement(): void {
@@ -635,6 +675,11 @@ export default function MemberPage(): JSX.Element {
       }
       const order = await createOrder();
       await payOrder(order.orderNo, true);
+    } catch (error) {
+      const refreshed = await refreshPlansAfterUnavailablePlan(error);
+      if (!refreshed) {
+        Taro.showToast({ title: error instanceof Error ? error.message : '支付失败，请稍后再试', icon: 'none' });
+      }
     } finally {
       setSubmitting(false);
       setPaymentLocked(false);
@@ -670,7 +715,10 @@ export default function MemberPage(): JSX.Element {
       const order = await createOrder();
       await payOrder(order.orderNo, true);
     } catch (error) {
-      Taro.showToast({ title: error instanceof Error ? error.message : '授权失败，请稍后再试', icon: 'none' });
+      const refreshed = await refreshPlansAfterUnavailablePlan(error);
+      if (!refreshed) {
+        Taro.showToast({ title: error instanceof Error ? error.message : '授权失败，请稍后再试', icon: 'none' });
+      }
     } finally {
       setSubmitting(false);
       setPaymentLocked(false);
@@ -1060,7 +1108,17 @@ export default function MemberPage(): JSX.Element {
             </View>
             <Text className='plan-sheet__desc'>{activeProduct.description}</Text>
             <View className='plan-sheet__plans'>
-              {activePlans.map((plan) => {
+              {activePlans.length === 0 ? (
+                <View className='plan-option plan-option--disabled'>
+                  <View>
+                    <Text className='plan-option__name'>{plansLoaded ? '暂无可购买套餐' : '套餐加载中'}</Text>
+                    <Text className='plan-option__duration'>{plansLoaded ? '请稍后再试' : '正在同步云端套餐'}</Text>
+                  </View>
+                  <View className='plan-option__price-row'>
+                    <Text className='plan-option__price'>--</Text>
+                  </View>
+                </View>
+              ) : activePlans.map((plan) => {
                 const selected = plan.planCode === selectedPlanCode;
                 return (
                   <View
@@ -1151,7 +1209,7 @@ export default function MemberPage(): JSX.Element {
               </Button>
             ) : (
               <Button className={`saas-button plan-sheet__button ${activeProductAvailable && purchaseAgreementAccepted ? '' : 'saas-button--disabled'}`} loading={submitting} onClick={() => void handlePlanPay()}>
-                {activeProductAvailable ? '确认支付' : '即将上线'}
+                {activeProductAvailable ? '确认支付' : plansLoaded ? '即将上线' : '套餐加载中'}
               </Button>
             )}
       </PopLayout>

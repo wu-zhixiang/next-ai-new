@@ -52,6 +52,7 @@ export interface MembershipRecord {
 
 export interface MemberPlanRecord {
   _id?: string;
+  pid?: string;
   productCode: string;
   productName: string;
   planCode: string;
@@ -213,6 +214,7 @@ export interface ApiResponse<T> {
 }
 
 export interface PlanView {
+  pid?: string;
   productCode: string;
   productName: string;
   planCode: string;

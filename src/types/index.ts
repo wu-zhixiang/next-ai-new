@@ -25,6 +25,7 @@ export interface AiAccountView {
 }
 
 export interface PlanView {
+  pid?: string;
   productCode: string;
   productName: string;
   planCode: string;

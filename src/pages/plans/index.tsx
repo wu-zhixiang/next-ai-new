@@ -112,11 +112,14 @@ export default function PlansPage(): JSX.Element {
       return;
     }
 
-    const selectedIndex = visiblePlans.findIndex((plan) => plan.planCode === selectedPlanCode);
-    const mappedPlanCode = backendPlans[selectedIndex]?.planCode ?? selectedPlanCode;
+    const selectedBackendPlan = backendPlans.find((plan) => plan.productCode === productCode && plan.planCode === selectedPlanCode);
+    if (!selectedBackendPlan?.pid) {
+      Taro.showToast({ title: '套餐缺少 pid，请联系管理员', icon: 'none' });
+      return;
+    }
 
     const result = await callCloudFunction<CreateOrderResult>('create-order', {
-      planCode: mappedPlanCode,
+      pid: selectedBackendPlan.pid,
     });
 
     const payResult = await callCloudFunction<PayOrderResult>('pay-order', await createPayOrderPayload(result.orderNo));
