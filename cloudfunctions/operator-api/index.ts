@@ -369,6 +369,61 @@ async function getAppStoreAccountByChatgptEmail(chatgptAccountEmail: string): Pr
   return (result.data[0] as (AppStoreAccountRecord & { _id: string }) | undefined) ?? null;
 }
 
+async function resolveSubmittedAppStoreAccount(
+  body: Record<string, unknown>,
+  operatorMobile: string,
+): Promise<(AppStoreAccountRecord & { _id: string }) | null> {
+  const accountId = sanitizeText(body.appleStoreAccountId, 80);
+  if (accountId) {
+    return getAppStoreAccountById(accountId);
+  }
+
+  const now = Date.now();
+  const email = normalizeAppStoreEmail(body.appleStoreEmail);
+  const password = sanitizeText(body.appleStorePassword, 80);
+  if (!email && !password) {
+    return null;
+  }
+  if (!isValidAppStoreEmail(email)) {
+    throw new Error(`Apple Store 邮箱必须以 @${APPSTORE_EMAIL_DOMAIN} 结尾`);
+  }
+  if (!isValidAppStorePassword(password)) {
+    throw new Error('Apple Store 密码需至少 8 位，并包含数字、大写、小写和特殊符号');
+  }
+
+  await ensureCollection('appstoreAccounts');
+  const existing = await findAppStoreAccountByEmail(email);
+  if (existing) {
+    await collection('appstoreAccounts').doc(existing._id).update({
+      data: {
+        mobile: normalizeAppStoreMobile(operatorMobile),
+        password,
+        updatedAt: now,
+      },
+    });
+    return {
+      ...existing,
+      mobile: normalizeAppStoreMobile(operatorMobile),
+      password,
+      updatedAt: now,
+    };
+  }
+
+  const record: AppStoreAccountRecord = {
+    email,
+    mobile: normalizeAppStoreMobile(operatorMobile),
+    password,
+    status: 'available',
+    createdAt: now,
+    updatedAt: now,
+  };
+  const result = await collection('appstoreAccounts').add({ data: record });
+  return {
+    ...record,
+    _id: result._id ?? result.id ?? '',
+  };
+}
+
 async function resolveOrderAppStoreAccount(order: OrderRecord, user?: UserRecord | null): Promise<(AppStoreAccountRecord & { _id: string }) | null> {
   const byOrderNo = await getAppStoreAccountByOrderNo(order.orderNo);
   if (byOrderNo) {
@@ -886,7 +941,6 @@ async function listTasks(event: Event): Promise<HttpResponse> {
 async function updateTask(orderNo: string, body: Record<string, unknown>, event: Event): Promise<HttpResponse> {
   const status = normalizeStatus(String(body.status ?? event.status ?? ''));
   const note = sanitizeNote(body.note ?? event.note);
-  const appStoreAccountId = sanitizeText(body.appleStoreAccountId, 80);
   const operatorMobile = normalizeAppStoreMobile(body.mobile ?? event.queryStringParameters?.mobile ?? DEFAULT_APPSTORE_MOBILE);
   const operatorTail = getAppStoreMobileTail(operatorMobile);
   const privileged = isSuperOperatorMobile(operatorMobile);
@@ -900,16 +954,18 @@ async function updateTask(orderNo: string, body: Record<string, unknown>, event:
 
   const now = Date.now();
   if (status === 'fulfilled') {
-    if (!appStoreAccountId) {
-      return fail(400, '请先获取 Apple Store 账号');
-    }
     const user = await getUserById(order.userId);
     if (!user?.aiAccountEmail) {
       return fail(400, '该订单用户暂未填写 ChatGPT 注册邮箱');
     }
-    const appStoreAccount = await getAppStoreAccountById(appStoreAccountId);
+    let appStoreAccount: (AppStoreAccountRecord & { _id: string }) | null;
+    try {
+      appStoreAccount = await resolveSubmittedAppStoreAccount(body, operatorMobile);
+    } catch (error) {
+      return fail(400, error instanceof Error ? error.message : 'Apple Store 账号信息不正确');
+    }
     if (!appStoreAccount) {
-      return fail(404, 'Apple Store 账号不存在');
+      return fail(400, '请先获取或输入 Apple Store 账号和密码');
     }
     if (!privileged && !normalizeMobile(appStoreAccount.mobile).endsWith(operatorTail)) {
       return fail(403, '只能使用本手机号注册的 Apple Store 账号');

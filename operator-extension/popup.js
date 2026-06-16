@@ -286,7 +286,8 @@ function renderTasks(tasks) {
     node.querySelector('.copy-password').addEventListener('click', () => copyText(task.password || '', '密码已复制'));
     node.querySelector('.fetch-code').addEventListener('click', (event) => fetchVerificationCode(task.orderNo, node, event.currentTarget));
     node.querySelector('.fetch-apple-account').addEventListener('click', (event) => fetchAppleStoreAccount(task.orderNo, node, event.currentTarget));
-    node.querySelector('.task-card__apple-email').addEventListener('click', () => copyText(node.querySelector('.task-card__apple-email').value, 'Apple 邮箱已复制'));
+    node.querySelector('.task-card__apple-email').addEventListener('input', () => markManualAppleStoreAccount(node));
+    node.querySelector('.task-card__apple-password').addEventListener('input', () => markManualAppleStoreAccount(node));
     node.querySelector('.copy-apple-password').addEventListener('click', () => copyText(node.querySelector('.task-card__apple-password').value, 'Apple 密码已复制'));
     node.querySelector('.open-site').addEventListener('click', () => openTab(settings.chatgptUrl || DEFAULT_SETTINGS.chatgptUrl));
     node.querySelector('.mark-processing').addEventListener('click', () => updateTask(task.orderNo, 'processing', node));
@@ -320,10 +321,19 @@ function applyAppleStoreAccountToTask(node, account) {
   const fetchButton = node.querySelector('.fetch-apple-account');
   const normalized = account || null;
   node.dataset.appleStoreAccountId = normalized?.id || '';
+  node.dataset.appleStoreAccountSource = normalized?.id ? 'pool' : '';
   emailInput.value = normalized?.email || '';
   passwordInput.value = normalized?.password || '';
-  fetchButton.classList.toggle('hidden', Boolean(normalized?.email));
-  fetchButton.textContent = normalized?.email ? '已关联' : '获取';
+  fetchButton.textContent = normalized?.email ? '已取' : '获取';
+}
+
+function markManualAppleStoreAccount(node) {
+  node.dataset.appleStoreAccountId = '';
+  node.dataset.appleStoreAccountSource = 'manual';
+  const fetchButton = node.querySelector('.fetch-apple-account');
+  if (fetchButton) {
+    fetchButton.textContent = '获取';
+  }
 }
 
 async function fetchAppleStoreAccount(orderNo, node, button) {
@@ -347,8 +357,10 @@ async function fetchAppleStoreAccount(orderNo, node, button) {
 
 function openFulfillConfirm(orderNo, node) {
   if (!orderNo) return;
-  if (!node.dataset.appleStoreAccountId) {
-    showToast('请先获取 Apple Store 账号');
+  const appleStoreEmail = node.querySelector('.task-card__apple-email').value.trim();
+  const appleStorePassword = node.querySelector('.task-card__apple-password').value.trim();
+  if (!node.dataset.appleStoreAccountId && (!appleStoreEmail || !appleStorePassword)) {
+    showToast('请先获取或输入 Apple Store 账号和密码');
     return;
   }
   pendingFulfill = { orderNo, node };
@@ -376,10 +388,19 @@ async function updateTask(orderNo, status, node) {
   if (!orderNo) return;
   const note = node.querySelector('.task-card__note').value.trim();
   const appleStoreAccountId = node.dataset.appleStoreAccountId || '';
+  const appleStoreEmail = node.querySelector('.task-card__apple-email').value.trim();
+  const appleStorePassword = node.querySelector('.task-card__apple-password').value.trim();
   try {
     await apiRequest(`/operator/tasks/${encodeURIComponent(orderNo)}`, {
       method: 'POST',
-      body: JSON.stringify({ status, note, appleStoreAccountId, mobile: (settings.appstoreMobile || DEFAULT_SETTINGS.appstoreMobile).trim() })
+      body: JSON.stringify({
+        status,
+        note,
+        appleStoreAccountId,
+        appleStoreEmail,
+        appleStorePassword,
+        mobile: (settings.appstoreMobile || DEFAULT_SETTINGS.appstoreMobile).trim()
+      })
     });
     if (status === 'fulfilled') {
       node.remove();

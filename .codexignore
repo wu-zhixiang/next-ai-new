@@ -1,0 +1,17 @@
+node_modules/
+dist/
+build/
+.next/
+.nuxt/
+coverage/
+.cache/
+.turbo/
+.vite/
+.git/
+
+*.log
+*.map
+*.lock
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
