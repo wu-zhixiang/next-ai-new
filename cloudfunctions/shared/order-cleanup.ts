@@ -10,6 +10,19 @@ interface CleanupOptions {
   limit?: number;
 }
 
+interface CleanupOrderQuery {
+  skip(value: number): CleanupOrderQuery;
+  limit(value: number): CleanupOrderQuery;
+  get(): Promise<{ data: unknown[] }>;
+}
+
+interface CleanupOrderCollection {
+  where(query: Record<string, unknown>): CleanupOrderQuery;
+  doc(id: string): {
+    remove(): Promise<unknown>;
+  };
+}
+
 function getAbandonedAt(order: OrderRecord): number | null {
   if (order.payStatus === 'closed' || order.payStatus === 'failed') {
     return order.closedAt ?? order.updatedAt ?? order.createdAt;
@@ -41,29 +54,30 @@ export async function cleanupAbandonedOrders(options: CleanupOptions = {}): Prom
   const query = options.userId ? { userId: options.userId } : {};
   let removed = 0;
   let scanned = 0;
+  const orders = collection('orders') as unknown as CleanupOrderCollection;
 
   while (true) {
-    const result = await collection('orders').where(query).skip(scanned).limit(limit).get();
-    const orders = result.data as Array<OrderRecord & { _id: string }>;
-    if (orders.length === 0) {
+    const result = await orders.where(query).skip(scanned).limit(limit).get();
+    const records = result.data as Array<OrderRecord & { _id: string }>;
+    if (records.length === 0) {
       break;
     }
 
     let batchRemoved = 0;
-    for (const order of orders) {
+    for (const order of records) {
       if (!order._id || !shouldRemoveOrder(order, now)) {
         continue;
       }
-      await collection('orders').doc(order._id).remove();
+      await orders.doc(order._id).remove();
       removed += 1;
       batchRemoved += 1;
     }
 
     if (batchRemoved === 0) {
-      scanned += orders.length;
+      scanned += records.length;
     }
 
-    if (orders.length < limit) {
+    if (records.length < limit) {
       break;
     }
   }

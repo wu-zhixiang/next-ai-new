@@ -58,14 +58,43 @@ export interface MemberPlanRecord {
   planCode: string;
   planName: string;
   virtualPaymentProductId?: string;
-  isFirstBuy?: boolean;
-  isFirstBay?: boolean;
   price: number;
   durationDays: number;
   autoRenewEnabled: boolean;
   status: 'on' | 'off';
   sort: number;
   description?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ProductTypeRecord {
+  _id?: string;
+  productCode: string;
+  productName: string;
+  label: string;
+  tag: string;
+  avatarUrl?: string;
+  available: boolean;
+  description: string;
+  introHighlights?: Array<{
+    title: string;
+    description: string;
+  }>;
+  sort: number;
+  status: 'on' | 'off';
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface AppStoreCountryRecord {
+  _id?: string;
+  countryCode: string;
+  countryName: string;
+  dialingCode: string;
+  available: boolean;
+  sort: number;
+  status: 'on' | 'off';
   createdAt: number;
   updatedAt: number;
 }
@@ -163,6 +192,7 @@ export interface AppStoreEmailVerificationCodeRecord {
   _id?: string;
   email: string;
   code: string;
+  provider?: 'apple' | 'unknown';
   from: string;
   subject: string;
   receivedAt: number;
@@ -176,6 +206,10 @@ export interface AppStoreAccountRecord {
   email: string;
   mobile: string;
   password: string;
+  countryCode?: string;
+  countryName?: string;
+  productCode?: string;
+  productName?: string;
   status: 'available' | 'bound' | 'disabled';
   chatgptAccountEmail?: string;
   orderNo?: string;
@@ -219,11 +253,30 @@ export interface PlanView {
   productName: string;
   planCode: string;
   planName: string;
-  isFirstBuy?: boolean;
-  isFirstBay?: boolean;
   price: number;
   durationDays: number;
   description?: string;
+}
+
+export interface ProductTypeView {
+  productCode: string;
+  productName: string;
+  label: string;
+  tag: string;
+  avatarUrl?: string;
+  available: boolean;
+  description: string;
+  introHighlights: Array<{
+    title: string;
+    description: string;
+  }>;
+}
+
+export interface AppStoreCountryView {
+  countryCode: string;
+  countryName: string;
+  dialingCode: string;
+  available: boolean;
 }
 
 export interface AiNewsView {

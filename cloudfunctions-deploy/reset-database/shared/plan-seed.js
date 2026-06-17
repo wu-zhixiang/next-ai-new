@@ -4,63 +4,72 @@ exports.PLAN_SEED = void 0;
 exports.seedMemberPlans = seedMemberPlans;
 const constants_1 = require("./constants");
 const db_1 = require("./db");
-exports.PLAN_SEED = [
+const SEED_TIME = 1746921600000;
+function generatePlanPid(productCode, planCode) {
+    return `${productCode}_${planCode}`.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+}
+const PLAN_SEED_SOURCE = [
     {
         productCode: constants_1.DEFAULT_PRODUCT_CODE,
-        productName: constants_1.DEFAULT_PRODUCT_NAME,
-        pid: 'ai_news_plus',
+        productName: 'ChatGPT Plus',
         planCode: 'plus',
-        planName: 'AI资讯PLUS会员',
-        virtualPaymentProductId: 'ai_news_plus_one',
-        price: 0.01,
+        planName: 'ChatGPT Plus',
+        virtualPaymentProductId: 'chatgpt_plus',
+        price: 160,
         durationDays: 30,
-        isFirstBuy: false,
-        isFirstBay: false,
         autoRenewEnabled: false,
         status: 'on',
         sort: 1,
-        description: 'PLUS月度会员套餐，适合深度资讯订阅场景。',
-        createdAt: 1746921600000,
-        updatedAt: 1746921600000,
+        description: 'ChatGPT Plus 月度会员套餐。',
     },
     {
         productCode: constants_1.DEFAULT_PRODUCT_CODE,
-        productName: constants_1.DEFAULT_PRODUCT_NAME,
-        pid: 'ai_news_go',
-        planCode: 'go',
-        planName: 'AI资讯GO会员',
-        virtualPaymentProductId: 'ai_news_go',
-        price: 0.01,
-        durationDays: 30,
-        isFirstBuy: false,
-        isFirstBay: false,
+        productName: 'ChatGPT Plus',
+        planCode: 'quarterly',
+        planName: 'ChatGPT Plus 季度会员',
+        virtualPaymentProductId: 'chatgpt_qtr',
+        price: 460,
+        durationDays: 90,
         autoRenewEnabled: false,
         status: 'on',
         sort: 2,
-        description: 'GO月度会员套餐，适合轻量资讯订阅场景。',
-        createdAt: 1746921600000,
-        updatedAt: 1746921600000,
+        description: 'ChatGPT Plus 季度会员套餐。',
+    },
+    {
+        productCode: 'claude_pro',
+        productName: 'Claude Pro',
+        planCode: 'pro',
+        planName: 'Claude Pro',
+        virtualPaymentProductId: 'claude_pro',
+        price: 128,
+        durationDays: 30,
+        autoRenewEnabled: false,
+        status: 'on',
+        sort: 3,
+        description: 'Claude Pro 月度会员套餐。',
     },
 ];
-const LEGACY_PLAN_CODES = ['annual', 'quarterly', 'monthly'];
+exports.PLAN_SEED = PLAN_SEED_SOURCE.map((seed) => ({
+    ...seed,
+    pid: generatePlanPid(seed.productCode, seed.planCode),
+    createdAt: SEED_TIME,
+    updatedAt: SEED_TIME,
+}));
 async function seedMemberPlans(now = Date.now()) {
-    for (const planCode of LEGACY_PLAN_CODES) {
-        const existing = await (0, db_1.collection)('memberPlans').where({ planCode }).limit(1).get();
-        const current = existing.data[0];
-        if (current === null || current === void 0 ? void 0 : current._id) {
-            await (0, db_1.collection)('memberPlans').doc(current._id).update({
-                data: {
-                    status: 'off',
-                    updatedAt: now,
-                },
-            });
+    await (0, db_1.ensureCollection)('memberPlans');
+    const plans = (0, db_1.collection)('memberPlans');
+    const targetPids = new Set(exports.PLAN_SEED.map((seed) => seed.pid));
+    const currentPlans = (await plans.get()).data;
+    for (const plan of currentPlans) {
+        if (plan._id && (!plan.pid || !targetPids.has(plan.pid))) {
+            await plans.doc(plan._id).remove();
         }
     }
     for (const seed of exports.PLAN_SEED) {
-        const existing = await (0, db_1.collection)('memberPlans').where({ planCode: seed.planCode }).limit(1).get();
+        const existing = await plans.where({ pid: seed.pid }).limit(1).get();
         const current = existing.data[0];
         if (current === null || current === void 0 ? void 0 : current._id) {
-            await (0, db_1.collection)('memberPlans').doc(current._id).update({
+            await plans.doc(current._id).update({
                 data: {
                     ...seed,
                     updatedAt: now,
@@ -68,7 +77,7 @@ async function seedMemberPlans(now = Date.now()) {
             });
             continue;
         }
-        await (0, db_1.collection)('memberPlans').add({
+        await plans.add({
             data: {
                 ...seed,
                 createdAt: now,

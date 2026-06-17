@@ -1,6 +1,8 @@
 import { COLLECTIONS } from '../shared/constants';
 import { collection } from '../shared/db';
+import { seedAppStoreCountries } from '../shared/appstore-country-seed';
 import { seedMemberPlans } from '../shared/plan-seed';
+import { seedProductTypes } from '../shared/product-type-seed';
 import { ok } from '../shared/utils';
 
 interface Event {
@@ -8,6 +10,8 @@ interface Event {
   dryRun?: boolean;
   includeUsers?: boolean;
   includeMemberPlans?: boolean;
+  includeProductTypes?: boolean;
+  includeAppStoreCountries?: boolean;
 }
 
 type CollectionKey = keyof typeof COLLECTIONS;
@@ -100,6 +104,8 @@ export async function main(event: Event = {}) {
     ...DEFAULT_CLEAR_COLLECTIONS,
     ...(event.includeUsers ? (['users'] as CollectionKey[]) : []),
     ...(event.includeMemberPlans ? (['memberPlans'] as CollectionKey[]) : []),
+    ...(event.includeProductTypes ? (['productTypes'] as CollectionKey[]) : []),
+    ...(event.includeAppStoreCountries ? (['appstoreCountries'] as CollectionKey[]) : []),
   ];
 
   if (event.dryRun) {
@@ -115,6 +121,8 @@ export async function main(event: Event = {}) {
       clearCollections: clearCollections.map((name) => COLLECTIONS[name]),
       counts,
       seedMemberPlans: true,
+      seedProductTypes: true,
+      seedAppStoreCountries: true,
     });
   }
 
@@ -123,14 +131,20 @@ export async function main(event: Event = {}) {
     removed[COLLECTIONS[name]] = await clearCollection(name);
   }
   const resetUserPointsCount = event.includeUsers ? 0 : await resetUserPoints();
+  const seededProductTypes = await seedProductTypes();
+  const seededAppStoreCountries = await seedAppStoreCountries();
   const seededPlans = await seedMemberPlans();
 
   return ok({
     success: true,
     removed,
     resetUserPointsCount,
+    seededProductTypes,
+    seededAppStoreCountries,
     seededPlans,
     includeUsers: Boolean(event.includeUsers),
     includeMemberPlans: Boolean(event.includeMemberPlans),
+    includeProductTypes: Boolean(event.includeProductTypes),
+    includeAppStoreCountries: Boolean(event.includeAppStoreCountries),
   });
 }

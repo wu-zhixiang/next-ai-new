@@ -6,7 +6,7 @@ const db_1 = require("./shared/db");
 const context_1 = require("./_lib/context");
 const utils_1 = require("./shared/utils");
 async function main() {
-    var _a, _b, _c;
+    var _a, _b, _c, _d;
     const { OPENID } = (0, context_1.getWxContext)();
     const user = await (0, db_1.getUserByOpenId)(OPENID);
     if (!user) {
@@ -32,6 +32,6 @@ async function main() {
         membershipProductName: membership === null || membership === void 0 ? void 0 : membership.productName,
         subscribeMsgAuth: user.subscribeMsgAuth,
         newsSubscribeMsgAuth: Boolean(user.newsSubscribeMsgAuth),
-        newsSubscribeMsgQuota: (_a = user.newsSubscribeMsgQuota) !== null && _a !== void 0 ? _a : 0,
+        newsSubscribeMsgQuota: (_d = user.newsSubscribeMsgQuota) !== null && _d !== void 0 ? _d : 0,
     });
 }

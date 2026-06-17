@@ -51,6 +51,9 @@ export async function ensureCollection(name: CollectionName): Promise<void> {
 }
 
 export async function getUserByOpenId(openid: string): Promise<(UserRecord & { _id: string }) | null> {
+  if (!openid) {
+    return null;
+  }
   const result = await collection('users').where({ openid }).limit(1).get();
   return (result.data[0] as (UserRecord & { _id: string }) | undefined) ?? null;
 }

@@ -1,27 +1,24 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.main = main;
-const cloud = require("wx-server-sdk");
-cloud.init({
-    env: cloud.DYNAMIC_CURRENT_ENV,
+const wx_server_sdk_1 = __importDefault(require("wx-server-sdk"));
+const utils_1 = require("./shared/utils");
+wx_server_sdk_1.default.init({
+    env: wx_server_sdk_1.default.DYNAMIC_CURRENT_ENV,
 });
-const db = cloud.database();
+const db = wx_server_sdk_1.default.database();
 const DEFAULT_CONFIG = {
     enableNewsAuthModal: true,
 };
-function ok(data, message = 'ok') {
-    return {
-        code: 0,
-        message,
-        data,
-    };
-}
 async function main() {
     var _a;
     try {
         const result = await db.collection('app_config').doc('client').get();
-        const config = (_a = result.data) !== null && _a !== void 0 ? _a : {};
-        return ok({
+        const config = ((_a = result.data) !== null && _a !== void 0 ? _a : {});
+        return (0, utils_1.ok)({
             enableNewsAuthModal: config.enableNewsAuthModal !== false,
         });
     }
@@ -32,7 +29,7 @@ async function main() {
             || message.includes('Table not exist')
             || message.includes('document.get:fail')
             || message.includes('cannot find document')) {
-            return ok(DEFAULT_CONFIG);
+            return (0, utils_1.ok)(DEFAULT_CONFIG);
         }
         throw error;
     }

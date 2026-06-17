@@ -30,11 +30,30 @@ export interface PlanView {
   productName: string;
   planCode: string;
   planName: string;
-  isFirstBuy?: boolean;
-  isFirstBay?: boolean;
   price: number;
   durationDays: number;
   description?: string;
+}
+
+export interface ProductTypeView {
+  productCode: string;
+  productName: string;
+  label: string;
+  tag: string;
+  avatarUrl?: string;
+  available: boolean;
+  description: string;
+  introHighlights: Array<{
+    title: string;
+    description: string;
+  }>;
+}
+
+export interface AppStoreCountryView {
+  countryCode: string;
+  countryName: string;
+  dialingCode: string;
+  available: boolean;
 }
 
 export interface AiNewsView {

@@ -420,7 +420,6 @@ export default function ToolDetailPage(): JSX.Element {
             const summary = await callCloudFunction<SummaryResult>('summarize-ai-tool', {
                 content: text,
                 outputType,
-                imageDataUrl: '',
                 fileText: referenceAsset?.fileText || '',
                 fileBase64: referenceAsset?.fileBase64 || '',
                 imageDataUrl: referenceAsset?.imageDataUrl || '',

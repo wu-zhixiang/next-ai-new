@@ -1,6 +1,8 @@
 export const COLLECTIONS = {
   users: 'users',
   memberPlans: 'member_plans',
+  productTypes: 'product_types',
+  appstoreCountries: 'appstore_countries',
   memberships: 'memberships',
   orders: 'orders',
   inviteRelations: 'invite_relations',

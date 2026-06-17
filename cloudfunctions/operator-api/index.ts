@@ -1,9 +1,10 @@
 import https from 'node:https';
 import { decryptAiAccountPassword } from '../shared/ai-account';
+import { DEFAULT_PRODUCT_CODE, DEFAULT_PRODUCT_NAME } from '../shared/constants';
 import { _, app, collection, ensureCollection, getLatestUnusedEmailVerificationCode, getOrderByNo, getUserById } from '../shared/db';
 import { fulfillPaidOrderMembership } from '../shared/orders';
 import { isValidMainlandMobile, normalizeMobile } from '../shared/utils';
-import type { AiNewsRecord, AppStoreAccountRecord, AppStoreEmailVerificationCodeRecord, FulfillmentStatus, OrderRecord, UserRecord } from '../shared/types';
+import type { AiNewsRecord, AppStoreAccountRecord, AppStoreCountryRecord, AppStoreCountryView, AppStoreEmailVerificationCodeRecord, FulfillmentStatus, OrderRecord, ProductTypeRecord, ProductTypeView, UserRecord } from '../shared/types';
 
 interface Event {
   httpMethod?: string;
@@ -20,6 +21,8 @@ interface Event {
     | 'getVerificationCode'
     | 'getAppStoreVerificationCode'
     | 'clearAppStoreVerificationCode'
+    | 'listAppStoreCountries'
+    | 'listProductTypes'
     | 'getAvailableAppStoreAccount'
     | 'generateAppStoreAccount'
     | 'saveAppStoreAccount'
@@ -41,6 +44,9 @@ type OperatorTaskStatus = 'opening' | 'processing' | 'fulfilled' | 'failed';
 const DEFAULT_NEWS_REMINDER_TEMPLATE_ID = 'm7Cb5rMgtJtFdyVn3YvR671tWZwyK87qe6qKr7KPZrQ';
 const APPSTORE_EMAIL_DOMAIN = 'mraclpivot.com';
 const DEFAULT_APPSTORE_MOBILE = '15810901111';
+const DEFAULT_APPSTORE_COUNTRY_CODE = 'PH';
+const DEFAULT_APPSTORE_COUNTRY_NAME = '菲律宾';
+const DEFAULT_APPSTORE_DIALING_CODE = '+63';
 const SUPER_OPERATOR_MOBILE = '15501130351';
 const APPSTORE_PASSWORD_SPECIALS = '!@#$%^&*';
 
@@ -135,6 +141,8 @@ function matchTaskRoute(event: Event): {
     | 'getVerificationCode'
     | 'getAppStoreVerificationCode'
     | 'clearAppStoreVerificationCode'
+    | 'listAppStoreCountries'
+    | 'listProductTypes'
     | 'getAvailableAppStoreAccount'
     | 'generateAppStoreAccount'
     | 'saveAppStoreAccount'
@@ -156,6 +164,12 @@ function matchTaskRoute(event: Event): {
   }
   if (event.action === 'clearAppStoreVerificationCode') {
     return { action: 'clearAppStoreVerificationCode' };
+  }
+  if (event.action === 'listAppStoreCountries') {
+    return { action: 'listAppStoreCountries' };
+  }
+  if (event.action === 'listProductTypes') {
+    return { action: 'listProductTypes' };
   }
   if (event.action === 'getAvailableAppStoreAccount' && event.orderNo) {
     return { action: 'getAvailableAppStoreAccount', orderNo: event.orderNo };
@@ -193,6 +207,14 @@ function matchTaskRoute(event: Event): {
 
   if (method === 'POST' && /(?:^|\/)(?:operator\/)?appstore-accounts$/.test(path)) {
     return { action: 'saveAppStoreAccount' };
+  }
+
+  if (method === 'GET' && /(?:^|\/)(?:operator\/)?appstore-countries$/.test(path)) {
+    return { action: 'listAppStoreCountries' };
+  }
+
+  if (method === 'GET' && /(?:^|\/)(?:operator\/)?product-types$/.test(path)) {
+    return { action: 'listProductTypes' };
   }
 
   if (method === 'GET' && /(?:^|\/)(?:operator\/)?appstore-accounts\/email-code$/.test(path)) {
@@ -329,10 +351,120 @@ function serializeAppStoreAccount(account: AppStoreAccountRecord & { _id: string
     email: account.email,
     mobile: account.mobile,
     password: account.password,
+    countryCode: account.countryCode ?? DEFAULT_APPSTORE_COUNTRY_CODE,
+    countryName: account.countryName ?? DEFAULT_APPSTORE_COUNTRY_NAME,
+    productCode: account.productCode ?? DEFAULT_PRODUCT_CODE,
+    productName: account.productName ?? DEFAULT_PRODUCT_NAME,
     status: account.status,
     chatgptAccountEmail: account.chatgptAccountEmail ?? '',
     orderNo: account.orderNo ?? '',
   };
+}
+
+function toAppStoreCountryView(record: AppStoreCountryRecord): AppStoreCountryView {
+  return {
+    countryCode: record.countryCode,
+    countryName: record.countryName,
+    dialingCode: record.dialingCode,
+    available: record.available,
+  };
+}
+
+function toProductTypeView(record: ProductTypeRecord): ProductTypeView {
+  return {
+    productCode: record.productCode,
+    productName: record.productName,
+    label: record.label,
+    tag: record.tag,
+    avatarUrl: record.avatarUrl,
+    available: record.available,
+    description: record.description,
+    introHighlights: record.introHighlights ?? [],
+  };
+}
+
+async function listProductTypeRecords(): Promise<ProductTypeRecord[]> {
+  await ensureCollection('productTypes');
+  const result = await collection('productTypes')
+    .where({ status: 'on' })
+    .orderBy('sort', 'asc')
+    .get();
+  return result.data as ProductTypeRecord[];
+}
+
+async function listProductTypes(): Promise<HttpResponse> {
+  const productTypes = (await listProductTypeRecords()).map(toProductTypeView);
+  return ok({ productTypes });
+}
+
+async function resolveProductType(value: unknown): Promise<ProductTypeView> {
+  const productCode = normalizeProductCode(value);
+  const productTypes = await listProductTypeRecords();
+  const matched = productTypes.find((product) => product.productCode === productCode && product.available);
+  if (!matched) {
+    throw new Error('请选择支持的商品类型');
+  }
+  return toProductTypeView(matched);
+}
+
+async function listAppStoreCountryRecords(): Promise<AppStoreCountryRecord[]> {
+  await ensureCollection('appstoreCountries');
+  const result = await collection('appstoreCountries')
+    .where({ status: 'on' })
+    .orderBy('sort', 'asc')
+    .get();
+  return result.data as AppStoreCountryRecord[];
+}
+
+async function listAppStoreCountries(): Promise<HttpResponse> {
+  const countries = (await listAppStoreCountryRecords()).map(toAppStoreCountryView);
+  return ok({ countries });
+}
+
+async function resolveAppStoreCountry(value: unknown): Promise<AppStoreCountryView> {
+  const countryCode = normalizeAppStoreCountryCode(value);
+  const countries = await listAppStoreCountryRecords();
+  const matched = countries.find((country) => country.countryCode === countryCode && country.available);
+  if (!matched) {
+    throw new Error('请选择支持的 Apple Store 国家');
+  }
+  return toAppStoreCountryView(matched);
+}
+
+function normalizeAppStoreCountryCode(value: unknown): string {
+  const code = sanitizeText(value, 10).trim().toUpperCase();
+  return /^[A-Z]{2}$/.test(code) ? code : DEFAULT_APPSTORE_COUNTRY_CODE;
+}
+
+function normalizeAppStoreCountryName(value: unknown, countryCode: string): string {
+  return sanitizeText(value, 40) || (countryCode === DEFAULT_APPSTORE_COUNTRY_CODE ? DEFAULT_APPSTORE_COUNTRY_NAME : countryCode);
+}
+
+function normalizeProductCode(value: unknown): string {
+  return sanitizeText(value, 64) || DEFAULT_PRODUCT_CODE;
+}
+
+function normalizeProductName(value: unknown, productCode: string): string {
+  return sanitizeText(value, 80) || (productCode === DEFAULT_PRODUCT_CODE ? DEFAULT_PRODUCT_NAME : productCode);
+}
+
+function getOrderProductCode(order: OrderRecord): string {
+  return normalizeProductCode(order.productCode);
+}
+
+function getOrderProductName(order: OrderRecord): string {
+  return normalizeProductName(order.productName, getOrderProductCode(order));
+}
+
+function isAppStoreAccountForOrder(account: AppStoreAccountRecord, order: OrderRecord): boolean {
+  const accountProductCode = normalizeProductCode(account.productCode);
+  return accountProductCode === getOrderProductCode(order);
+}
+
+function assertAppStoreAccountForOrder(account: AppStoreAccountRecord, order: OrderRecord): void {
+  if (!isAppStoreAccountForOrder(account, order)) {
+    throw new Error(`Apple Store 账号商品类型与订单不匹配，请使用 ${getOrderProductName(order)} 的账号`);
+  }
 }
 
 async function findAppStoreAccountByEmail(email: string): Promise<(AppStoreAccountRecord & { _id: string }) | null> {
@@ -372,10 +504,15 @@ async function getAppStoreAccountByChatgptEmail(chatgptAccountEmail: string): Pr
 async function resolveSubmittedAppStoreAccount(
   body: Record<string, unknown>,
   operatorMobile: string,
+  order: OrderRecord,
 ): Promise<(AppStoreAccountRecord & { _id: string }) | null> {
   const accountId = sanitizeText(body.appleStoreAccountId, 80);
   if (accountId) {
-    return getAppStoreAccountById(accountId);
+    const account = await getAppStoreAccountById(accountId);
+    if (account) {
+      assertAppStoreAccountForOrder(account, order);
+    }
+    return account;
   }
 
   const now = Date.now();
@@ -393,11 +530,19 @@ async function resolveSubmittedAppStoreAccount(
 
   await ensureCollection('appstoreAccounts');
   const existing = await findAppStoreAccountByEmail(email);
+  const productCode = getOrderProductCode(order);
+  const productName = getOrderProductName(order);
+  const country = await resolveAppStoreCountry(body.appleStoreCountryCode);
   if (existing) {
+    assertAppStoreAccountForOrder(existing, order);
     await collection('appstoreAccounts').doc(existing._id).update({
       data: {
         mobile: normalizeAppStoreMobile(operatorMobile),
         password,
+        productCode,
+        productName,
+        countryCode: existing.countryCode ?? country.countryCode,
+        countryName: existing.countryName ?? country.countryName,
         updatedAt: now,
       },
     });
@@ -405,6 +550,10 @@ async function resolveSubmittedAppStoreAccount(
       ...existing,
       mobile: normalizeAppStoreMobile(operatorMobile),
       password,
+      productCode,
+      productName,
+      countryCode: existing.countryCode ?? country.countryCode,
+      countryName: existing.countryName ?? country.countryName,
       updatedAt: now,
     };
   }
@@ -413,11 +562,15 @@ async function resolveSubmittedAppStoreAccount(
     email,
     mobile: normalizeAppStoreMobile(operatorMobile),
     password,
+    countryCode: country.countryCode,
+    countryName: country.countryName,
+    productCode,
+    productName,
     status: 'available',
     createdAt: now,
     updatedAt: now,
   };
-  const result = await collection('appstoreAccounts').add({ data: record });
+  const result = await collection('appstoreAccounts').add({ data: record }) as { _id?: string; id?: string };
   return {
     ...record,
     _id: result._id ?? result.id ?? '',
@@ -433,7 +586,11 @@ async function resolveOrderAppStoreAccount(order: OrderRecord, user?: UserRecord
   if (!email) {
     return null;
   }
-  return getAppStoreAccountByChatgptEmail(email);
+  const byAccountEmail = await getAppStoreAccountByChatgptEmail(email);
+  if (!byAccountEmail || !isAppStoreAccountForOrder(byAccountEmail, order)) {
+    return null;
+  }
+  return byAccountEmail;
 }
 
 async function generateUniqueAppStoreEmail(): Promise<string> {
@@ -886,6 +1043,7 @@ async function buildTask(order: OrderRecord & { _id: string }) {
 
   return {
     orderNo: order.orderNo,
+    productCode: getOrderProductCode(order),
     productName: order.productName,
     planCode: order.planCode,
     planName: order.planName,
@@ -960,7 +1118,7 @@ async function updateTask(orderNo: string, body: Record<string, unknown>, event:
     }
     let appStoreAccount: (AppStoreAccountRecord & { _id: string }) | null;
     try {
-      appStoreAccount = await resolveSubmittedAppStoreAccount(body, operatorMobile);
+      appStoreAccount = await resolveSubmittedAppStoreAccount(body, operatorMobile, order);
     } catch (error) {
       return fail(400, error instanceof Error ? error.message : 'Apple Store 账号信息不正确');
     }
@@ -1142,10 +1300,17 @@ async function clearAppStoreVerificationCode(body: Record<string, unknown>): Pro
 
 async function generateAppStoreAccount(body: Record<string, unknown>): Promise<HttpResponse> {
   const mobile = normalizeAppStoreMobile(body.mobile);
+  const country = await resolveAppStoreCountry(body.countryCode);
+  const product = await resolveProductType(body.productCode);
   const email = await generateUniqueAppStoreEmail();
   return ok({
     email,
     mobile,
+    countryCode: country.countryCode,
+    countryName: country.countryName,
+    dialingCode: country.dialingCode,
+    productCode: product.productCode,
+    productName: product.productName,
     password: generateAppStorePassword(),
   });
 }
@@ -1155,6 +1320,18 @@ async function saveAppStoreAccount(body: Record<string, unknown>): Promise<HttpR
   const email = normalizeAppStoreEmail(body.email);
   const mobile = normalizeAppStoreMobile(body.mobile);
   const password = sanitizeText(body.password, 80);
+  let country: AppStoreCountryView;
+  try {
+    country = await resolveAppStoreCountry(body.countryCode);
+  } catch (error) {
+    return fail(400, error instanceof Error ? error.message : '请选择支持的 Apple Store 国家');
+  }
+  let product: ProductTypeView;
+  try {
+    product = await resolveProductType(body.productCode);
+  } catch (error) {
+    return fail(400, error instanceof Error ? error.message : '请选择支持的商品类型');
+  }
   if (!isValidAppStoreEmail(email)) {
     return fail(400, `Apple Store 邮箱必须以 @${APPSTORE_EMAIL_DOMAIN} 结尾`);
   }
@@ -1170,11 +1347,15 @@ async function saveAppStoreAccount(body: Record<string, unknown>): Promise<HttpR
     email,
     mobile,
     password,
+    countryCode: country.countryCode,
+    countryName: country.countryName,
+    productCode: product.productCode,
+    productName: product.productName,
     status: 'available',
     createdAt: now,
     updatedAt: now,
   };
-  const result = await collection('appstoreAccounts').add({ data: record });
+  const result = await collection('appstoreAccounts').add({ data: record }) as { _id?: string; id?: string };
   const id = result._id ?? result.id ?? '';
   return ok({
     success: true,
@@ -1210,10 +1391,10 @@ async function getAvailableAppStoreAccount(orderNo: string, mobile?: string): Pr
     })
     .get();
   const account = (result.data as Array<AppStoreAccountRecord & { _id: string }>)
-    .filter((item) => !item.orderNo && !item.chatgptAccountEmail && normalizeMobile(item.mobile).endsWith(targetTail))
+    .filter((item) => !item.orderNo && !item.chatgptAccountEmail && normalizeMobile(item.mobile).endsWith(targetTail) && isAppStoreAccountForOrder(item, order))
     .sort((left, right) => (left.createdAt ?? 0) - (right.createdAt ?? 0))[0];
   if (!account) {
-    return fail(404, `暂无尾号为 ${targetTail} 的可用 Apple Store 账号，请先到注册页保存账号`);
+    return fail(404, `暂无尾号为 ${targetTail} 且匹配 ${getOrderProductName(order)} 的可用 Apple Store 账号，请先到注册页保存账号`);
   }
 
   return ok({ account: serializeAppStoreAccount(account), reused: false });
@@ -1310,6 +1491,12 @@ export async function main(event: Event) {
     }
     if (route.action === 'clearAppStoreVerificationCode') {
       return clearAppStoreVerificationCode(parseBody(event));
+    }
+    if (route.action === 'listAppStoreCountries') {
+      return listAppStoreCountries();
+    }
+    if (route.action === 'listProductTypes') {
+      return listProductTypes();
     }
     if (route.action === 'getAvailableAppStoreAccount') {
       return getAvailableAppStoreAccount(route.orderNo as string, event.queryStringParameters?.mobile);

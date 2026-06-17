@@ -21,6 +21,12 @@
       "name": "list-member-plans"
     },
     {
+      "name": "list-appstore-countries"
+    },
+    {
+      "name": "list-product-types"
+    },
+    {
       "name": "pay-notify"
     },
     {

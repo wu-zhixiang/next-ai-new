@@ -1,6 +1,7 @@
+"use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.main = main;
-const SUCCESS_CODE = 0;
+const constants_1 = require("./shared/constants");
 const LEGACY_PROMPT_PREFIXES = [
     '请帮我总结这篇 AI 资讯，突出核心变化、影响范围和普通用户应该关注的点：',
     '请把下面内容整理成行动清单，按优先级输出，避免空泛建议：',
@@ -10,10 +11,10 @@ const LEGACY_PROMPT_PREFIXES = [
 const MAX_IMAGE_DATA_URL_LENGTH = 2.5 * 1024 * 1024;
 const MAX_FILE_TEXT_LENGTH = 6000;
 let cloudbaseApp = null;
+// eslint-disable-next-line @typescript-eslint/no-var-requires
 const tcb = require('@cloudbase/node-sdk');
-const JSZip = require('jszip');
 function ok(data) {
-    return { code: SUCCESS_CODE, message: 'ok', data };
+    return { code: constants_1.SUCCESS_CODE, message: 'ok', data };
 }
 function fail(message) {
     return { code: 400, message, data: null };
@@ -40,15 +41,6 @@ function sanitizeFileName(value) {
 function sanitizeFileType(value) {
     return String(value || '').trim().slice(0, 80);
 }
-function sanitizeFileBase64(value) {
-    const raw = String(value || '').trim();
-    if (!raw) {
-        return '';
-    }
-    const match = raw.match(/^data:[^;]+;base64,(.+)$/);
-    const base64 = match ? match[1] : raw;
-    return /^[A-Za-z0-9+/=]+$/.test(base64) ? base64 : '';
-}
 function getFileExtension(fileName) {
     const normalized = String(fileName || '').split('?')[0].split('#')[0];
     const matched = normalized.match(/\.([a-z0-9]+)$/i);
@@ -56,140 +48,6 @@ function getFileExtension(fileName) {
 }
 function isImageFileExtension(extension) {
     return ['jpg', 'jpeg', 'png', 'webp'].includes(extension);
-}
-function isTextFileExtension(extension) {
-    return ['txt', 'md', 'markdown', 'csv', 'json', 'html', 'htm', 'xml', 'log'].includes(extension);
-}
-function decodeHtmlEntities(value) {
-    return value
-        .replace(/&nbsp;/g, ' ')
-        .replace(/&amp;/g, '&')
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&quot;/g, '"')
-        .replace(/&#39;/g, '\'')
-        .replace(/&#(\d+);/g, (_match, code) => String.fromCharCode(Number(code)))
-        .replace(/&#x([0-9a-f]+);/gi, (_match, code) => String.fromCharCode(Number.parseInt(code, 16)));
-}
-function normalizeExtractedText(value) {
-    return decodeHtmlEntities(String(value || '')
-        .replace(/<[^>]+>/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim());
-}
-function extractXmlText(xml) {
-    return normalizeExtractedText(String(xml || '')
-        .replace(/<\?xml[\s\S]*?\?>/g, ' ')
-        .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1'));
-}
-function unescapePdfString(value) {
-    return String(value || '')
-        .replace(/\\([nrtbf()\\])/g, (_match, char) => {
-        const map = { n: '\n', r: '\r', t: '\t', b: '\b', f: '\f', '(': '(', ')': ')', '\\': '\\' };
-        return map[char] || char;
-    })
-        .replace(/\\([0-7]{1,3})/g, (_match, code) => String.fromCharCode(Number.parseInt(code, 8)));
-}
-function decodePdfHexString(hex) {
-    const clean = String(hex || '').replace(/\s+/g, '');
-    if (!clean) {
-        return '';
-    }
-    const normalized = clean.length % 2 === 0 ? clean : `${clean}0`;
-    const bytes = [];
-    for (let index = 0; index < normalized.length; index += 2) {
-        bytes.push(Number.parseInt(normalized.slice(index, index + 2), 16));
-    }
-    if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) {
-        let result = '';
-        for (let index = 2; index + 1 < bytes.length; index += 2) {
-            result += String.fromCharCode((bytes[index] << 8) | bytes[index + 1]);
-        }
-        return result;
-    }
-    return Buffer.from(bytes).toString('utf8');
-}
-function extractPdfText(buffer) {
-    const latin = buffer.toString('latin1');
-    const parts = [];
-    const literalMatches = latin.matchAll(/\(((?:\\.|[^\\()])*)\)\s*(?:Tj|'|TJ)/g);
-    for (const match of literalMatches) {
-        parts.push(unescapePdfString(match[1]));
-    }
-    const arrayMatches = latin.matchAll(/\[((?:.|\n)*?)\]\s*TJ/g);
-    for (const match of arrayMatches) {
-        const chunk = match[1];
-        const nestedLiteralMatches = chunk.matchAll(/\(((?:\\.|[^\\()])*)\)/g);
-        for (const nestedMatch of nestedLiteralMatches) {
-            parts.push(unescapePdfString(nestedMatch[1]));
-        }
-    }
-    const hexMatches = latin.matchAll(/<([0-9A-Fa-f\s]{4,})>\s*(?:Tj|'|TJ)/g);
-    for (const match of hexMatches) {
-        const text = decodePdfHexString(match[1]);
-        if (text) {
-            parts.push(text);
-        }
-    }
-    return normalizeExtractedText(parts.join(' ')).slice(0, MAX_FILE_TEXT_LENGTH);
-}
-function extractLooseBinaryText(buffer) {
-    const latin = buffer.toString('latin1');
-    const candidates = latin.match(/[A-Za-z0-9\u4e00-\u9fa5][A-Za-z0-9\u4e00-\u9fa5\s,.;:!?，。！？、（）()\-_/]{3,}/g) || [];
-    return normalizeExtractedText(candidates.join(' ')).slice(0, MAX_FILE_TEXT_LENGTH);
-}
-async function extractZipText(buffer) {
-    const zip = await JSZip.loadAsync(buffer);
-    const paths = [];
-    zip.forEach((relativePath, file) => {
-        if (!file.dir && /\.xml$/i.test(relativePath) && /(word\/|ppt\/slides\/|xl\/sharedStrings\.xml|xl\/worksheets\/)/.test(relativePath)) {
-            paths.push(relativePath);
-        }
-    });
-    paths.sort();
-    const parts = [];
-    for (const filePath of paths.slice(0, 40)) {
-        const file = zip.file(filePath);
-        if (!file) {
-            continue;
-        }
-        const text = await file.async('text');
-        const extracted = extractXmlText(text);
-        if (extracted) {
-            parts.push(extracted);
-        }
-    }
-    return normalizeExtractedText(parts.join(' ')).slice(0, MAX_FILE_TEXT_LENGTH);
-}
-async function resolveFileText(fileText, fileBase64, fileName) {
-    const textFromClient = sanitizeFileText(fileText);
-    if (textFromClient) {
-        return textFromClient;
-    }
-    const base64 = sanitizeFileBase64(fileBase64);
-    if (!base64) {
-        return '';
-    }
-    const extension = getFileExtension(fileName);
-    const buffer = Buffer.from(base64, 'base64');
-    if (isTextFileExtension(extension)) {
-        return sanitizeFileText(buffer.toString('utf8'));
-    }
-    if (extension === 'pdf') {
-        const extracted = extractPdfText(buffer);
-        return extracted || extractLooseBinaryText(buffer);
-    }
-    if (['doc', 'docx', 'xls', 'xlsx', 'pptx'].includes(extension)) {
-        try {
-            const extracted = await extractZipText(buffer);
-            return extracted || extractLooseBinaryText(buffer);
-        }
-        catch (error) {
-            console.warn('ai.tool.summary.zipExtractFailed', error instanceof Error ? error.message : String(error));
-            return extractLooseBinaryText(buffer);
-        }
-    }
-    return '';
 }
 function normalizeOutputType(value) {
     if (value === 'bullets' || value === 'xiaohongshu' || value === 'moments') {
@@ -308,6 +166,7 @@ ${fileInstruction}
 ${content}`;
 }
 async function generateByAi(content, outputType, imageDataUrl, hasFile) {
+    var _a;
     try {
         const model = imageDataUrl
             ? process.env.TCB_AI_VISION_MODEL || 'deepseek-v4-pro'
@@ -330,7 +189,7 @@ async function generateByAi(content, outputType, imageDataUrl, hasFile) {
                 },
             ],
         });
-        const parsed = parseJsonObject(result.text || '');
+        const parsed = parseJsonObject((_a = result.text) !== null && _a !== void 0 ? _a : '');
         const title = typeof (parsed === null || parsed === void 0 ? void 0 : parsed.title) === 'string' ? parsed.title.trim().slice(0, 48) : '';
         const summary = typeof (parsed === null || parsed === void 0 ? void 0 : parsed.summary) === 'string' ? parsed.summary.trim().slice(0, 240) : '';
         const outputText = typeof (parsed === null || parsed === void 0 ? void 0 : parsed.outputText) === 'string' ? parsed.outputText.trim().slice(0, 2000) : '';
@@ -355,16 +214,15 @@ async function main(event = {}) {
     const content = sanitizeContent(event.content);
     const outputType = normalizeOutputType(event.outputType);
     const imageDataUrl = sanitizeImageDataUrl(event.imageDataUrl);
+    const fileText = sanitizeFileText(event.fileText);
     const fileName = sanitizeFileName(event.fileName);
     const fileType = sanitizeFileType(event.fileType);
     const fileExtension = getFileExtension(fileName);
     const isImageFile = isImageFileExtension(fileExtension);
-    const hasRawFile = Boolean(String(event.fileText || '').trim() || String(event.fileBase64 || '').trim());
+    const hasFile = Boolean(fileText);
     if (isImageFile && !imageDataUrl) {
         return fail('图片素材过大、格式不正确或未能完整上传，请压缩后重试');
     }
-    const fileText = await resolveFileText(event.fileText, event.fileBase64, fileName);
-    const hasFile = Boolean(fileText);
     const fileContext = hasFile
         ? [
             content,
@@ -374,7 +232,7 @@ async function main(event = {}) {
             fileText,
         ].join('\n')
         : content;
-    if (!imageDataUrl && !hasRawFile && content.length === 0) {
+    if (!imageDataUrl && !hasFile && content.length === 0) {
         return fail('请输入内容或添加素材');
     }
     console.info('ai.tool.summary.material.received', {
@@ -382,7 +240,6 @@ async function main(event = {}) {
         hasFile,
         fileName: fileName || '',
         fileTextLength: fileText.length,
-        fileBase64Length: String(event.fileBase64 || '').trim().length,
         outputType,
     });
     const fallbackContent = imageDataUrl || hasFile ? `用户上传了参考素材。用户描述：${fileContext}` : content;
@@ -390,7 +247,7 @@ async function main(event = {}) {
     if (generated.result) {
         return ok(generated.result);
     }
-    if (imageDataUrl || hasRawFile) {
+    if (imageDataUrl || hasFile) {
         return fail(`参考素材解析失败：${generated.errorMessage || '请更换素材或补充文字描述'}`);
     }
     return ok(fallbackResult(fallbackContent, outputType));

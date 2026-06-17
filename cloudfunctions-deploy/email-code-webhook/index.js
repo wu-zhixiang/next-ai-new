@@ -6,7 +6,7 @@ const utils_1 = require("./shared/utils");
 const CODE_TTL_MS = 10 * 60 * 1000;
 const EMAIL_DOMAIN = '@mraclpivot.com';
 async function main(event = {}) {
-    var _a, _b;
+    var _a, _b, _c, _d;
     const payload = normalizeEvent(event);
     assertWebhookSecret(event);
     const email = normalizeEmail(payload.to);
@@ -54,8 +54,8 @@ async function main(event = {}) {
         userId: user._id,
         code,
         provider: isOpenAiEmail(payload.from) ? 'openai' : 'unknown',
-        from: (_a = payload.from) !== null && _a !== void 0 ? _a : '',
-        subject: (_b = payload.subject) !== null && _b !== void 0 ? _b : '',
+        from: (_c = payload.from) !== null && _c !== void 0 ? _c : '',
+        subject: (_d = payload.subject) !== null && _d !== void 0 ? _d : '',
         receivedAt,
         expiresAt: receivedAt + CODE_TTL_MS,
         usedAt: null,

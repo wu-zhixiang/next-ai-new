@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Button, Image, Input, Text, View } from '@tarojs/components';
 import Taro, { useDidShow } from '@tarojs/taro';
 import AuthModal, { type AuthUserInfo } from '@/components/AuthModal';
@@ -6,7 +6,7 @@ import { PaymentLockOverlay } from '@/components/PaymentLockOverlay';
 import { PopLayout } from '@/components/PopLayout';
 import { SaasPageFrame } from '@/components/SaasPageFrame';
 import { callCloudFunction } from '@/services/api';
-import type { MembershipView, PlanView } from '@/types';
+import type { MembershipView, PlanView, ProductTypeView } from '@/types';
 import { AUTH_CACHE_KEY, getCachedUserInfo, saveCachedUserInfo, type CachedUserInfo, type LoginResult } from '@/utils/auth';
 import { formatDate } from '@/utils/format';
 import { isMobileBound } from '@/utils/mobile';
@@ -37,14 +37,6 @@ interface MemberHomeData {
   subscribeMsgAuth?: boolean;
 }
 
-interface ProductOption {
-  code: string;
-  label: string;
-  tag: string;
-  available: boolean;
-  description: string;
-}
-
 interface ProductPlanOption {
   pid?: string;
   planCode: string;
@@ -53,12 +45,15 @@ interface ProductPlanOption {
   priceLabel: string;
   durationLabel: string;
   periodLabel?: string;
-  isFirstBuy?: boolean;
   recommended?: boolean;
 }
 
 interface PlanListResult {
   plans: PlanView[];
+}
+
+interface ProductTypeListResult {
+  productTypes: ProductTypeView[];
 }
 
 interface ProfileResult {
@@ -134,36 +129,10 @@ interface WechatPhoneEvent {
   };
 }
 
-const PRODUCT_OPTIONS: ProductOption[] = [
-  {
-    code: 'ai_news',
-    label: 'AIO Version',
-    tag: '已上线',
-    available: true,
-    description: '适合 Open AI 资讯订阅、精选内容与会员权益场景。',
-  },
-  {
-    code: 'claude_pro',
-    label: 'Anthropic资讯会员',
-    tag: '即将上线',
-    available: false,
-    description: '预留 Anthropic 资讯会员产品，后续接入独立套餐与交付信息。',
-  },
-];
-
-const FALLBACK_PLAN_MAP: Record<string, ProductPlanOption[]> = {
-  ai_news: [
-    { planCode: 'plus', displayName: 'AI资讯PLUS会员', price: 0.01, priceLabel: '¥0.01', durationLabel: '30 天', periodLabel: '月', recommended: true },
-    { planCode: 'go', displayName: 'AI资讯GO会员', price: 0.01, priceLabel: '¥0.01', durationLabel: '30 天', periodLabel: '月' },
-  ],
-  claude_pro: [
-    { planCode: 'claude_waitlist', displayName: 'Anthropic资讯会员', price: 0, priceLabel: '即将上线', durationLabel: '敬请期待' },
-  ],
-};
-
 const ACCOUNT_INFO_ICON = require('../../assets/member/account-info.svg') as string;
 const CUSTOMER_SUPPORT_ICON = require('../../assets/member/customer-support.svg') as string;
 const VERIFICATION_CODE_ICON = require('../../assets/member/verification-code.svg') as string;
+const MESSAGE_REMINDER_ICON = require('../../assets/member/message-reminder.svg') as string;
 const CHEVRON_RIGHT_ICON = require('../../assets/icons/chevron-right.svg') as string;
 const CACHE_KEY = AUTH_CACHE_KEY;
 const AI_ACCOUNT_DOMAIN = '@mraclpivot.com';
@@ -172,7 +141,6 @@ const PRIVACY_AGREEMENT_URL = 'https://cloud1-d3gbrpive8611514c-1348953433.tclou
 
 function buildPlanOption(plan: PlanView, index: number): ProductPlanOption {
   const periodLabel = plan.durationDays >= 365 ? '年' : plan.durationDays >= 90 ? '季' : '月';
-  const isFirstBuy = normalizeBooleanFlag(plan.isFirstBuy);
   return {
     pid: plan.pid,
     planCode: plan.planCode,
@@ -181,19 +149,8 @@ function buildPlanOption(plan: PlanView, index: number): ProductPlanOption {
     priceLabel: `¥${plan.price.toFixed(2)}`,
     durationLabel: `${plan.durationDays} 天`,
     periodLabel,
-    isFirstBuy,
     recommended: index === 0,
   };
-}
-
-function normalizeBooleanFlag(value: unknown): boolean {
-  if (value === true || value === 1) {
-    return true;
-  }
-  if (typeof value === 'string') {
-    return value.trim().toLowerCase() === 'true' || value.trim() === '1';
-  }
-  return false;
 }
 
 export default function MemberPage(): JSX.Element {
@@ -203,8 +160,10 @@ export default function MemberPage(): JSX.Element {
     deliverySummary: { hasDeliveryInfo: false },
   });
   const [backendPlans, setBackendPlans] = useState<PlanView[]>([]);
+  const [backendProductTypes, setBackendProductTypes] = useState<ProductTypeView[]>([]);
   const [plansLoaded, setPlansLoaded] = useState(false);
   const [activeProductCode, setActiveProductCode] = useState('ai_news');
+  const [productTypeSheetVisible, setProductTypeSheetVisible] = useState(false);
   const [planSheetVisible, setPlanSheetVisible] = useState(false);
   const [productIntroVisible, setProductIntroVisible] = useState(false);
   const [introProductCode, setIntroProductCode] = useState('ai_news');
@@ -234,6 +193,7 @@ export default function MemberPage(): JSX.Element {
   useEffect(() => {
     loadCachedUserInfo();
     void loadData();
+    void loadProductTypes();
     void loadPlans();
   }, []);
 
@@ -304,6 +264,15 @@ export default function MemberPage(): JSX.Element {
     }
   }
 
+  async function loadProductTypes(): Promise<void> {
+    try {
+      const result = await callCloudFunction<ProductTypeListResult>('list-product-types');
+      setBackendProductTypes(result.productTypes);
+    } catch {
+      setBackendProductTypes([]);
+    }
+  }
+
   const isActive = data.membership.status === 'active';
   const isOpening = data.membership.status === 'opening';
   const memberStatusLabel = data.membership.status === 'none' ? '立即开通' : data.membership.openStatusLabel ?? '立即开通';
@@ -321,8 +290,11 @@ export default function MemberPage(): JSX.Element {
   const mobileBound = isMobileBound(data.userInfo?.mobile);
   const nickname = data.userInfo?.nickname ?? cachedUserInfo?.nickname ?? '微信用户';
   const avatarUrl = data.userInfo?.avatarUrl ?? cachedUserInfo?.avatarUrl ?? '';
-  const activeProduct = PRODUCT_OPTIONS.find((item) => item.code === activeProductCode) ?? PRODUCT_OPTIONS[0];
-  const introProduct = PRODUCT_OPTIONS.find((item) => item.code === introProductCode) ?? PRODUCT_OPTIONS[0];
+  const productTypes = backendProductTypes;
+  const membershipProduct = productTypes.find((item) => item.productCode === currentProductCode);
+  const memberCardAvatarUrl = data.membership.status === 'none' ? avatarUrl : membershipProduct?.avatarUrl || avatarUrl;
+  const activeProduct = productTypes.find((item) => item.productCode === activeProductCode);
+  const introProduct = productTypes.find((item) => item.productCode === introProductCode);
   const plansByProduct = useMemo(() => {
     const nextMap: Record<string, ProductPlanOption[]> = {};
     backendPlans.forEach((plan) => {
@@ -332,8 +304,8 @@ export default function MemberPage(): JSX.Element {
     });
     return nextMap;
   }, [backendPlans]);
-  const activePlans = plansByProduct[activeProductCode] ?? (activeProduct.available ? [] : FALLBACK_PLAN_MAP[activeProductCode] ?? []);
-  const activeProductAvailable = activeProduct.available && activePlans.some((plan) => plan.price > 0);
+  const activePlans = plansByProduct[activeProductCode] ?? [];
+  const activeProductAvailable = Boolean(activeProduct?.available && activePlans.some((plan) => plan.price > 0));
   const selectedPlan = activePlans.find((plan) => plan.planCode === selectedPlanCode) ?? activePlans[0];
   const pointsBalance = Math.max(0, Math.floor(data.userInfo?.pointsBalance ?? cachedUserInfo?.pointsBalance ?? 0));
   const maxPointsDeducted = selectedPlan ? Math.min(pointsBalance, Math.floor(selectedPlan.price)) : 0;
@@ -344,9 +316,13 @@ export default function MemberPage(): JSX.Element {
   const messageReminderAvailable = activeProductAvailable;
 
   function openPlanSheet(productCode: string): void {
-    const nextProduct = PRODUCT_OPTIONS.find((item) => item.code === productCode) ?? PRODUCT_OPTIONS[0];
-    const nextPlans = plansByProduct[nextProduct.code] ?? (nextProduct.available ? [] : FALLBACK_PLAN_MAP[nextProduct.code] ?? []);
-    setActiveProductCode(nextProduct.code);
+    const nextProduct = productTypes.find((item) => item.productCode === productCode);
+    if (!nextProduct) {
+      Taro.showToast({ title: '商品信息加载失败，请刷新后重试', icon: 'none' });
+      return;
+    }
+    const nextPlans = plansByProduct[nextProduct.productCode] ?? [];
+    setActiveProductCode(nextProduct.productCode);
     setSelectedPlanCode(nextPlans[0]?.planCode ?? '');
     setPurchaseAgreementAccepted(false);
     setUsePointsDeduction(false);
@@ -354,8 +330,21 @@ export default function MemberPage(): JSX.Element {
     setPlanSheetVisible(true);
   }
 
+  function openProductTypeSheet(): void {
+    setProductTypeSheetVisible(true);
+  }
+
+  function closeProductTypeSheet(): void {
+    setProductTypeSheetVisible(false);
+  }
+
   function openProductIntro(productCode: string): void {
+    if (!productTypes.some((item) => item.productCode === productCode)) {
+      Taro.showToast({ title: '商品信息加载失败，请刷新后重试', icon: 'none' });
+      return;
+    }
     setIntroProductCode(productCode);
+    setProductTypeSheetVisible(false);
     setProductIntroVisible(true);
   }
 
@@ -411,7 +400,7 @@ export default function MemberPage(): JSX.Element {
   }
 
   function openSubscriptionFlow(productCode: string): void {
-    const product = PRODUCT_OPTIONS.find((item) => item.code === productCode);
+    const product = productTypes.find((item) => item.productCode === productCode);
     if (!product?.available) {
       Taro.showToast({ title: product?.tag || '暂不支持购买', icon: 'none' });
       return;
@@ -429,12 +418,16 @@ export default function MemberPage(): JSX.Element {
   }
 
   function continueFromProductIntro(): void {
+    if (!introProduct) {
+      Taro.showToast({ title: '商品信息加载失败，请刷新后重试', icon: 'none' });
+      return;
+    }
     if (!introProduct.available) {
       Taro.showToast({ title: introProduct.tag || '暂不支持购买', icon: 'none' });
       return;
     }
     setProductIntroVisible(false);
-    openSubscriptionFlow(introProduct.code);
+    openSubscriptionFlow(introProduct.productCode);
   }
 
   async function handleSaveAiAccount(): Promise<void> {
@@ -852,8 +845,8 @@ export default function MemberPage(): JSX.Element {
             <>
               <View className='member-profile'>
                 <View className='member-profile__avatar'>
-                  {avatarUrl ? (
-                    <Image className='member-profile__avatar-image' src={avatarUrl} mode='aspectFill' />
+                  {memberCardAvatarUrl ? (
+                    <Image className='member-profile__avatar-image' src={memberCardAvatarUrl} mode='aspectFill' />
                   ) : (
                     <Text>{nickname.slice(0, 1).toUpperCase()}</Text>
                   )}
@@ -862,7 +855,7 @@ export default function MemberPage(): JSX.Element {
                 <View className='member-profile__copy'>
                   <Text
                     className={`member-plan-title__status member-plan-title__status--${renewAvailable ? 'none' : data.membership.status}`}
-                    onClick={() => (data.membership.status === 'none' || renewAvailable) && openSubscriptionFlow(currentProductCode)}
+                    onClick={() => (data.membership.status === 'none' || renewAvailable) && openProductTypeSheet()}
                   >
                     {renewAvailable ? '立即续费' : memberStatusLabel}
                   </Text>
@@ -886,6 +879,43 @@ export default function MemberPage(): JSX.Element {
               </View>
             </>
           )}
+        </View>
+
+        <View className='member-section'>
+          <Text className='member-section__title'>工具类型</Text>
+          <View className='member-list-card'>
+            {productTypes.length > 0 ? (
+              productTypes.map((product, index) => (
+                <Fragment key={product.productCode}>
+                  {index > 0 ? <View className='member-divider' /> : null}
+                  <View
+                    className={`member-right-item ${product.available ? '' : 'member-right-item--disabled'}`}
+                    onClick={() => openProductIntro(product.productCode)}
+                  >
+                    <View className='member-product-type__main'>
+                      {product.avatarUrl ? (
+                        <Image className='member-product-type__avatar' src={product.avatarUrl} mode='aspectFill' />
+                      ) : null}
+                      <View className='member-product-type__copy'>
+                        <Text className='member-right-item__title'>{product.label}</Text>
+                        <Text className='member-right-item__desc'>
+                          {product.productCode === currentProductCode && isActive ? '当前开通' : product.tag}
+                        </Text>
+                      </View>
+                    </View>
+                    <Image className='member-service-item__arrow' src={CHEVRON_RIGHT_ICON} mode='aspectFit' />
+                  </View>
+                </Fragment>
+              ))
+            ) : (
+              <View className='member-right-item member-right-item--disabled'>
+                <View>
+                  <Text className='member-right-item__title'>暂无可购买商品</Text>
+                  <Text className='member-right-item__desc'>请先初始化商品类型数据</Text>
+                </View>
+              </View>
+            )}
+          </View>
         </View>
 
         <View className='member-section'>
@@ -923,34 +953,14 @@ export default function MemberPage(): JSX.Element {
               </View>
               <Image className='member-service-item__arrow' src={CHEVRON_RIGHT_ICON} mode='aspectFit' />
             </Button>
-          </View>
-        </View>
-
-        <View className='member-section'>
-          <Text className='member-section__title'>我的权益</Text>
-          <View className='member-list-card'>
-            {PRODUCT_OPTIONS.map((product) => (
-              <View
-                key={product.code}
-                className={`member-right-item ${product.available ? '' : 'member-right-item--disabled'}`}
-                onClick={() => openProductIntro(product.code)}
-              >
-                <View>
-                  <Text className='member-right-item__title'>{product.label}</Text>
-                  <Text className='member-right-item__desc'>
-                    {product.code === currentProductCode && isActive ? '当前开通' : product.tag}
-                  </Text>
-                </View>
-                <View className={`ios-switch ${product.available ? 'ios-switch--on' : ''}`}>
-                  <Text className='ios-switch__thumb' />
-                </View>
-              </View>
-            ))}
             <View className='member-divider' />
-            <View className='member-right-item' onClick={() => void handleToggleReminder()}>
-              <View>
-                <Text className='member-right-item__title'>开启消息提醒</Text>
-                <Text className='member-right-item__desc'>
+            <View className='member-service-item' onClick={() => void handleToggleReminder()}>
+              <View className='member-service-item__icon'>
+                <Image className='member-service-item__image' src={MESSAGE_REMINDER_ICON} mode='aspectFit' />
+              </View>
+              <View className='member-service-item__copy'>
+                <Text className='member-service-item__title'>开启消息提醒</Text>
+                <Text className='member-service-item__desc'>
                   {data.subscribeMsgAuth ? '已开启，开通成功和临近到期都会提醒' : '开通成功和临近到期都会提醒'}
                 </Text>
               </View>
@@ -966,34 +976,68 @@ export default function MemberPage(): JSX.Element {
         </Button> */}
       </View>
 
+      <PopLayout visible={productTypeSheetVisible} onClose={closeProductTypeSheet} panelClassName='product-intro-sheet'>
+        <View className='plan-sheet__head'>
+          <View>
+            <Text className='plan-sheet__label'>商品类型</Text>
+            <Text className='plan-sheet__title'>选择开通商品</Text>
+          </View>
+          <Text className='plan-sheet__close' onClick={closeProductTypeSheet}>×</Text>
+        </View>
+        <Text className='plan-sheet__desc'>请选择要开通或续费的商品类型。</Text>
+        <View className='product-type-sheet__list'>
+          {productTypes.length > 0 ? (
+            productTypes.map((product) => (
+              <View
+                key={product.productCode}
+                className={`product-type-sheet__item ${product.available ? '' : 'product-type-sheet__item--disabled'}`}
+                onClick={() => openProductIntro(product.productCode)}
+              >
+                <View className='product-type-sheet__main'>
+                  {product.avatarUrl ? (
+                    <Image className='product-type-sheet__avatar' src={product.avatarUrl} mode='aspectFill' />
+                  ) : null}
+                  <View className='product-type-sheet__copy'>
+                    <Text className='product-type-sheet__title'>{product.label}</Text>
+                    <Text className='product-type-sheet__desc'>{product.description}</Text>
+                  </View>
+                </View>
+                <Text className='product-type-sheet__tag'>{product.tag}</Text>
+              </View>
+            ))
+          ) : (
+            <View className='product-type-sheet__item product-type-sheet__item--disabled'>
+              <View>
+                <Text className='product-type-sheet__title'>暂无可购买商品</Text>
+                <Text className='product-type-sheet__desc'>请先部署并调用 seed-database 初始化商品类型。</Text>
+              </View>
+            </View>
+          )}
+        </View>
+      </PopLayout>
+
       <PopLayout visible={productIntroVisible} onClose={closeProductIntro} panelClassName='product-intro-sheet'>
         <View className='plan-sheet__head'>
           <View>
             <Text className='plan-sheet__label'>商品介绍</Text>
-            <Text className='plan-sheet__title'>{introProduct.label}</Text>
+            <Text className='plan-sheet__title'>{introProduct?.label ?? '商品信息'}</Text>
           </View>
           <Text className='plan-sheet__close' onClick={closeProductIntro}>×</Text>
         </View>
-        <Text className='plan-sheet__desc'>{introProduct.description}</Text>
+        <Text className='plan-sheet__desc'>{introProduct?.description ?? '暂未获取到商品信息，请刷新后重试。'}</Text>
         <View className='product-intro-list'>
-          <View className='product-intro-item'>
-            <Text className='product-intro-item__title'>精选资讯</Text>
-            <Text className='product-intro-item__desc'>聚合前沿 AI 动态、产品更新与应用案例。</Text>
-          </View>
-          <View className='product-intro-item'>
-            <Text className='product-intro-item__title'>会员权益</Text>
-            <Text className='product-intro-item__desc'>开通后进入人工处理流程，完成后展示会员有效期。</Text>
-          </View>
-          <View className='product-intro-item'>
-            <Text className='product-intro-item__title'>当前状态</Text>
-            <Text className='product-intro-item__desc'>{introProduct.available ? '支持购买' : introProduct.tag}</Text>
-          </View>
+          {(introProduct?.introHighlights ?? []).map((item) => (
+            <View className='product-intro-item' key={item.title}>
+              <Text className='product-intro-item__title'>{item.title}</Text>
+              <Text className='product-intro-item__desc'>{item.description}</Text>
+            </View>
+          ))}
         </View>
         <Button
-          className={`saas-button plan-sheet__button ${introProduct.available ? '' : 'saas-button--disabled'}`}
+          className={`saas-button plan-sheet__button ${introProduct?.available ? '' : 'saas-button--disabled'}`}
           onClick={continueFromProductIntro}
         >
-          {introProduct.available ? '查看套餐' : introProduct.tag}
+          {introProduct?.available ? '查看套餐' : introProduct?.tag ?? '暂不可用'}
         </Button>
       </PopLayout>
 
@@ -1102,11 +1146,11 @@ export default function MemberPage(): JSX.Element {
             <View className='plan-sheet__head'>
               <View>
                 <Text className='plan-sheet__label'>会员方案</Text>
-                <Text className='plan-sheet__title'>{activeProduct.label}</Text>
+                <Text className='plan-sheet__title'>{activeProduct?.label ?? '商品信息'}</Text>
               </View>
               <Text className='plan-sheet__close' onClick={closePlanSheet}>×</Text>
             </View>
-            <Text className='plan-sheet__desc'>{activeProduct.description}</Text>
+            <Text className='plan-sheet__desc'>{activeProduct?.description ?? '暂未获取到商品信息，请刷新后重试。'}</Text>
             <View className='plan-sheet__plans'>
               {activePlans.length === 0 ? (
                 <View className='plan-option plan-option--disabled'>

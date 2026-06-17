@@ -14,6 +14,7 @@ exports.getMembershipByUserId = getMembershipByUserId;
 exports.listMembershipsByUserId = listMembershipsByUserId;
 exports.getDeliveryByUserId = getDeliveryByUserId;
 exports.getPlanByCode = getPlanByCode;
+exports.getPlanByPid = getPlanByPid;
 exports.getOrderByNo = getOrderByNo;
 exports.getLatestPendingOrderByUserId = getLatestPendingOrderByUserId;
 exports.listOrdersByUserId = listOrdersByUserId;
@@ -53,6 +54,9 @@ async function ensureCollection(name) {
 }
 async function getUserByOpenId(openid) {
     var _a;
+    if (!openid) {
+        return null;
+    }
     const result = await collection('users').where({ openid }).limit(1).get();
     return (_a = result.data[0]) !== null && _a !== void 0 ? _a : null;
 }
@@ -89,6 +93,11 @@ async function getDeliveryByUserId(userId) {
 async function getPlanByCode(planCode) {
     var _a;
     const result = await collection('memberPlans').where({ planCode, status: 'on' }).limit(1).get();
+    return (_a = result.data[0]) !== null && _a !== void 0 ? _a : null;
+}
+async function getPlanByPid(pid) {
+    var _a;
+    const result = await collection('memberPlans').where({ pid, status: 'on' }).limit(1).get();
     return (_a = result.data[0]) !== null && _a !== void 0 ? _a : null;
 }
 async function getOrderByNo(orderNo) {
@@ -162,6 +171,14 @@ async function listEmailVerificationCodes(emailOrUserId, currentEmail) {
     }
     return userCodes;
 }
+function sortEmailVerificationCodes(left, right) {
+    const leftReceivedAt = left.receivedAt || left.createdAt || 0;
+    const rightReceivedAt = right.receivedAt || right.createdAt || 0;
+    if (rightReceivedAt !== leftReceivedAt) {
+        return rightReceivedAt - leftReceivedAt;
+    }
+    return (right.createdAt || 0) - (left.createdAt || 0);
+}
 async function listAppStoreEmailVerificationCodes(email) {
     const normalizedEmail = email.trim().toLowerCase();
     try {
@@ -175,14 +192,6 @@ async function listAppStoreEmailVerificationCodes(email) {
         }
         throw error;
     }
-}
-function sortEmailVerificationCodes(left, right) {
-    const leftReceivedAt = left.receivedAt || left.createdAt || 0;
-    const rightReceivedAt = right.receivedAt || right.createdAt || 0;
-    if (rightReceivedAt !== leftReceivedAt) {
-        return rightReceivedAt - leftReceivedAt;
-    }
-    return (right.createdAt || 0) - (left.createdAt || 0);
 }
 function sortAppStoreEmailVerificationCodes(left, right) {
     const leftReceivedAt = left.receivedAt || left.createdAt || 0;

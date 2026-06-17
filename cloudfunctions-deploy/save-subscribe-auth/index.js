@@ -4,13 +4,33 @@ exports.main = main;
 const db_1 = require("./shared/db");
 const context_1 = require("./_lib/context");
 const utils_1 = require("./shared/utils");
-async function main(event) {
+function normalizeAccepted(value) {
+    if (value === true || value === 'true' || value === 1) {
+        return true;
+    }
+    if (value === false || value === 'false' || value === 0) {
+        return false;
+    }
+    return null;
+}
+async function main(event = {}) {
     const { OPENID } = (0, context_1.getWxContext)();
+    const accepted = normalizeAccepted(event.accepted);
     console.info('subscribe-auth.save.request', {
         openid: OPENID,
         scene: event.scene || 'member',
-        accepted: event.accepted,
+        accepted,
     });
+    if (!OPENID) {
+        console.warn('subscribe-auth.save.openid-missing', {
+            scene: event.scene || 'member',
+            accepted,
+        });
+        throw new Error('未获取到微信登录态，请重新进入小程序后重试');
+    }
+    if (accepted === null) {
+        throw new Error('订阅状态参数不正确');
+    }
     const user = await (0, db_1.getUserByOpenId)(OPENID);
     if (!user) {
         console.warn('subscribe-auth.save.user-missing', {
@@ -22,14 +42,14 @@ async function main(event) {
     const now = Date.now();
     const data = event.scene === 'news'
         ? {
-            newsSubscribeMsgAuth: event.accepted,
-            newsSubscribeMsgAuthAt: event.accepted ? now : undefined,
-            newsSubscribeMsgQuota: event.accepted ? db_1._.inc(1) : 0,
+            newsSubscribeMsgAuth: accepted,
+            newsSubscribeMsgAuthAt: accepted ? now : undefined,
+            newsSubscribeMsgQuota: accepted ? db_1._.inc(1) : 0,
             updatedAt: now,
         }
         : {
-            subscribeMsgAuth: event.accepted,
-            subscribeMsgAuthAt: event.accepted ? now : undefined,
+            subscribeMsgAuth: accepted,
+            subscribeMsgAuthAt: accepted ? now : undefined,
             updatedAt: now,
         };
     await (0, db_1.collection)('users').doc(user._id).update({
@@ -39,7 +59,7 @@ async function main(event) {
         openid: OPENID,
         userId: user._id,
         scene: event.scene || 'member',
-        accepted: event.accepted,
+        accepted,
     });
     return (0, utils_1.ok)({ success: true });
 }

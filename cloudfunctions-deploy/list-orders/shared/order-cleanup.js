@@ -26,31 +26,32 @@ function shouldRemoveOrder(order, now) {
     return Boolean(abandonedAt && now - abandonedAt >= ABANDONED_ORDER_RETENTION_MS);
 }
 async function cleanupAbandonedOrders(options = {}) {
-    var _a;
+    var _a, _b;
     const now = (_a = options.now) !== null && _a !== void 0 ? _a : Date.now();
-    const limit = Math.max(1, Math.min(options.limit || 100, 100));
+    const limit = Math.max(1, Math.min((_b = options.limit) !== null && _b !== void 0 ? _b : 100, 100));
     const query = options.userId ? { userId: options.userId } : {};
     let removed = 0;
     let scanned = 0;
+    const orders = (0, db_1.collection)('orders');
     while (true) {
-        const result = await (0, db_1.collection)('orders').where(query).skip(scanned).limit(limit).get();
-        const orders = result.data;
-        if (orders.length === 0) {
+        const result = await orders.where(query).skip(scanned).limit(limit).get();
+        const records = result.data;
+        if (records.length === 0) {
             break;
         }
         let batchRemoved = 0;
-        for (const order of orders) {
+        for (const order of records) {
             if (!order._id || !shouldRemoveOrder(order, now)) {
                 continue;
             }
-            await (0, db_1.collection)('orders').doc(order._id).remove();
+            await orders.doc(order._id).remove();
             removed += 1;
             batchRemoved += 1;
         }
         if (batchRemoved === 0) {
-            scanned += orders.length;
+            scanned += records.length;
         }
-        if (orders.length < limit) {
+        if (records.length < limit) {
             break;
         }
     }

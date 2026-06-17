@@ -4,6 +4,8 @@ exports.DEFAULT_PRODUCT_NAME = exports.DEFAULT_PRODUCT_CODE = exports.SUCCESS_CO
 exports.COLLECTIONS = {
     users: 'users',
     memberPlans: 'member_plans',
+    productTypes: 'product_types',
+    appstoreCountries: 'appstore_countries',
     memberships: 'memberships',
     orders: 'orders',
     inviteRelations: 'invite_relations',

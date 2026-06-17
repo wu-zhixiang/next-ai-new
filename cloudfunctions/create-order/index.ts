@@ -1,5 +1,5 @@
 import { collection, getMembershipByUserId, getPlanByPid, getUserByOpenId, listMembershipsByUserId, listOrdersByUserId, listPendingOrdersByUserId } from '../shared/db';
-import type { MemberPlanRecord, OrderRecord } from '../shared/types';
+import type { OrderRecord } from '../shared/types';
 import { createOrderNo, ok } from '../shared/utils';
 import { getWxContext } from '../_lib/context';
 import { DEFAULT_PRODUCT_CODE } from '../shared/constants';
@@ -13,20 +13,6 @@ function normalizeAmount(amount: number): number {
   return Number(amount.toFixed(2));
 }
 
-function isFirstBuyPlan(plan: Pick<MemberPlanRecord, 'isFirstBuy'>): boolean {
-  return normalizeBooleanFlag(plan.isFirstBuy);
-}
-
-function normalizeBooleanFlag(value: unknown): boolean {
-  if (value === true || value === 1) {
-    return true;
-  }
-  if (typeof value === 'string') {
-    return value.trim().toLowerCase() === 'true' || value.trim() === '1';
-  }
-  return false;
-}
-
 function normalizePurchasedProductCode(record: { productCode?: string }): string {
   return record.productCode || DEFAULT_PRODUCT_CODE;
 }
@@ -38,13 +24,6 @@ async function hasPurchasedProductBefore(userId: string, productCode: string): P
   ]);
   return memberships.some((membership) => normalizePurchasedProductCode(membership) === productCode)
     || orders.some((order) => normalizePurchasedProductCode(order) === productCode && order.payStatus === 'paid');
-}
-
-async function hasFirstBuyPlan(productCode: string): Promise<boolean> {
-  const result = await collection('memberPlans')
-    .where({ status: 'on', productCode })
-    .get();
-  return (result.data as MemberPlanRecord[]).some(isFirstBuyPlan);
 }
 
 export async function main(event: Event) {
@@ -66,25 +45,10 @@ export async function main(event: Event) {
     throw new Error('套餐不存在或已下架');
   }
 
-  const [existingMembership, purchasedBefore, firstBuyPlanExists] = await Promise.all([
+  const [existingMembership, purchasedBefore] = await Promise.all([
     getMembershipByUserId(user._id, plan.productCode),
     hasPurchasedProductBefore(user._id, plan.productCode),
-    hasFirstBuyPlan(plan.productCode),
   ]);
-  const firstBuyPlan = isFirstBuyPlan(plan);
-  if (purchasedBefore && firstBuyPlan) {
-    console.warn(JSON.stringify({
-      tag: 'create-order.first-buy-plan-blocked',
-      userId: user._id,
-      planCode: plan.planCode,
-      productCode: plan.productCode,
-      isFirstBuy: plan.isFirstBuy,
-    }));
-    throw new Error('该套餐仅限首次购买用户');
-  }
-  if (!purchasedBefore && firstBuyPlanExists && !firstBuyPlan) {
-    throw new Error('首次购买请使用首次购买套餐');
-  }
 
   const now = Date.now();
   const pendingOrders = await listPendingOrdersByUserId(user._id);

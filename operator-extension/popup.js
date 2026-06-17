@@ -4,6 +4,14 @@ const DEFAULT_SETTINGS = {
   chatgptUrl: 'https://chatgpt.com/',
   appstoreMobile: '15810901111'
 };
+const FALLBACK_APPSTORE_COUNTRIES = [
+  { countryCode: 'PH', countryName: '菲律宾', dialingCode: '+63', available: true },
+  { countryCode: 'NG', countryName: '尼日利亚', dialingCode: '+234', available: true }
+];
+const FALLBACK_PRODUCT_TYPES = [
+  { productCode: 'ai_news', productName: 'Open AI 资讯会员', label: 'ChatGPT Plus', available: true },
+  { productCode: 'claude_pro', productName: 'Claude Pro 会员', label: 'Claude Pro', available: true }
+];
 const MAX_COVER_DATA_URL_LENGTH = 2 * 1024 * 1024;
 const NEWS_TAG_TREE = [
   {
@@ -60,6 +68,8 @@ const els = {
   generateAppleAccountBtn: document.querySelector('#generateAppleAccountBtn'),
   saveAppleAccountBtn: document.querySelector('#saveAppleAccountBtn'),
   clearAppleAccountBtn: document.querySelector('#clearAppleAccountBtn'),
+  appleAccountCountry: document.querySelector('#appleAccountCountry'),
+  appleAccountProduct: document.querySelector('#appleAccountProduct'),
   appleAccountEmail: document.querySelector('#appleAccountEmail'),
   appleAccountMobile: document.querySelector('#appleAccountMobile'),
   appleAccountPassword: document.querySelector('#appleAccountPassword'),
@@ -91,16 +101,20 @@ let selectedNewsTags = new Set();
 let lastAppleVerificationCodeId = '';
 let lastAppleVerificationEmail = '';
 let lastAppleVerificationExpired = false;
+let appStoreCountries = [...FALLBACK_APPSTORE_COUNTRIES];
+let productTypes = [...FALLBACK_PRODUCT_TYPES];
 
 document.addEventListener('DOMContentLoaded', async () => {
   settings = await getSettings();
   updateSetupNotice();
   syncAppleAccountMobile(settings.appstoreMobile);
+  renderAppleAccountOptions();
   resetAppleVerificationState();
   bindActions();
   renderNewsTagsOptions();
   updateNewsTagsTrigger();
   if (isConfigured()) {
+    await loadAppleAccountOptions();
     await loadTasks();
   }
 });
@@ -116,6 +130,9 @@ function bindActions() {
     settings = await getSettings();
     updateSetupNotice();
     syncAppleAccountMobile(settings.appstoreMobile);
+    if (isConfigured()) {
+      await loadAppleAccountOptions();
+    }
     switchPanel('register');
   });
   els.fillCurrentTabBtn.addEventListener('click', fillNewsFromCurrentTab);
@@ -273,6 +290,8 @@ function renderTasks(tasks) {
   tasks.forEach((task) => {
     const node = els.taskTemplate.content.firstElementChild.cloneNode(true);
     node.dataset.orderNo = task.orderNo || '';
+    node.dataset.productCode = task.productCode || '';
+    node.dataset.productName = task.productName || '';
     node.querySelector('.task-card__product').textContent = task.productName || 'Open AI 资讯会员';
     node.querySelector('.task-card__plan').textContent = task.planName || '会员套餐';
     node.querySelector('.task-card__amount').textContent = formatMoney(task.amount);
@@ -322,6 +341,8 @@ function applyAppleStoreAccountToTask(node, account) {
   const normalized = account || null;
   node.dataset.appleStoreAccountId = normalized?.id || '';
   node.dataset.appleStoreAccountSource = normalized?.id ? 'pool' : '';
+  node.dataset.appleStoreCountryCode = normalized?.countryCode || '';
+  node.dataset.appleStoreCountryName = normalized?.countryName || '';
   emailInput.value = normalized?.email || '';
   passwordInput.value = normalized?.password || '';
   fetchButton.textContent = normalized?.email ? '已取' : '获取';
@@ -330,6 +351,8 @@ function applyAppleStoreAccountToTask(node, account) {
 function markManualAppleStoreAccount(node) {
   node.dataset.appleStoreAccountId = '';
   node.dataset.appleStoreAccountSource = 'manual';
+  node.dataset.appleStoreCountryCode = '';
+  node.dataset.appleStoreCountryName = '';
   const fetchButton = node.querySelector('.fetch-apple-account');
   if (fetchButton) {
     fetchButton.textContent = '获取';
@@ -399,6 +422,8 @@ async function updateTask(orderNo, status, node) {
         appleStoreAccountId,
         appleStoreEmail,
         appleStorePassword,
+        appleStoreCountryCode: node.dataset.appleStoreCountryCode || '',
+        appleStoreCountryName: node.dataset.appleStoreCountryName || '',
         mobile: (settings.appstoreMobile || DEFAULT_SETTINGS.appstoreMobile).trim()
       })
     });
@@ -434,12 +459,74 @@ async function apiRequest(path, options = {}) {
   return payload.data || payload;
 }
 
+function escapeOptionText(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;');
+}
+
+function renderAppleAccountOptions() {
+  const selectedCountry = els.appleAccountCountry.value;
+  const selectedProduct = els.appleAccountProduct.value;
+  els.appleAccountCountry.innerHTML = appStoreCountries
+    .map((country) => {
+      const label = `${country.countryName} ${country.dialingCode || ''}`.trim();
+      return `<option value="${escapeOptionText(country.countryCode)}" ${country.available ? '' : 'disabled'}>${escapeOptionText(label)}</option>`;
+    })
+    .join('');
+  els.appleAccountProduct.innerHTML = productTypes
+    .map((product) => {
+      const label = product.label || product.productName || product.productCode;
+      return `<option value="${escapeOptionText(product.productCode)}" ${product.available ? '' : 'disabled'}>${escapeOptionText(label)}</option>`;
+    })
+    .join('');
+  if (selectedCountry && appStoreCountries.some((country) => country.countryCode === selectedCountry)) {
+    els.appleAccountCountry.value = selectedCountry;
+  }
+  if (selectedProduct && productTypes.some((product) => product.productCode === selectedProduct)) {
+    els.appleAccountProduct.value = selectedProduct;
+  }
+}
+
+async function loadAppleAccountOptions() {
+  try {
+    const [countryResult, productResult] = await Promise.all([
+      apiRequest('/operator/appstore-countries', { method: 'GET' }),
+      apiRequest('/operator/product-types', { method: 'GET' })
+    ]);
+    appStoreCountries = Array.isArray(countryResult.countries) && countryResult.countries.length > 0
+      ? countryResult.countries
+      : [...FALLBACK_APPSTORE_COUNTRIES];
+    productTypes = Array.isArray(productResult.productTypes) && productResult.productTypes.length > 0
+      ? productResult.productTypes
+      : [...FALLBACK_PRODUCT_TYPES];
+  } catch (error) {
+    appStoreCountries = [...FALLBACK_APPSTORE_COUNTRIES];
+    productTypes = [...FALLBACK_PRODUCT_TYPES];
+  }
+  renderAppleAccountOptions();
+}
+
+function getSelectedAppleCountry() {
+  const countryCode = els.appleAccountCountry.value || FALLBACK_APPSTORE_COUNTRIES[0].countryCode;
+  return appStoreCountries.find((country) => country.countryCode === countryCode) || FALLBACK_APPSTORE_COUNTRIES[0];
+}
+
+function getSelectedAppleProduct() {
+  const productCode = els.appleAccountProduct.value || FALLBACK_PRODUCT_TYPES[0].productCode;
+  return productTypes.find((product) => product.productCode === productCode) || FALLBACK_PRODUCT_TYPES[0];
+}
+
 async function generateAppleAccount() {
   settings = await getSettings();
   updateSetupNotice();
   if (!isConfigured()) return;
 
   const mobile = (settings.appstoreMobile || DEFAULT_SETTINGS.appstoreMobile).trim();
+  const country = getSelectedAppleCountry();
+  const product = getSelectedAppleProduct();
   syncAppleAccountMobile(mobile);
   const originalText = els.generateAppleAccountBtn.textContent;
   els.generateAppleAccountBtn.disabled = true;
@@ -447,7 +534,13 @@ async function generateAppleAccount() {
   try {
     const account = await apiRequest('/operator/appstore-accounts/generate', {
       method: 'POST',
-      body: JSON.stringify({ mobile }),
+      body: JSON.stringify({
+        mobile,
+        countryCode: country.countryCode,
+        countryName: country.countryName,
+        productCode: product.productCode,
+        productName: product.productName
+      }),
     });
     els.appleAccountEmail.value = account.email || '';
     els.appleAccountMobile.value = account.mobile || mobile;
@@ -469,6 +562,8 @@ async function saveAppleAccount() {
 
   const email = els.appleAccountEmail.value.trim();
   const mobile = (settings.appstoreMobile || DEFAULT_SETTINGS.appstoreMobile).trim();
+  const country = getSelectedAppleCountry();
+  const product = getSelectedAppleProduct();
   syncAppleAccountMobile(mobile);
   const password = els.appleAccountPassword.value.trim();
   if (!email || !password) {
@@ -482,7 +577,15 @@ async function saveAppleAccount() {
   try {
     await apiRequest('/operator/appstore-accounts', {
       method: 'POST',
-      body: JSON.stringify({ email, mobile, password })
+      body: JSON.stringify({
+        email,
+        mobile,
+        password,
+        countryCode: country.countryCode,
+        countryName: country.countryName,
+        productCode: product.productCode,
+        productName: product.productName
+      })
     });
     showToast('Apple Store 账号已保存');
     clearAppleAccountForm();

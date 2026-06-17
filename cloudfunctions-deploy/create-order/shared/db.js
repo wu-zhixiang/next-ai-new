@@ -22,6 +22,8 @@ exports.listPendingOrdersByUserId = listPendingOrdersByUserId;
 exports.listInviteRelationsByInviterId = listInviteRelationsByInviterId;
 exports.getLatestEmailVerificationCode = getLatestEmailVerificationCode;
 exports.getLatestUnusedEmailVerificationCode = getLatestUnusedEmailVerificationCode;
+exports.getLatestAppStoreEmailVerificationCode = getLatestAppStoreEmailVerificationCode;
+exports.getLatestUnusedAppStoreEmailVerificationCode = getLatestUnusedAppStoreEmailVerificationCode;
 const wx_server_sdk_1 = __importDefault(require("wx-server-sdk"));
 const constants_1 = require("./constants");
 wx_server_sdk_1.default.init({
@@ -52,6 +54,9 @@ async function ensureCollection(name) {
 }
 async function getUserByOpenId(openid) {
     var _a;
+    if (!openid) {
+        return null;
+    }
     const result = await collection('users').where({ openid }).limit(1).get();
     return (_a = result.data[0]) !== null && _a !== void 0 ? _a : null;
 }
@@ -119,43 +124,80 @@ async function listInviteRelationsByInviterId(inviterUserId) {
     const result = await collection('inviteRelations').where({ inviterUserId }).get();
     return result.data.sort((left, right) => right.createdAt - left.createdAt);
 }
-async function getLatestEmailVerificationCode(emailOrUserId, now = Date.now()) {
+async function getLatestEmailVerificationCode(emailOrUserId, now = Date.now(), currentEmail) {
     var _a;
-    const result = await collection('emailVerificationCodes')
-        .where({
-        userId: emailOrUserId,
-    })
-        .get();
-    const userCodes = result.data;
-    const fallbackResult = userCodes.length > 0
-        ? { data: userCodes }
-        : await collection('emailVerificationCodes')
-            .where({
-            email: emailOrUserId.trim().toLowerCase(),
-        })
-            .get();
-    const codes = fallbackResult.data
+    const codes = await listEmailVerificationCodes(emailOrUserId, currentEmail);
+    return (_a = codes
         .filter((item) => item.expiresAt > now && !item.usedAt)
-        .sort((left, right) => right.receivedAt - left.receivedAt);
-    return (_a = codes[0]) !== null && _a !== void 0 ? _a : null;
+        .sort(sortEmailVerificationCodes)[0]) !== null && _a !== void 0 ? _a : null;
 }
-async function getLatestUnusedEmailVerificationCode(emailOrUserId) {
+async function getLatestUnusedEmailVerificationCode(emailOrUserId, currentEmail) {
     var _a;
-    const result = await collection('emailVerificationCodes')
-        .where({
-        userId: emailOrUserId,
-    })
-        .get();
-    const userCodes = result.data;
-    const fallbackResult = userCodes.length > 0
-        ? { data: userCodes }
-        : await collection('emailVerificationCodes')
-            .where({
-            email: emailOrUserId.trim().toLowerCase(),
-        })
-            .get();
-    const codes = fallbackResult.data
+    const codes = await listEmailVerificationCodes(emailOrUserId, currentEmail);
+    return (_a = codes
         .filter((item) => !item.usedAt)
-        .sort((left, right) => right.receivedAt - left.receivedAt);
-    return (_a = codes[0]) !== null && _a !== void 0 ? _a : null;
+        .sort(sortEmailVerificationCodes)[0]) !== null && _a !== void 0 ? _a : null;
+}
+async function getLatestAppStoreEmailVerificationCode(email, now = Date.now()) {
+    var _a;
+    const codes = await listAppStoreEmailVerificationCodes(email);
+    return (_a = codes
+        .filter((item) => item.expiresAt > now && !item.usedAt)
+        .sort(sortAppStoreEmailVerificationCodes)[0]) !== null && _a !== void 0 ? _a : null;
+}
+async function getLatestUnusedAppStoreEmailVerificationCode(email) {
+    var _a;
+    const codes = await listAppStoreEmailVerificationCodes(email);
+    return (_a = codes
+        .filter((item) => !item.usedAt)
+        .sort(sortAppStoreEmailVerificationCodes)[0]) !== null && _a !== void 0 ? _a : null;
+}
+async function listEmailVerificationCodes(emailOrUserId, currentEmail) {
+    const normalizedInput = emailOrUserId.trim().toLowerCase();
+    const normalizedEmail = (currentEmail !== null && currentEmail !== void 0 ? currentEmail : (normalizedInput.includes('@') ? normalizedInput : '')).trim().toLowerCase();
+    if (normalizedInput.includes('@')) {
+        const result = await collection('emailVerificationCodes').where({ email: normalizedInput }).get();
+        return result.data;
+    }
+    const result = await collection('emailVerificationCodes').where({ userId: emailOrUserId }).get();
+    const userCodes = result.data;
+    if (normalizedEmail) {
+        const matchedCodes = userCodes.filter((item) => item.email === normalizedEmail);
+        if (matchedCodes.length > 0) {
+            return matchedCodes;
+        }
+        const fallbackResult = await collection('emailVerificationCodes').where({ email: normalizedEmail }).get();
+        return fallbackResult.data;
+    }
+    return userCodes;
+}
+function sortEmailVerificationCodes(left, right) {
+    const leftReceivedAt = left.receivedAt || left.createdAt || 0;
+    const rightReceivedAt = right.receivedAt || right.createdAt || 0;
+    if (rightReceivedAt !== leftReceivedAt) {
+        return rightReceivedAt - leftReceivedAt;
+    }
+    return (right.createdAt || 0) - (left.createdAt || 0);
+}
+async function listAppStoreEmailVerificationCodes(email) {
+    const normalizedEmail = email.trim().toLowerCase();
+    try {
+        const result = await collection('appstoreEmailVerificationCodes').where({ email: normalizedEmail }).get();
+        return result.data;
+    }
+    catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (message.includes('collection not exists') || message.includes('DATABASE_COLLECTION_NOT_EXIST') || message.includes('Table not exist')) {
+            return [];
+        }
+        throw error;
+    }
+}
+function sortAppStoreEmailVerificationCodes(left, right) {
+    const leftReceivedAt = left.receivedAt || left.createdAt || 0;
+    const rightReceivedAt = right.receivedAt || right.createdAt || 0;
+    if (rightReceivedAt !== leftReceivedAt) {
+        return rightReceivedAt - leftReceivedAt;
+    }
+    return (right.createdAt || 0) - (left.createdAt || 0);
 }

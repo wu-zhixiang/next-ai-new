@@ -8,6 +8,7 @@ const compileRoot = path.join('/private/tmp', 'gpt-pay-cloudfunctions-compiled')
 const deployRoot = path.join(projectRoot, 'cloudfunctions-deploy');
 const functionNames = [
   'bind-mobile',
+  'cleanup-abandoned-orders',
   'clear-email-code',
   'create-order',
   'email-code-webhook',
@@ -15,6 +16,7 @@ const functionNames = [
   'get-member-home',
   'get-ai-account',
   'get-ai-news-detail',
+  'get-app-config',
   'get-invite-home',
   'get-latest-email-code',
   'get-pay-result',
@@ -22,6 +24,8 @@ const functionNames = [
   'list-ai-news',
   'list-orders',
   'list-member-plans',
+  'list-appstore-countries',
+  'list-product-types',
   'operator-api',
   'pay-notify',
   'pay-order',
@@ -65,6 +69,8 @@ execFileSync(
     path.join(sourceRoot, 'shared', 'operator-notify.ts'),
     path.join(sourceRoot, 'shared', 'orders.ts'),
     path.join(sourceRoot, 'shared', 'plan-seed.ts'),
+    path.join(sourceRoot, 'shared', 'appstore-country-seed.ts'),
+    path.join(sourceRoot, 'shared', 'product-type-seed.ts'),
     path.join(sourceRoot, 'shared', 'types.ts'),
     path.join(sourceRoot, 'shared', 'utils.ts'),
     path.join(sourceRoot, 'shared', 'wechat.ts'),
@@ -75,12 +81,27 @@ execFileSync(
 
 const sharedCompileRoot = path.join(compileRoot, 'shared');
 const libCompileRoot = path.join(compileRoot, '_lib');
+const seedSharedFiles = [
+  'plan-seed.js',
+  'appstore-country-seed.js',
+  'product-type-seed.js',
+];
+const functionsThatNeedSeedShared = new Set([
+  'seed-database',
+  'reset-database',
+]);
 
 for (const name of functionNames) {
   const targetRoot = path.join(deployRoot, name);
   fs.mkdirSync(targetRoot, { recursive: true });
   fs.cpSync(path.join(compileRoot, name), targetRoot, { recursive: true });
-  fs.cpSync(sharedCompileRoot, path.join(targetRoot, 'shared'), { recursive: true });
+  const targetSharedRoot = path.join(targetRoot, 'shared');
+  fs.cpSync(sharedCompileRoot, targetSharedRoot, { recursive: true });
+  if (!functionsThatNeedSeedShared.has(name)) {
+    for (const file of seedSharedFiles) {
+      fs.rmSync(path.join(targetSharedRoot, file), { force: true });
+    }
+  }
   fs.cpSync(libCompileRoot, path.join(targetRoot, '_lib'), { recursive: true });
   const configFile = path.join(sourceRoot, name, 'config.json');
   if (fs.existsSync(configFile)) {
