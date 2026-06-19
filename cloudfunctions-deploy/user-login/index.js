@@ -4,10 +4,49 @@ exports.main = main;
 const db_1 = require("./shared/db");
 const utils_1 = require("./shared/utils");
 const context_1 = require("./_lib/context");
+const invite_reward_policy_1 = require("./shared/invite-reward-policy");
 function createInviteCode(openid) {
     return `U${openid.slice(-6).toUpperCase()}${Math.floor(Math.random() * 1000)
         .toString()
         .padStart(3, '0')}`;
+}
+async function grantInviteMilestoneOnce(inviterUserId, now) {
+    const existing = await (0, db_1.collection)('pointsLedger')
+        .where({
+        userId: inviterUserId,
+        type: 'invite_milestone',
+    })
+        .limit(1)
+        .get();
+    if (existing.data[0]) {
+        return;
+    }
+    const relations = await (0, db_1.collection)('inviteRelations')
+        .where({
+        inviterUserId,
+        status: 'active',
+    })
+        .get();
+    if (!(0, invite_reward_policy_1.shouldGrantInviteMilestone)(relations.data.length)) {
+        return;
+    }
+    await (0, db_1.collection)('users').doc(inviterUserId).update({
+        data: {
+            pointsBalance: db_1._.inc(invite_reward_policy_1.INVITE_MILESTONE_REWARD),
+            updatedAt: now,
+        },
+    });
+    const inviter = await (0, db_1.getUserById)(inviterUserId);
+    const ledger = {
+        userId: inviterUserId,
+        type: 'invite_milestone',
+        direction: 'in',
+        points: invite_reward_policy_1.INVITE_MILESTONE_REWARD,
+        balanceAfter: inviter === null || inviter === void 0 ? void 0 : inviter.pointsBalance,
+        description: `累计邀请${invite_reward_policy_1.INVITE_MILESTONE_TARGET}人奖励${invite_reward_policy_1.INVITE_MILESTONE_REWARD} T币`,
+        createdAt: now,
+    };
+    await (0, db_1.collection)('pointsLedger').add({ data: ledger });
 }
 async function bindInviteRelation(currentUser, event, now) {
     var _a, _b, _c, _d, _e, _f;
@@ -18,6 +57,7 @@ async function bindInviteRelation(currentUser, event, now) {
             .limit(1)
             .get();
         if (existingRelation.data[0]) {
+            await grantInviteMilestoneOnce(currentUser.inviterUserId, now);
             console.info('invite.bind.skipped', {
                 reason: 'already_bound',
                 userId: currentUser._id,
@@ -45,6 +85,7 @@ async function bindInviteRelation(currentUser, event, now) {
             inviteCode: inviteCode || (inviterUser === null || inviterUser === void 0 ? void 0 : inviterUser.inviteCode) || '',
             source: (_d = event.source) !== null && _d !== void 0 ? _d : 'backfill',
         });
+        await grantInviteMilestoneOnce(currentUser.inviterUserId, now);
         return currentUser.inviterUserId;
     }
     if (!inviteCode) {
@@ -92,6 +133,7 @@ async function bindInviteRelation(currentUser, event, now) {
         inviteCode,
         source: (_f = event.source) !== null && _f !== void 0 ? _f : 'share',
     });
+    await grantInviteMilestoneOnce(inviter._id, now);
     return inviter._id;
 }
 async function main(event = {}) {
@@ -109,22 +151,23 @@ async function main(event = {}) {
                 avatarUrl: (_e = (_d = event.avatarUrl) !== null && _d !== void 0 ? _d : existingUser.avatarUrl) !== null && _e !== void 0 ? _e : '',
                 inviteCode,
                 inviterUserId,
-                pointsBalance: (_f = existingUser.pointsBalance) !== null && _f !== void 0 ? _f : 0,
                 aiAccountRegistered,
                 lastLoginAt: now,
                 updatedAt: now,
             },
         });
+        await grantInviteMilestoneOnce(existingUser._id, now);
+        const refreshedUser = await (0, db_1.getUserById)(existingUser._id);
         return (0, utils_1.ok)({
             userId: existingUser._id,
             openid: OPENID,
             openId: OPENID,
             mobileBound: Boolean(existingUser.mobile),
-            nickname: (_g = event.nickname) !== null && _g !== void 0 ? _g : existingUser.nickname,
-            avatarUrl: (_h = event.avatarUrl) !== null && _h !== void 0 ? _h : existingUser.avatarUrl,
+            nickname: (_f = event.nickname) !== null && _f !== void 0 ? _f : existingUser.nickname,
+            avatarUrl: (_g = event.avatarUrl) !== null && _g !== void 0 ? _g : existingUser.avatarUrl,
             inviteCode,
             inviterUserId,
-            pointsBalance: (_j = existingUser.pointsBalance) !== null && _j !== void 0 ? _j : 0,
+            pointsBalance: (_j = (_h = refreshedUser === null || refreshedUser === void 0 ? void 0 : refreshedUser.pointsBalance) !== null && _h !== void 0 ? _h : existingUser.pointsBalance) !== null && _j !== void 0 ? _j : 0,
             aiAccountRegistered,
         });
     }

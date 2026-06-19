@@ -6,13 +6,7 @@ const db_1 = require("./db");
 const member_reminders_1 = require("./member-reminders");
 const operator_notify_1 = require("./operator-notify");
 const utils_1 = require("./utils");
-function calcInviteRewardPoints(amount) {
-    // 1 积分 = 1 元；邀请奖励按被邀请人实付金额的 10% 向下取整。
-    if (amount <= 0) {
-        return 0;
-    }
-    return Math.floor(amount * 0.1);
-}
+const invite_reward_policy_1 = require("./invite-reward-policy");
 async function deductPaymentPointsOnce(order, paidAt) {
     var _a;
     const points = Math.max(0, Math.floor((_a = order.pointsDeducted) !== null && _a !== void 0 ? _a : 0));
@@ -49,7 +43,7 @@ async function deductPaymentPointsOnce(order, paidAt) {
         direction: 'out',
         points,
         balanceAfter: user === null || user === void 0 ? void 0 : user.pointsBalance,
-        description: `订阅 ${order.planName} 抵扣积分`,
+        description: `订阅 ${order.planName} 抵扣T币`,
         createdAt: paidAt,
     };
     await (0, db_1.collection)('pointsLedger').add({ data: ledger });
@@ -85,12 +79,13 @@ async function rewardInviterOnce(order, paidAt) {
         });
         return;
     }
-    const rewardPoints = calcInviteRewardPoints(order.amount);
+    const rewardPoints = (0, invite_reward_policy_1.calcInvitePurchaseReward)(order.amount);
     if (rewardPoints <= 0) {
         console.info('invite.reward.skipped', {
-            reason: 'zero_paid_amount',
+            reason: 'paid_amount_not_over_50',
             orderNo: order.orderNo,
             inviterUserId: invitee.inviterUserId,
+            paidAmount: order.amount,
         });
         return;
     }
@@ -109,7 +104,7 @@ async function rewardInviterOnce(order, paidAt) {
         direction: 'in',
         points: rewardPoints,
         balanceAfter: inviter === null || inviter === void 0 ? void 0 : inviter.pointsBalance,
-        description: `邀请用户订阅 ${order.planName} 返还积分`,
+        description: `好友购买 ${order.planName} 奖励5 T币`,
         createdAt: paidAt,
     };
     await (0, db_1.collection)('pointsLedger').add({ data: ledger });

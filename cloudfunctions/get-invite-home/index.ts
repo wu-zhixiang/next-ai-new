@@ -34,13 +34,22 @@ export async function main() {
     }
   }
 
-  const ledgersResult = await collection('pointsLedger')
-    .where({
-      userId: user._id,
-      type: 'invite_reward',
-    })
-    .get();
+  const [ledgersResult, milestoneLedgersResult] = await Promise.all([
+    collection('pointsLedger')
+      .where({
+        userId: user._id,
+        type: 'invite_reward',
+      })
+      .get(),
+    collection('pointsLedger')
+      .where({
+        userId: user._id,
+        type: 'invite_milestone',
+      })
+      .get(),
+  ]);
   const rewardLedgers = ledgersResult.data as PointsLedgerRecord[];
+  const milestoneLedgers = milestoneLedgersResult.data as PointsLedgerRecord[];
   const rewardByInvitee = new Map<string, number>();
   for (const ledger of rewardLedgers) {
     const relatedUserId = ledger.relatedUserId;
@@ -60,7 +69,8 @@ export async function main() {
     };
   });
 
-  const totalRewardPoints = rewardLedgers.reduce((total, ledger) => total + ledger.points, 0);
+  const totalRewardPoints = [...rewardLedgers, ...milestoneLedgers]
+    .reduce((total, ledger) => total + ledger.points, 0);
 
   return ok({
     inviteCode: user.inviteCode,

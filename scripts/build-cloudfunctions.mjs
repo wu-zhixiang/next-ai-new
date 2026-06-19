@@ -67,6 +67,7 @@ execFileSync(
     path.join(sourceRoot, 'shared', 'client-config.ts'),
     path.join(sourceRoot, 'shared', 'ai-account.ts'),
     path.join(sourceRoot, 'shared', 'db.ts'),
+    path.join(sourceRoot, 'shared', 'invite-reward-policy.ts'),
     path.join(sourceRoot, 'shared', 'operator-notify.ts'),
     path.join(sourceRoot, 'shared', 'orders.ts'),
     path.join(sourceRoot, 'shared', 'payment-config.ts'),
@@ -97,6 +98,13 @@ const functionsThatNeedClientConfig = new Set([
   'get-app-config',
   'retry-order',
 ]);
+const functionsThatNeedInviteRewardPolicy = new Set([
+  'fulfill-membership',
+  'operator-api',
+  'pay-notify',
+  'pay-order',
+  'user-login',
+]);
 
 for (const name of functionNames) {
   const targetRoot = path.join(deployRoot, name);
@@ -112,6 +120,9 @@ for (const name of functionNames) {
   if (!functionsThatNeedClientConfig.has(name)) {
     fs.rmSync(path.join(targetSharedRoot, 'client-config.js'), { force: true });
     fs.rmSync(path.join(targetSharedRoot, 'payment-config.js'), { force: true });
+  }
+  if (!functionsThatNeedInviteRewardPolicy.has(name)) {
+    fs.rmSync(path.join(targetSharedRoot, 'invite-reward-policy.js'), { force: true });
   }
   fs.cpSync(libCompileRoot, path.join(targetRoot, '_lib'), { recursive: true });
   const configFile = path.join(sourceRoot, name, 'config.json');

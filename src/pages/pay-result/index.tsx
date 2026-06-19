@@ -202,8 +202,8 @@ export default function PayResultPage(): JSX.Element {
             </View>
             {data.pointsDeducted ? (
               <View className='info-row'>
-                <Text className='info-row__label'>积分抵扣</Text>
-                <Text className='info-row__value'>-{data.pointsDeducted} 积分</Text>
+                <Text className='info-row__label'>T币抵扣</Text>
+                <Text className='info-row__value'>-{data.pointsDeducted} T币</Text>
               </View>
             ) : null}
             <View className='info-row'>

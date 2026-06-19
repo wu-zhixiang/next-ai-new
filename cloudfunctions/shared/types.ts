@@ -183,7 +183,7 @@ export interface PointsLedgerRecord {
   userId: string;
   relatedUserId?: string;
   orderNo?: string;
-  type: 'invite_reward' | 'payment_deduct' | 'adjustment';
+  type: 'invite_reward' | 'invite_milestone' | 'payment_deduct' | 'adjustment';
   direction: 'in' | 'out';
   points: number;
   balanceAfter?: number;

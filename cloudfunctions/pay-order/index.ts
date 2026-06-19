@@ -37,7 +37,7 @@ export async function main(event: Event) {
       orderNo: order.orderNo,
       paid: true,
       paymentType: 'points' as const,
-      message: '积分已全额抵扣，服务开通中',
+      message: 'T币已全额抵扣，服务开通中',
     });
   }
 

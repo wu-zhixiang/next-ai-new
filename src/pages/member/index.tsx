@@ -1294,11 +1294,11 @@ export default function MemberPage(): JSX.Element {
             ) : null}
             <View className={`plan-sheet__points ${usePointsDeduction ? 'plan-sheet__points--active' : ''} ${pointsDeductionAvailable ? '' : 'plan-sheet__points--disabled'}`}>
               <View>
-                <Text className='plan-sheet__points-title'>使用积分抵扣</Text>
+                <Text className='plan-sheet__points-title'>使用T币抵扣</Text>
                 <Text className='plan-sheet__points-desc'>
                   {pointsDeductionAvailable
-                    ? `可用 ${pointsBalance} 积分，本次抵扣 ¥${pointsDeductAmount.toFixed(2)}`
-                    : `可用 ${pointsBalance} 积分，满 1 积分可抵 ¥1`}
+                    ? `可用 ${pointsBalance} T币，本次抵扣 ¥${pointsDeductAmount.toFixed(2)}`
+                    : `可用 ${pointsBalance} T币，1 T币可抵 ¥1`}
                 </Text>
                 {selectedPlan ? (
                   <Text className='plan-sheet__points-pay'>预计支付 ¥{finalPayAmount.toFixed(2)}</Text>
@@ -1308,7 +1308,7 @@ export default function MemberPage(): JSX.Element {
                 className={`ios-switch ${usePointsDeduction ? 'ios-switch--on' : ''}`}
                 onClick={() => {
                   if (!pointsDeductionAvailable) {
-                    Taro.showToast({ title: '暂无可抵扣积分', icon: 'none' });
+                    Taro.showToast({ title: '暂无可抵扣T币', icon: 'none' });
                     return;
                   }
                   setUsePointsDeduction((enabled) => !enabled);

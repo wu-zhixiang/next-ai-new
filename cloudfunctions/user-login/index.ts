@@ -1,7 +1,12 @@
-import { collection, getUserByInviteCode, getUserByOpenId } from '../shared/db';
-import type { UserRecord } from '../shared/types';
+import { _, collection, getUserById, getUserByInviteCode, getUserByOpenId } from '../shared/db';
+import type { PointsLedgerRecord, UserRecord } from '../shared/types';
 import { ok } from '../shared/utils';
 import { getWxContext } from '../_lib/context';
+import {
+  INVITE_MILESTONE_REWARD,
+  INVITE_MILESTONE_TARGET,
+  shouldGrantInviteMilestone,
+} from '../shared/invite-reward-policy';
 
 interface Event {
   nickname?: string;
@@ -14,6 +19,47 @@ function createInviteCode(openid: string): string {
   return `U${openid.slice(-6).toUpperCase()}${Math.floor(Math.random() * 1000)
     .toString()
     .padStart(3, '0')}`;
+}
+
+async function grantInviteMilestoneOnce(inviterUserId: string, now: number): Promise<void> {
+  const existing = await collection('pointsLedger')
+    .where({
+      userId: inviterUserId,
+      type: 'invite_milestone',
+    })
+    .limit(1)
+    .get();
+  if (existing.data[0]) {
+    return;
+  }
+
+  const relations = await collection('inviteRelations')
+    .where({
+      inviterUserId,
+      status: 'active',
+    })
+    .get();
+  if (!shouldGrantInviteMilestone(relations.data.length)) {
+    return;
+  }
+
+  await collection('users').doc(inviterUserId).update({
+    data: {
+      pointsBalance: _.inc(INVITE_MILESTONE_REWARD),
+      updatedAt: now,
+    },
+  });
+  const inviter = await getUserById(inviterUserId);
+  const ledger: PointsLedgerRecord = {
+    userId: inviterUserId,
+    type: 'invite_milestone',
+    direction: 'in',
+    points: INVITE_MILESTONE_REWARD,
+    balanceAfter: inviter?.pointsBalance,
+    description: `累计邀请${INVITE_MILESTONE_TARGET}人奖励${INVITE_MILESTONE_REWARD} T币`,
+    createdAt: now,
+  };
+  await collection('pointsLedger').add({ data: ledger });
 }
 
 async function bindInviteRelation(
@@ -29,6 +75,7 @@ async function bindInviteRelation(
       .limit(1)
       .get();
     if (existingRelation.data[0]) {
+      await grantInviteMilestoneOnce(currentUser.inviterUserId, now);
       console.info('invite.bind.skipped', {
         reason: 'already_bound',
         userId: currentUser._id,
@@ -58,6 +105,7 @@ async function bindInviteRelation(
       inviteCode: inviteCode || inviterUser?.inviteCode || '',
       source: event.source ?? 'backfill',
     });
+    await grantInviteMilestoneOnce(currentUser.inviterUserId, now);
     return currentUser.inviterUserId;
   }
 
@@ -111,6 +159,7 @@ async function bindInviteRelation(
     source: event.source ?? 'share',
   });
 
+  await grantInviteMilestoneOnce(inviter._id, now);
   return inviter._id;
 }
 
@@ -129,12 +178,13 @@ export async function main(event: Event = {}) {
         avatarUrl: event.avatarUrl ?? existingUser.avatarUrl ?? '',
         inviteCode,
         inviterUserId,
-        pointsBalance: existingUser.pointsBalance ?? 0,
         aiAccountRegistered,
         lastLoginAt: now,
         updatedAt: now,
       },
     });
+    await grantInviteMilestoneOnce(existingUser._id, now);
+    const refreshedUser = await getUserById(existingUser._id);
 
     return ok({
       userId: existingUser._id,
@@ -145,7 +195,7 @@ export async function main(event: Event = {}) {
       avatarUrl: event.avatarUrl ?? existingUser.avatarUrl,
       inviteCode,
       inviterUserId,
-      pointsBalance: existingUser.pointsBalance ?? 0,
+      pointsBalance: refreshedUser?.pointsBalance ?? existingUser.pointsBalance ?? 0,
       aiAccountRegistered,
     });
   }

@@ -81,7 +81,7 @@ audit_logs
 }
 ```
 
-注意：传 `includeUsers: true` 后会删除 `users` 集合里的用户记录，因此不会再单独重置用户积分。
+注意：传 `includeUsers: true` 后会删除 `users` 集合里的用户记录，因此不会再单独重置用户T币。
 
 ## 清空套餐表后重建
 
@@ -135,7 +135,7 @@ audit_logs
 字段说明：
 
 - `removed`：每个集合删除的记录数。
-- `resetUserPointsCount`：被重置积分余额的用户数。
+- `resetUserPointsCount`：被重置T币余额的用户数。
 - `seededPlans`：重新初始化的套餐数量。
 - `includeUsers`：本次是否删除用户。
 - `includeMemberPlans`：本次是否先清空套餐表。

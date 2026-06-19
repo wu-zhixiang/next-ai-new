@@ -3,14 +3,7 @@ import { sendMembershipOpenedReminder } from './member-reminders';
 import { notifyOperatorPaidOrderOnce } from './operator-notify';
 import type { MembershipRecord, OrderRecord, PointsLedgerRecord } from './types';
 import { calcMembershipRemainDays } from './utils';
-
-function calcInviteRewardPoints(amount: number): number {
-  // 1 积分 = 1 元；邀请奖励按被邀请人实付金额的 10% 向下取整。
-  if (amount <= 0) {
-    return 0;
-  }
-  return Math.floor(amount * 0.1);
-}
+import { calcInvitePurchaseReward } from './invite-reward-policy';
 
 async function deductPaymentPointsOnce(order: OrderRecord & { _id: string }, paidAt: number): Promise<void> {
   const points = Math.max(0, Math.floor(order.pointsDeducted ?? 0));
@@ -50,7 +43,7 @@ async function deductPaymentPointsOnce(order: OrderRecord & { _id: string }, pai
     direction: 'out',
     points,
     balanceAfter: user?.pointsBalance,
-    description: `订阅 ${order.planName} 抵扣积分`,
+    description: `订阅 ${order.planName} 抵扣T币`,
     createdAt: paidAt,
   };
   await collection('pointsLedger').add({ data: ledger });
@@ -89,12 +82,13 @@ async function rewardInviterOnce(order: OrderRecord & { _id: string }, paidAt: n
     return;
   }
 
-  const rewardPoints = calcInviteRewardPoints(order.amount);
+  const rewardPoints = calcInvitePurchaseReward(order.amount);
   if (rewardPoints <= 0) {
     console.info('invite.reward.skipped', {
-      reason: 'zero_paid_amount',
+      reason: 'paid_amount_not_over_50',
       orderNo: order.orderNo,
       inviterUserId: invitee.inviterUserId,
+      paidAmount: order.amount,
     });
     return;
   }
@@ -114,7 +108,7 @@ async function rewardInviterOnce(order: OrderRecord & { _id: string }, paidAt: n
     direction: 'in',
     points: rewardPoints,
     balanceAfter: inviter?.pointsBalance,
-    description: `邀请用户订阅 ${order.planName} 返还积分`,
+    description: `好友购买 ${order.planName} 奖励5 T币`,
     createdAt: paidAt,
   };
   await collection('pointsLedger').add({ data: ledger });

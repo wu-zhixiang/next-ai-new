@@ -604,6 +604,11 @@ button::after {
   pointer-events: none;
 }
 
+.home-banner--skeleton .skeleton {
+  background: linear-gradient(90deg, #eadfd9, #faf7f4, #eadfd9);
+  background-size: 220% 100%;
+}
+
 .home-banner--skeleton .home-banner__copy .skeleton + .skeleton {
   margin-top: 18rpx;
 }
@@ -619,8 +624,6 @@ button::after {
 
 .home-news-section,
 .home-tools-section {
-  padding-right: 6rpx;
-  padding-left: 6rpx;
   box-sizing: border-box;
 }
 
@@ -666,7 +669,7 @@ button::after {
   align-items: center;
   gap: 22rpx;
   min-height: 116rpx;
-  padding: 22rpx 4rpx;
+  padding: 22rpx 16rpx;
   box-sizing: border-box;
   border-bottom: 1rpx solid rgba(185, 180, 174, 0.2);
 }
@@ -720,6 +723,7 @@ button::after {
 }
 
 .home-news-list {
+    padding: 0 16rpx;
   border-top: 1rpx solid rgba(185, 180, 174, 0.26);
 }
 
