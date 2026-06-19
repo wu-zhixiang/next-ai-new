@@ -1,25 +1,27 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.main = main;
+const node_crypto_1 = require("node:crypto");
 const db_1 = require("./shared/db");
+const constants_1 = require("./shared/constants");
 const utils_1 = require("./shared/utils");
 const CODE_TTL_MS = 10 * 60 * 1000;
 const EMAIL_DOMAIN = '@mraclpivot.com';
 async function main(event = {}) {
-    var _a, _b, _c, _d;
+    var _a, _b, _c, _d, _e, _f;
     const payload = normalizeEvent(event);
     assertWebhookSecret(event);
     const email = normalizeEmail(payload.to);
-    const appleEmail = isAppleEmail(payload.from, payload.subject);
-    const code = appleEmail ? normalizeAppleCode(payload) : normalizeCode(payload.code, payload.subject, payload.text, payload.html, payload.content);
     if (!email.endsWith(EMAIL_DOMAIN)) {
         throw new Error('邮箱域名不合法');
     }
-    if (!code) {
-        throw new Error('验证码格式不合法');
-    }
+    const appleEmail = isAppleEmail(payload.from, payload.subject);
     const receivedAt = normalizeReceivedAt(payload.receivedAt);
     if (appleEmail) {
+        const code = normalizeAppleCode(payload);
+        if (!code) {
+            throw new Error('验证码格式不合法');
+        }
         const record = {
             email,
             code,
@@ -49,11 +51,18 @@ async function main(event = {}) {
         }));
         return (0, utils_1.ok)({ success: true, ignored: true, reason: 'user_missing' });
     }
+    const provider = getEmailProvider(payload.from, payload.subject);
+    const code = provider === 'claude'
+        ? await resolveClaudeCode(payload)
+        : normalizeCode(payload.code, payload.subject, payload.text, payload.html, payload.content);
+    if (!code) {
+        throw new Error('验证码格式不合法');
+    }
     const record = {
         email,
         userId: user._id,
         code,
-        provider: isOpenAiEmail(payload.from) ? 'openai' : 'unknown',
+        provider,
         from: (_c = payload.from) !== null && _c !== void 0 ? _c : '',
         subject: (_d = payload.subject) !== null && _d !== void 0 ? _d : '',
         receivedAt,
@@ -61,15 +70,39 @@ async function main(event = {}) {
         usedAt: null,
         createdAt: Date.now(),
     };
-    await (0, db_1.collection)('emailVerificationCodes').add({ data: record });
+    const addResult = await (0, db_1.collection)('emailVerificationCodes').add({ data: record });
+    const recordId = (_f = (_e = addResult._id) !== null && _e !== void 0 ? _e : addResult.id) !== null && _f !== void 0 ? _f : '';
+    const readBackResult = recordId
+        ? await (0, db_1.collection)('emailVerificationCodes').doc(recordId).get()
+        : null;
+    const persisted = Boolean(readBackResult === null || readBackResult === void 0 ? void 0 : readBackResult.data);
     console.info(JSON.stringify({
         tag: 'emailCode.saved',
         email,
         userId: user._id,
         provider: record.provider,
+        collection: constants_1.COLLECTIONS.emailVerificationCodes,
+        recordId,
+        persisted,
+        envId: getRuntimeEnvId(),
+        codeFingerprint: fingerprintCode(code),
         receivedAt,
     }));
-    return (0, utils_1.ok)({ success: true });
+    return (0, utils_1.ok)({
+        success: true,
+        recordId,
+        collection: constants_1.COLLECTIONS.emailVerificationCodes,
+        persisted,
+    });
+}
+function fingerprintCode(code) {
+    return (0, node_crypto_1.createHash)('sha256').update(code).digest('hex').slice(0, 12);
+}
+function getRuntimeEnvId() {
+    return process.env.TCB_ENV
+        || process.env.SCF_NAMESPACE
+        || process.env.WX_PAY_ENV_ID
+        || 'dynamic-current-env';
 }
 function normalizeEvent(event) {
     if (event.body) {
@@ -152,6 +185,10 @@ function normalizeCandidates(value) {
     }
     return Array.from(new Set(value.map((item) => String(item).trim()).filter((item) => /^\d{6}$/.test(item))));
 }
+async function resolveClaudeCode(payload) {
+    return normalizeCode(payload.code)
+        || normalizeKeywordCode(payload.subject, payload.text, payload.html, payload.content);
+}
 function normalizeReceivedAt(value) {
     if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
         return Date.now();
@@ -161,6 +198,14 @@ function normalizeReceivedAt(value) {
 function isOpenAiEmail(value) {
     const from = (value !== null && value !== void 0 ? value : '').toLowerCase();
     return from.includes('openai.com');
+}
+function getEmailProvider(from, subject) {
+    const normalizedFrom = (from !== null && from !== void 0 ? from : '').toLowerCase();
+    const normalizedSubject = (subject !== null && subject !== void 0 ? subject : '').toLowerCase();
+    if (normalizedFrom.includes('anthropic.com') || normalizedFrom.includes('claude.ai') || normalizedSubject.includes('claude')) {
+        return 'claude';
+    }
+    return isOpenAiEmail(from) ? 'openai' : 'unknown';
 }
 function isAppleEmail(from, subject) {
     const normalizedFrom = (from !== null && from !== void 0 ? from : '').toLowerCase();

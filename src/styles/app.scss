@@ -2378,6 +2378,24 @@ button::after {
   min-width: 0;
 }
 
+.member-product-type-skeleton {
+  pointer-events: none;
+}
+
+.member-product-type-skeleton__item {
+  min-height: 128rpx;
+  box-sizing: border-box;
+}
+
+.member-product-type-skeleton__avatar {
+  flex: none;
+  border-radius: 50% !important;
+}
+
+.member-product-type-skeleton__desc {
+  margin-top: 12rpx;
+}
+
 .member-service-item__icon {
   width: 80rpx;
   height: 80rpx;

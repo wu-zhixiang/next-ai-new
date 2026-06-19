@@ -1,4 +1,6 @@
+import { createHash } from 'node:crypto';
 import { collection, ensureCollection, getUserByAiAccountEmail } from '../shared/db';
+import { COLLECTIONS } from '../shared/constants';
 import type { AppStoreEmailVerificationCodeRecord, EmailVerificationCodeRecord } from '../shared/types';
 import { ok } from '../shared/utils';
 
@@ -26,23 +28,22 @@ type EmailCodePayload = Required<Pick<Event, 'to' | 'from' | 'subject' | 'code'>
 
 const CODE_TTL_MS = 10 * 60 * 1000;
 const EMAIL_DOMAIN = '@mraclpivot.com';
-
 export async function main(event: Event = {}) {
   const payload = normalizeEvent(event);
   assertWebhookSecret(event);
 
   const email = normalizeEmail(payload.to);
-  const appleEmail = isAppleEmail(payload.from, payload.subject);
-  const code = appleEmail ? normalizeAppleCode(payload) : normalizeCode(payload.code, payload.subject, payload.text, payload.html, payload.content);
   if (!email.endsWith(EMAIL_DOMAIN)) {
     throw new Error('邮箱域名不合法');
   }
-  if (!code) {
-    throw new Error('验证码格式不合法');
-  }
 
+  const appleEmail = isAppleEmail(payload.from, payload.subject);
   const receivedAt = normalizeReceivedAt(payload.receivedAt);
   if (appleEmail) {
+    const code = normalizeAppleCode(payload);
+    if (!code) {
+      throw new Error('验证码格式不合法');
+    }
     const record: AppStoreEmailVerificationCodeRecord = {
       email,
       code,
@@ -80,11 +81,19 @@ export async function main(event: Event = {}) {
     return ok({ success: true, ignored: true, reason: 'user_missing' });
   }
 
+  const provider = getEmailProvider(payload.from, payload.subject);
+  const code = provider === 'claude'
+    ? await resolveClaudeCode(payload)
+    : normalizeCode(payload.code, payload.subject, payload.text, payload.html, payload.content);
+  if (!code) {
+    throw new Error('验证码格式不合法');
+  }
+
   const record: EmailVerificationCodeRecord = {
     email,
     userId: user._id,
     code,
-    provider: isOpenAiEmail(payload.from) ? 'openai' : 'unknown',
+    provider,
     from: payload.from ?? '',
     subject: payload.subject ?? '',
     receivedAt,
@@ -92,7 +101,15 @@ export async function main(event: Event = {}) {
     usedAt: null,
     createdAt: Date.now(),
   };
-  await collection('emailVerificationCodes').add({ data: record });
+  const addResult = await collection('emailVerificationCodes').add({ data: record }) as {
+    _id?: string;
+    id?: string;
+  };
+  const recordId = addResult._id ?? addResult.id ?? '';
+  const readBackResult = recordId
+    ? await collection('emailVerificationCodes').doc(recordId).get() as { data?: { _id?: string } }
+    : null;
+  const persisted = Boolean(readBackResult?.data);
 
   console.info(
     JSON.stringify({
@@ -100,11 +117,32 @@ export async function main(event: Event = {}) {
       email,
       userId: user._id,
       provider: record.provider,
+      collection: COLLECTIONS.emailVerificationCodes,
+      recordId,
+      persisted,
+      envId: getRuntimeEnvId(),
+      codeFingerprint: fingerprintCode(code),
       receivedAt,
     }),
   );
 
-  return ok({ success: true });
+  return ok({
+    success: true,
+    recordId,
+    collection: COLLECTIONS.emailVerificationCodes,
+    persisted,
+  });
+}
+
+function fingerprintCode(code: string): string {
+  return createHash('sha256').update(code).digest('hex').slice(0, 12);
+}
+
+function getRuntimeEnvId(): string {
+  return process.env.TCB_ENV
+    || process.env.SCF_NAMESPACE
+    || process.env.WX_PAY_ENV_ID
+    || 'dynamic-current-env';
 }
 
 function normalizeEvent(event: Event): EmailCodePayload {
@@ -195,6 +233,11 @@ function normalizeCandidates(value?: string[]): string[] {
   return Array.from(new Set(value.map((item) => String(item).trim()).filter((item) => /^\d{6}$/.test(item))));
 }
 
+async function resolveClaudeCode(payload: EmailCodePayload): Promise<string> {
+  return normalizeCode(payload.code)
+    || normalizeKeywordCode(payload.subject, payload.text, payload.html, payload.content);
+}
+
 function normalizeReceivedAt(value?: number): number {
   if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
     return Date.now();
@@ -205,6 +248,15 @@ function normalizeReceivedAt(value?: number): number {
 function isOpenAiEmail(value?: string): boolean {
   const from = (value ?? '').toLowerCase();
   return from.includes('openai.com');
+}
+
+function getEmailProvider(from?: string, subject?: string): EmailVerificationCodeRecord['provider'] {
+  const normalizedFrom = (from ?? '').toLowerCase();
+  const normalizedSubject = (subject ?? '').toLowerCase();
+  if (normalizedFrom.includes('anthropic.com') || normalizedFrom.includes('claude.ai') || normalizedSubject.includes('claude')) {
+    return 'claude';
+  }
+  return isOpenAiEmail(from) ? 'openai' : 'unknown';
 }
 
 function isAppleEmail(from?: string, subject?: string): boolean {

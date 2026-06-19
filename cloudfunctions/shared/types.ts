@@ -179,7 +179,7 @@ export interface EmailVerificationCodeRecord {
   email: string;
   userId: string;
   code: string;
-  provider: 'openai' | 'unknown';
+  provider: 'openai' | 'claude' | 'unknown';
   from: string;
   subject: string;
   receivedAt: number;

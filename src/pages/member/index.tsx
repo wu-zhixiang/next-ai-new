@@ -5,6 +5,7 @@ import AuthModal, { type AuthUserInfo } from '@/components/AuthModal';
 import { PaymentLockOverlay } from '@/components/PaymentLockOverlay';
 import { PopLayout } from '@/components/PopLayout';
 import { SaasPageFrame } from '@/components/SaasPageFrame';
+import { Skeleton } from '@/components/Skeleton';
 import { callCloudFunction } from '@/services/api';
 import type { MembershipView, PlanView, ProductTypeView } from '@/types';
 import { AUTH_CACHE_KEY, getCachedUserInfo, saveCachedUserInfo, type CachedUserInfo, type LoginResult } from '@/utils/auth';
@@ -161,6 +162,7 @@ export default function MemberPage(): JSX.Element {
   });
   const [backendPlans, setBackendPlans] = useState<PlanView[]>([]);
   const [backendProductTypes, setBackendProductTypes] = useState<ProductTypeView[]>([]);
+  const [productTypesLoading, setProductTypesLoading] = useState(true);
   const [plansLoaded, setPlansLoaded] = useState(false);
   const [activeProductCode, setActiveProductCode] = useState('ai_news');
   const [productTypeSheetVisible, setProductTypeSheetVisible] = useState(false);
@@ -265,11 +267,14 @@ export default function MemberPage(): JSX.Element {
   }
 
   async function loadProductTypes(): Promise<void> {
+    setProductTypesLoading(true);
     try {
       const result = await callCloudFunction<ProductTypeListResult>('list-product-types');
       setBackendProductTypes(result.productTypes);
     } catch {
       setBackendProductTypes([]);
+    } finally {
+      setProductTypesLoading(false);
     }
   }
 
@@ -790,7 +795,7 @@ export default function MemberPage(): JSX.Element {
     if (!verificationCode) {
       await Taro.showModal({
         title: '暂无验证码',
-        content: '暂未获取到最新登录验证码。请确认已在 ChatGPT 登录页点击重新发送，然后稍等几秒后重试。',
+        content: '暂未获取到最新登录验证码。请确认已在对应商品登录页重新发送验证邮件，然后稍等几秒后重试。',
         showCancel: false,
         confirmText: '知道了',
       });
@@ -884,7 +889,25 @@ export default function MemberPage(): JSX.Element {
         <View className='member-section'>
           <Text className='member-section__title'>工具类型</Text>
           <View className='member-list-card'>
-            {productTypes.length > 0 ? (
+            {productTypesLoading ? (
+              <View className='member-product-type-skeleton' aria-label='商品类型加载中'>
+                {Array.from({ length: 2 }).map((_, index) => (
+                  <Fragment key={index}>
+                    {index > 0 ? <View className='member-divider' /> : null}
+                    <View className='member-right-item member-product-type-skeleton__item'>
+                      <View className='member-product-type__main'>
+                        <Skeleton className='member-product-type-skeleton__avatar' width='64rpx' height='64rpx' />
+                        <View className='member-product-type__copy'>
+                          <Skeleton width={index === 0 ? '184rpx' : '156rpx'} height='32rpx' radius='10rpx' />
+                          <Skeleton className='member-product-type-skeleton__desc' width='96rpx' height='24rpx' />
+                        </View>
+                      </View>
+                      <Skeleton width='24rpx' height='36rpx' radius='8rpx' />
+                    </View>
+                  </Fragment>
+                ))}
+              </View>
+            ) : productTypes.length > 0 ? (
               productTypes.map((product, index) => (
                 <Fragment key={product.productCode}>
                   {index > 0 ? <View className='member-divider' /> : null}
