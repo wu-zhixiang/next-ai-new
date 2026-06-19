@@ -35,6 +35,11 @@ const PLAN_SEED_SOURCE: Array<Omit<MemberPlanRecord, 'pid' | 'createdAt' | 'upda
     status: 'on',
     sort: 1,
     description: 'ChatGPT Plus 月度会员套餐。',
+    complianceDisplay: {
+      productName: 'AI效率会员',
+      planName: 'AI效率会员月度套餐',
+      description: 'AI效率服务月度套餐。',
+    },
   },
   {
     productCode: DEFAULT_PRODUCT_CODE,
@@ -48,6 +53,11 @@ const PLAN_SEED_SOURCE: Array<Omit<MemberPlanRecord, 'pid' | 'createdAt' | 'upda
     status: 'on',
     sort: 2,
     description: 'ChatGPT Plus 季度会员套餐。',
+    complianceDisplay: {
+      productName: 'AI效率会员',
+      planName: 'AI效率会员季度套餐',
+      description: 'AI效率服务季度套餐。',
+    },
   },
   {
     productCode: 'claude_pro',
@@ -61,6 +71,11 @@ const PLAN_SEED_SOURCE: Array<Omit<MemberPlanRecord, 'pid' | 'createdAt' | 'upda
     status: 'on',
     sort: 3,
     description: 'Claude Pro 月度会员套餐。',
+    complianceDisplay: {
+      productName: 'AI创作会员',
+      planName: 'AI创作会员月度套餐',
+      description: 'AI创作服务月度套餐。',
+    },
   },
 ];
 
@@ -106,4 +121,23 @@ export async function seedMemberPlans(now = Date.now()): Promise<number> {
   }
 
   return PLAN_SEED.length;
+}
+
+export async function seedPlanComplianceDisplays(now = Date.now()): Promise<number> {
+  await ensureCollection('memberPlans');
+  const plans = collection('memberPlans') as unknown as PlanSeedCollection;
+  let updated = 0;
+  for (const seed of PLAN_SEED) {
+    const existing = await plans.where({ pid: seed.pid }).limit(1).get();
+    const current = existing.data[0] as (MemberPlanRecord & { _id: string }) | undefined;
+    if (!current?._id || !seed.complianceDisplay) continue;
+    await plans.doc(current._id).update({
+      data: {
+        complianceDisplay: seed.complianceDisplay,
+        updatedAt: now,
+      },
+    });
+    updated += 1;
+  }
+  return updated;
 }

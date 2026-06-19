@@ -12,6 +12,7 @@ wx_server_sdk_1.default.init({
 const db = wx_server_sdk_1.default.database();
 const DEFAULT_CONFIG = {
     enableNewsAuthModal: true,
+    enableProductComplianceMode: false,
 };
 async function main() {
     var _a;
@@ -20,6 +21,7 @@ async function main() {
         const config = ((_a = result.data) !== null && _a !== void 0 ? _a : {});
         return (0, utils_1.ok)({
             enableNewsAuthModal: config.enableNewsAuthModal !== false,
+            enableProductComplianceMode: config.enableProductComplianceMode === true,
         });
     }
     catch (error) {

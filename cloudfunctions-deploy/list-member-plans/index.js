@@ -20,6 +20,7 @@ async function main(event = {}) {
             price: plan.price,
             durationDays: plan.durationDays,
             description: plan.description,
+            complianceDisplay: plan.complianceDisplay,
         };
     });
     return (0, utils_1.ok)({ plans });

@@ -16,6 +16,12 @@ import { disableReminderSubscription, enableReminderSubscription } from '@/utils
 import { hideTabBarSafely, showTabBarSafely } from '@/utils/tabbar';
 import { useResetPageScroll } from '@/hooks/useResetPageScroll';
 import { consumePromotedProductCode } from '@/utils/productNavigation';
+import { loadClientAppConfig } from '@/utils/appConfig';
+import {
+  toCompliantMembership,
+  toCompliantPlan,
+  toCompliantProductType,
+} from '@/utils/productCompliance';
 
 interface MemberHomeData {
   userInfo?: {
@@ -199,10 +205,12 @@ export default function MemberPage(): JSX.Element {
   const [clockNow, setClockNow] = useState(Date.now());
   const [authModalVisible, setAuthModalVisible] = useState(false);
   const [pendingAuthAction, setPendingAuthAction] = useState<PendingAuthAction | null>(null);
+  const [productComplianceMode, setProductComplianceMode] = useState<boolean | null>(null);
 
   useDidShow(() => {
     showTabBarSafely();
     openPromotedProductIfReady();
+    void loadComplianceMode();
   });
 
   useEffect(() => {
@@ -210,18 +218,30 @@ export default function MemberPage(): JSX.Element {
     void loadData();
     void loadProductTypes();
     void loadPlans();
+    void loadComplianceMode();
   }, []);
 
   useEffect(() => {
     openPromotedProductIfReady();
-  }, [productTypesLoading, backendProductTypes]);
+  }, [productTypesLoading, backendProductTypes, productComplianceMode]);
 
   function openPromotedProductIfReady(): void {
-    if (productTypesLoading || backendProductTypes.length === 0) {
+    if (
+      productComplianceMode === null
+      || productTypesLoading
+      || backendProductTypes.length === 0
+    ) {
       return;
     }
     const promotedProductCode = consumePromotedProductCode();
-    if (!promotedProductCode || !backendProductTypes.some((item) => item.productCode === promotedProductCode)) {
+    const promotedProduct = backendProductTypes.find(
+      (item) => item.productCode === promotedProductCode,
+    );
+    if (
+      !promotedProductCode
+      || !promotedProduct
+      || (productComplianceMode && !promotedProduct.complianceDisplay)
+    ) {
       return;
     }
     setIntroProductCode(promotedProductCode);
@@ -284,6 +304,11 @@ export default function MemberPage(): JSX.Element {
     }
   }
 
+  async function loadComplianceMode(): Promise<void> {
+    const config = await loadClientAppConfig();
+    setProductComplianceMode(config.enableProductComplianceMode);
+  }
+
   async function loadPlans(): Promise<void> {
     try {
       const result = await callCloudFunction<PlanListResult>('list-member-plans');
@@ -311,7 +336,10 @@ export default function MemberPage(): JSX.Element {
   const isActive = data.membership.status === 'active';
   const isOpening = data.membership.status === 'opening';
   const memberStatusLabel = data.membership.status === 'none' ? '立即开通' : data.membership.openStatusLabel ?? '立即开通';
-  const planLabel = isActive || isOpening ? data.membership.planName ?? '会员套餐' : '普通会员';
+  const displayedMembership = productComplianceMode === true
+    ? toCompliantMembership(data.membership, backendProductTypes, backendPlans)
+    : data.membership;
+  const planLabel = isActive || isOpening ? displayedMembership.planName ?? '会员套餐' : '普通会员';
   const remainCountdown = isActive
     ? formatRemainCountdown(data.membership.endAt, clockNow)
     : { value: String(data.membership.remainDays ?? 0), label: '剩余天数', remainMs: 0 };
@@ -325,20 +353,29 @@ export default function MemberPage(): JSX.Element {
   const mobileBound = isMobileBound(data.userInfo?.mobile);
   const nickname = data.userInfo?.nickname ?? cachedUserInfo?.nickname ?? '微信用户';
   const avatarUrl = data.userInfo?.avatarUrl ?? cachedUserInfo?.avatarUrl ?? '';
-  const productTypes = backendProductTypes;
+  const productTypes = useMemo(
+    () => productComplianceMode === true
+      ? backendProductTypes
+          .map(toCompliantProductType)
+          .filter((item): item is ProductTypeView => Boolean(item))
+      : backendProductTypes,
+    [backendProductTypes, productComplianceMode],
+  );
   const membershipProduct = productTypes.find((item) => item.productCode === currentProductCode);
   const memberCardAvatarUrl = data.membership.status === 'none' ? avatarUrl : membershipProduct?.avatarUrl || avatarUrl;
   const activeProduct = productTypes.find((item) => item.productCode === activeProductCode);
   const introProduct = productTypes.find((item) => item.productCode === introProductCode);
   const plansByProduct = useMemo(() => {
     const nextMap: Record<string, ProductPlanOption[]> = {};
-    backendPlans.forEach((plan) => {
+    backendPlans.forEach((rawPlan) => {
+      const plan = productComplianceMode === true ? toCompliantPlan(rawPlan) : rawPlan;
+      if (!plan) return;
       const current = nextMap[plan.productCode] ?? [];
       current.push(buildPlanOption(plan, current.length));
       nextMap[plan.productCode] = current;
     });
     return nextMap;
-  }, [backendPlans]);
+  }, [backendPlans, productComplianceMode]);
   const activePlans = plansByProduct[activeProductCode] ?? [];
   const activeProductAvailable = Boolean(activeProduct?.available && activePlans.some((plan) => plan.price > 0));
   const selectedPlan = activePlans.find((plan) => plan.planCode === selectedPlanCode) ?? activePlans[0];
@@ -834,7 +871,7 @@ export default function MemberPage(): JSX.Element {
 
     const modalResult = await Taro.showModal({
       title: '获取验证码',
-      content: `账号：\n${result.email}\n\n验证码：\n${verificationCode}${result.expired ? '\n\n提示：这是最近一次未复制的验证码，可能已过期。如不可用，请在 ChatGPT 登录页重新发送。' : ''}`,
+      content: `账号：\n${result.email}\n\n验证码：\n${verificationCode}${result.expired ? '\n\n提示：这是最近一次未复制的验证码，可能已过期。如不可用，请在对应服务登录页重新发送。' : ''}`,
       confirmText: '复制',
       cancelText: '关闭',
     });
@@ -866,7 +903,7 @@ export default function MemberPage(): JSX.Element {
       <View className='member-page'>
       <View className='saas-shell member-shell'>
         <View className='member-premium-card'>
-          {memberLoading ? (
+          {memberLoading || productComplianceMode === null ? (
             <View className='member-card-skeleton'>
               <View className='member-card-skeleton__head'>
                 <View className='member-card-skeleton__avatar' />
@@ -920,7 +957,7 @@ export default function MemberPage(): JSX.Element {
         <View className='member-section'>
           <Text className='member-section__title'>工具类型</Text>
           <View className='member-list-card'>
-            {productTypesLoading ? (
+            {productTypesLoading || productComplianceMode === null ? (
               <View className='member-product-type-skeleton' aria-label='商品类型加载中'>
                 {Array.from({ length: 2 }).map((_, index) => (
                   <Fragment key={index}>

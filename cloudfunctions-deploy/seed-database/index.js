@@ -6,6 +6,16 @@ const appstore_country_seed_1 = require("./shared/appstore-country-seed");
 const product_type_seed_1 = require("./shared/product-type-seed");
 const utils_1 = require("./shared/utils");
 async function main(event = {}) {
+    if (event.action === 'compliance-display') {
+        const updatedProductTypes = await (0, product_type_seed_1.seedProductTypeComplianceDisplays)();
+        const updatedPlans = await (0, plan_seed_1.seedPlanComplianceDisplays)();
+        return (0, utils_1.ok)({
+            success: true,
+            action: event.action,
+            updatedProductTypes,
+            updatedPlans,
+        });
+    }
     if (event.dryRun) {
         return (0, utils_1.ok)({
             dryRun: true,

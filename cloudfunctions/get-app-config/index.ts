@@ -8,10 +8,12 @@ cloud.init({
 const db = cloud.database();
 const DEFAULT_CONFIG = {
   enableNewsAuthModal: true,
+  enableProductComplianceMode: false,
 };
 
 interface AppConfigRecord {
   enableNewsAuthModal?: boolean;
+  enableProductComplianceMode?: boolean;
 }
 
 export async function main() {
@@ -20,6 +22,7 @@ export async function main() {
     const config = (result.data ?? {}) as AppConfigRecord;
     return ok({
       enableNewsAuthModal: config.enableNewsAuthModal !== false,
+      enableProductComplianceMode: config.enableProductComplianceMode === true,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

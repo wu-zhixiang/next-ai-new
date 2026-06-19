@@ -7,7 +7,7 @@
     "dev:weapp": "taro build --type weapp --watch",
     "build:weapp": "taro build --type weapp && node scripts/remove-dist-sourcemaps.mjs",
     "typecheck": "tsc --noEmit",
-    "test:unit": "node --test tests/mobile-utils.test.ts",
+    "test:unit": "node --test tests/*.test.ts",
     "upload:cloudfunctions": "node scripts/upload-cloudfunctions.mjs",
     "init:cloudenv": "node scripts/init-cloud-env.mjs"
   },

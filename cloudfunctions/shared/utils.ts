@@ -62,6 +62,7 @@ export function normalizeMembership(record?: MembershipRecord | null) {
     openStatusLabel: getMembershipOpenStatusLabel(record.status),
     productCode: record.productCode,
     productName: record.productName,
+    planCode: record.planCode,
     planName: record.planName,
     startAt: record.startAt,
     endAt: record.endAt,

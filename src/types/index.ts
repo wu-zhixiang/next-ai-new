@@ -12,6 +12,7 @@ export interface MembershipView {
   openStatusLabel?: '立即开通' | '开通中' | '已开通';
   productCode?: string;
   productName?: string;
+  planCode?: string;
   planName?: string;
   startAt?: number;
   endAt?: number;
@@ -33,6 +34,11 @@ export interface PlanView {
   price: number;
   durationDays: number;
   description?: string;
+  complianceDisplay?: {
+    productName: string;
+    planName: string;
+    description?: string;
+  };
 }
 
 export interface ProductTypeView {
@@ -47,6 +53,17 @@ export interface ProductTypeView {
     title: string;
     description: string;
   }>;
+  complianceDisplay?: {
+    productName: string;
+    label: string;
+    tag: string;
+    avatarUrl?: string;
+    description: string;
+    introHighlights?: Array<{
+      title: string;
+      description: string;
+    }>;
+  };
 }
 
 export interface AppStoreCountryView {

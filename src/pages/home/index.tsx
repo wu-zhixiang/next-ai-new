@@ -9,6 +9,8 @@ import { useResetPageScroll } from '@/hooks/useResetPageScroll';
 import { showTabBarSafely } from '@/utils/tabbar';
 import { setPromotedProductCode } from '@/utils/productNavigation';
 import { VISIBLE_TOOLS, type ToolDefinition } from '@/pages/tools/definitions';
+import { loadClientAppConfig } from '@/utils/appConfig';
+import { toCompliantProductType } from '@/utils/productCompliance';
 
 const CHEVRON_RIGHT_ICON = require('../../assets/icons/chevron-right-terracotta.svg') as string;
 const HOME_TOOLS = VISIBLE_TOOLS.filter((tool) => tool.enabled).slice(0, 3);
@@ -50,7 +52,8 @@ export default function HomePage(): JSX.Element {
   async function loadHome(): Promise<void> {
     setLoading(true);
     try {
-      const [productResult, newsResult] = await Promise.all([
+      const [config, productResult, newsResult] = await Promise.all([
+        loadClientAppConfig(),
         callCloudFunction<ProductTypeListResult>('list-product-types').catch(() => ({ productTypes: [] })),
         callCloudFunction<NewsListResult>('list-ai-news', {
           limit: 5,
@@ -58,7 +61,13 @@ export default function HomePage(): JSX.Element {
           sort: 'latest',
         }).catch(() => ({ items: [] })),
       ]);
-      setProductTypes(productResult.productTypes);
+      setProductTypes(
+        config.enableProductComplianceMode
+          ? productResult.productTypes
+              .map(toCompliantProductType)
+              .filter((item): item is ProductTypeView => Boolean(item))
+          : productResult.productTypes,
+      );
       setNews(newsResult.items.slice(0, 5));
     } finally {
       setLoading(false);

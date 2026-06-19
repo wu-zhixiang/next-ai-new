@@ -7,6 +7,9 @@ import { callCloudFunction } from '@/services/api';
 import { formatDateTime } from '@/utils/format';
 import { showTabBarSafely } from '@/utils/tabbar';
 import { useResetPageScroll } from '@/hooks/useResetPageScroll';
+import { loadClientAppConfig } from '@/utils/appConfig';
+import { getCompliantOrderDisplay } from '@/utils/productCompliance';
+import type { PlanView, ProductTypeView } from '@/types';
 
 const CHEVRON_RIGHT_ICON = require('../../assets/icons/chevron-right.svg') as string;
 
@@ -14,6 +17,8 @@ type PayStatus = 'pending' | 'paid' | 'failed' | 'closed' | 'refunded';
 
 interface OrderItem {
   orderNo: string;
+  productCode?: string;
+  planCode?: string;
   productName: string;
   planName: string;
   amount: number;
@@ -28,6 +33,14 @@ interface OrderItem {
 
 interface ListOrdersResult {
   orders: OrderItem[];
+}
+
+interface ProductTypeListResult {
+  productTypes: ProductTypeView[];
+}
+
+interface PlanListResult {
+  plans: PlanView[];
 }
 
 const STATUS_LABEL: Record<PayStatus, string> = {
@@ -71,8 +84,28 @@ export default function RecordsPage(): JSX.Element {
       setLoading(true);
     }
     try {
-      const result = await callCloudFunction<ListOrdersResult>('list-orders');
-      setOrders(result.orders);
+      const [config, result, productResult, planResult] = await Promise.all([
+        loadClientAppConfig(),
+        callCloudFunction<ListOrdersResult>('list-orders'),
+        callCloudFunction<ProductTypeListResult>('list-product-types').catch(() => ({ productTypes: [] })),
+        callCloudFunction<PlanListResult>('list-member-plans').catch(() => ({ plans: [] })),
+      ]);
+      setOrders(
+        config.enableProductComplianceMode
+          ? result.orders.map((order) => {
+              const display = getCompliantOrderDisplay(
+                order.productCode,
+                order.planCode,
+                productResult.productTypes,
+                planResult.plans,
+              );
+              return {
+                ...order,
+                ...display,
+              };
+            })
+          : result.orders,
+      );
     } catch (error) {
       Taro.showToast({
         title: error instanceof Error ? error.message : '服务记录刷新失败',

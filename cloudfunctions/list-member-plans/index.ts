@@ -23,6 +23,7 @@ export async function main(event: Event = {}) {
       price: plan.price,
       durationDays: plan.durationDays,
       description: plan.description,
+      complianceDisplay: plan.complianceDisplay,
     };
   });
 

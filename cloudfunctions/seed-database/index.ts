@@ -1,13 +1,29 @@
-import { PLAN_SEED, seedMemberPlans } from '../shared/plan-seed';
+import { PLAN_SEED, seedMemberPlans, seedPlanComplianceDisplays } from '../shared/plan-seed';
 import { APPSTORE_COUNTRY_SEED, seedAppStoreCountries } from '../shared/appstore-country-seed';
-import { PRODUCT_TYPE_SEED, seedProductTypes } from '../shared/product-type-seed';
+import {
+  PRODUCT_TYPE_SEED,
+  seedProductTypeComplianceDisplays,
+  seedProductTypes,
+} from '../shared/product-type-seed';
 import { ok } from '../shared/utils';
 
 interface Event {
   dryRun?: boolean;
+  action?: 'full' | 'compliance-display';
 }
 
 export async function main(event: Event = {}) {
+  if (event.action === 'compliance-display') {
+    const updatedProductTypes = await seedProductTypeComplianceDisplays();
+    const updatedPlans = await seedPlanComplianceDisplays();
+    return ok({
+      success: true,
+      action: event.action,
+      updatedProductTypes,
+      updatedPlans,
+    });
+  }
+
   if (event.dryRun) {
     return ok({
       dryRun: true,

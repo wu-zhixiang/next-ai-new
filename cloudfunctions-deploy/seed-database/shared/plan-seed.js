@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PLAN_SEED = void 0;
 exports.seedMemberPlans = seedMemberPlans;
+exports.seedPlanComplianceDisplays = seedPlanComplianceDisplays;
 const constants_1 = require("./constants");
 const db_1 = require("./db");
 const SEED_TIME = 1746921600000;
@@ -21,6 +22,11 @@ const PLAN_SEED_SOURCE = [
         status: 'on',
         sort: 1,
         description: 'ChatGPT Plus 月度会员套餐。',
+        complianceDisplay: {
+            productName: 'AI效率会员',
+            planName: 'AI效率会员月度套餐',
+            description: 'AI效率服务月度套餐。',
+        },
     },
     {
         productCode: constants_1.DEFAULT_PRODUCT_CODE,
@@ -34,6 +40,11 @@ const PLAN_SEED_SOURCE = [
         status: 'on',
         sort: 2,
         description: 'ChatGPT Plus 季度会员套餐。',
+        complianceDisplay: {
+            productName: 'AI效率会员',
+            planName: 'AI效率会员季度套餐',
+            description: 'AI效率服务季度套餐。',
+        },
     },
     {
         productCode: 'claude_pro',
@@ -47,6 +58,11 @@ const PLAN_SEED_SOURCE = [
         status: 'on',
         sort: 3,
         description: 'Claude Pro 月度会员套餐。',
+        complianceDisplay: {
+            productName: 'AI创作会员',
+            planName: 'AI创作会员月度套餐',
+            description: 'AI创作服务月度套餐。',
+        },
     },
 ];
 exports.PLAN_SEED = PLAN_SEED_SOURCE.map((seed) => ({
@@ -86,4 +102,23 @@ async function seedMemberPlans(now = Date.now()) {
         });
     }
     return exports.PLAN_SEED.length;
+}
+async function seedPlanComplianceDisplays(now = Date.now()) {
+    await (0, db_1.ensureCollection)('memberPlans');
+    const plans = (0, db_1.collection)('memberPlans');
+    let updated = 0;
+    for (const seed of exports.PLAN_SEED) {
+        const existing = await plans.where({ pid: seed.pid }).limit(1).get();
+        const current = existing.data[0];
+        if (!(current === null || current === void 0 ? void 0 : current._id) || !seed.complianceDisplay)
+            continue;
+        await plans.doc(current._id).update({
+            data: {
+                complianceDisplay: seed.complianceDisplay,
+                updatedAt: now,
+            },
+        });
+        updated += 1;
+    }
+    return updated;
 }

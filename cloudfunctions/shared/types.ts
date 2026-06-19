@@ -64,6 +64,11 @@ export interface MemberPlanRecord {
   status: 'on' | 'off';
   sort: number;
   description?: string;
+  complianceDisplay?: {
+    productName: string;
+    planName: string;
+    description?: string;
+  };
   createdAt: number;
   updatedAt: number;
 }
@@ -81,6 +86,17 @@ export interface ProductTypeRecord {
     title: string;
     description: string;
   }>;
+  complianceDisplay?: {
+    productName: string;
+    label: string;
+    tag: string;
+    avatarUrl?: string;
+    description: string;
+    introHighlights?: Array<{
+      title: string;
+      description: string;
+    }>;
+  };
   sort: number;
   status: 'on' | 'off';
   createdAt: number;
@@ -256,6 +272,7 @@ export interface PlanView {
   price: number;
   durationDays: number;
   description?: string;
+  complianceDisplay?: MemberPlanRecord['complianceDisplay'];
 }
 
 export interface ProductTypeView {
@@ -270,6 +287,7 @@ export interface ProductTypeView {
     title: string;
     description: string;
   }>;
+  complianceDisplay?: ProductTypeRecord['complianceDisplay'];
 }
 
 export interface AppStoreCountryView {

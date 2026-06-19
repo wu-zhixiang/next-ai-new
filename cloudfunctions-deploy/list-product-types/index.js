@@ -14,6 +14,7 @@ function toProductTypeView(record) {
         available: record.available,
         description: record.description,
         introHighlights: (_a = record.introHighlights) !== null && _a !== void 0 ? _a : [],
+        complianceDisplay: record.complianceDisplay,
     };
 }
 async function main() {

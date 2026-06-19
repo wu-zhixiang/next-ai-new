@@ -12,6 +12,7 @@ function toProductTypeView(record: ProductTypeRecord): ProductTypeView {
     available: record.available,
     description: record.description,
     introHighlights: record.introHighlights ?? [],
+    complianceDisplay: record.complianceDisplay,
   };
 }
 
