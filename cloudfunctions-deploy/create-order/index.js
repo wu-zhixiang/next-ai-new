@@ -5,6 +5,8 @@ const db_1 = require("./shared/db");
 const utils_1 = require("./shared/utils");
 const context_1 = require("./_lib/context");
 const constants_1 = require("./shared/constants");
+const client_config_1 = require("./shared/client-config");
+const payment_config_1 = require("./shared/payment-config");
 function normalizeAmount(amount) {
     return Number(amount.toFixed(2));
 }
@@ -36,9 +38,10 @@ async function main(event) {
     if (!plan) {
         throw new Error('套餐不存在或已下架');
     }
-    const [existingMembership, purchasedBefore] = await Promise.all([
+    const [existingMembership, purchasedBefore, appConfig] = await Promise.all([
         (0, db_1.getMembershipByUserId)(user._id, plan.productCode),
         hasPurchasedProductBefore(user._id, plan.productCode),
+        (0, client_config_1.getClientAppConfig)(),
     ]);
     const now = Date.now();
     const pendingOrders = await (0, db_1.listPendingOrdersByUserId)(user._id);
@@ -72,7 +75,7 @@ async function main(event) {
         durationDays: plan.durationDays,
         payStatus: 'pending',
         fulfillmentStatus: 'pending',
-        payChannel: 'wechat_virtual_pay',
+        payChannel: (0, payment_config_1.paymentTypeToPayChannel)(appConfig.paymentType),
         createdAt: now,
         updatedAt: now,
     };

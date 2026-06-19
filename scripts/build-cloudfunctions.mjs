@@ -64,10 +64,12 @@ execFileSync(
     path.join(sourceRoot, 'shared', 'wx-server-sdk.d.ts'),
     path.join(sourceRoot, '_lib', 'context.ts'),
     path.join(sourceRoot, 'shared', 'constants.ts'),
+    path.join(sourceRoot, 'shared', 'client-config.ts'),
     path.join(sourceRoot, 'shared', 'ai-account.ts'),
     path.join(sourceRoot, 'shared', 'db.ts'),
     path.join(sourceRoot, 'shared', 'operator-notify.ts'),
     path.join(sourceRoot, 'shared', 'orders.ts'),
+    path.join(sourceRoot, 'shared', 'payment-config.ts'),
     path.join(sourceRoot, 'shared', 'plan-seed.ts'),
     path.join(sourceRoot, 'shared', 'appstore-country-seed.ts'),
     path.join(sourceRoot, 'shared', 'product-type-seed.ts'),
@@ -90,6 +92,11 @@ const functionsThatNeedSeedShared = new Set([
   'seed-database',
   'reset-database',
 ]);
+const functionsThatNeedClientConfig = new Set([
+  'create-order',
+  'get-app-config',
+  'retry-order',
+]);
 
 for (const name of functionNames) {
   const targetRoot = path.join(deployRoot, name);
@@ -101,6 +108,10 @@ for (const name of functionNames) {
     for (const file of seedSharedFiles) {
       fs.rmSync(path.join(targetSharedRoot, file), { force: true });
     }
+  }
+  if (!functionsThatNeedClientConfig.has(name)) {
+    fs.rmSync(path.join(targetSharedRoot, 'client-config.js'), { force: true });
+    fs.rmSync(path.join(targetSharedRoot, 'payment-config.js'), { force: true });
   }
   fs.cpSync(libCompileRoot, path.join(targetRoot, '_lib'), { recursive: true });
   const configFile = path.join(sourceRoot, name, 'config.json');

@@ -2,6 +2,8 @@ import { collection, getMembershipByUserId, getOrderByNo, getPlanByCode, getUser
 import type { OrderRecord } from '../shared/types';
 import { createOrderNo, ok } from '../shared/utils';
 import { getWxContext } from '../_lib/context';
+import { getClientAppConfig } from '../shared/client-config';
+import { paymentTypeToPayChannel } from '../shared/payment-config';
 
 interface Event {
   orderNo: string;
@@ -39,6 +41,11 @@ export async function main(event: Event) {
     throw new Error('套餐不存在或已下架，请重新选择套餐');
   }
 
+  const [existingMembership, appConfig] = await Promise.all([
+    getMembershipByUserId(user._id, plan.productCode),
+    getClientAppConfig(),
+  ]);
+
   const now = Date.now();
   await collection('orders').doc(oldOrder._id).update({
     data: {
@@ -49,7 +56,6 @@ export async function main(event: Event) {
     },
   });
 
-  const existingMembership = await getMembershipByUserId(user._id, plan.productCode);
   const availablePoints = Math.max(0, Math.floor(user.pointsBalance ?? 0));
   const maxDeductiblePoints = Math.floor(plan.price);
   const usePointsDeduction = Boolean(oldOrder.pointsDeductionEnabled);
@@ -73,7 +79,7 @@ export async function main(event: Event) {
     durationDays: plan.durationDays,
     payStatus: 'pending',
     fulfillmentStatus: 'pending',
-    payChannel: oldOrder.payChannel,
+    payChannel: paymentTypeToPayChannel(appConfig.paymentType),
     createdAt: now,
     updatedAt: now,
   };

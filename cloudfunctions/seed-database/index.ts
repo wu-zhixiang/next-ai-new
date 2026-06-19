@@ -9,10 +9,19 @@ import { ok } from '../shared/utils';
 
 interface Event {
   dryRun?: boolean;
-  action?: 'full' | 'compliance-display';
+  action?: 'full' | 'member-plans' | 'compliance-display';
 }
 
 export async function main(event: Event = {}) {
+  if (event.action === 'member-plans') {
+    const seededPlans = await seedMemberPlans();
+    return ok({
+      success: true,
+      action: event.action,
+      seededPlans,
+    });
+  }
+
   if (event.action === 'compliance-display') {
     const updatedProductTypes = await seedProductTypeComplianceDisplays();
     const updatedPlans = await seedPlanComplianceDisplays();

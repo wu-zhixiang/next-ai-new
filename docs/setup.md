@@ -59,8 +59,10 @@ npm install
 
 ## 5. 支付环境配置
 
-- `pay-order` 现已接入小程序官方虚拟支付，会员购买订单默认走 `wx.requestVirtualPayment`。
-- 需要在云函数环境变量中配置：
+支付方式由 `app_config/client.paymentType` 控制，新订单支持虚拟支付和普通微信支付。
+
+虚拟支付需要在云函数环境变量中配置：
+
   - `WX_PAY_APPID`
   - `WX_APP_SECRET`
   - `WX_VIRTUAL_PAY_OFFER_ID`
@@ -68,6 +70,14 @@ npm install
   - `WX_VIRTUAL_PAY_ENV`，沙箱填 `1`，现网填 `0`
   - `WX_VIRTUAL_PAY_PRODUCT_ID`，或按套餐配置 `WX_VIRTUAL_PAY_PRODUCT_ID_GO`、`WX_VIRTUAL_PAY_PRODUCT_ID_PLUS`
 - 小程序后台虚拟支付回调 URL 指向 `pay-notify` 的 HTTP 访问服务地址。
+
+普通微信支付 V2 需要配置：
+
+- `WX_PAY_APPID`
+- `WX_PAY_MCH_ID`
+- `WX_PAY_API_KEY`
+- `WX_PAY_NOTIFY_URL`，指向 `pay-notify` 的 HTTP 访问服务地址
+- `WX_PAY_SPBILL_CREATE_IP`，可选，默认 `127.0.0.1`
 
 ## 6. 运营通知配置
 
@@ -148,12 +158,18 @@ npm install
 ```json
 {
   "_id": "client",
-  "enableNewsAuthModal": false
+  "enableNewsAuthModal": false,
+  "enableProductComplianceMode": false,
+  "paymentType": "virtual"
 }
 ```
 
 - `enableNewsAuthModal: false`：用户首次进入 AI 资讯页不展示昵称头像授权浮层。
 - 未创建集合、未创建文档或字段缺失时，默认按 `true` 处理，保持展示授权浮层。
+- `enableProductComplianceMode: true`：商品类型和套餐读取各自的 `complianceDisplay` 展示字段。
+- `paymentType: "virtual"`：新订单使用微信小程序虚拟支付，这是默认值。
+- `paymentType: "standard"`：新订单使用普通微信支付。
+- 支付类型会在创建订单时写入订单，切换配置不会改变已经创建的订单；“重新支付”生成的新订单会读取最新配置。
 
 ## 10. 续费提醒
 

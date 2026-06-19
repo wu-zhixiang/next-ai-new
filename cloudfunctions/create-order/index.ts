@@ -3,6 +3,8 @@ import type { OrderRecord } from '../shared/types';
 import { createOrderNo, ok } from '../shared/utils';
 import { getWxContext } from '../_lib/context';
 import { DEFAULT_PRODUCT_CODE } from '../shared/constants';
+import { getClientAppConfig } from '../shared/client-config';
+import { paymentTypeToPayChannel } from '../shared/payment-config';
 
 interface Event {
   pid: string;
@@ -45,9 +47,10 @@ export async function main(event: Event) {
     throw new Error('套餐不存在或已下架');
   }
 
-  const [existingMembership, purchasedBefore] = await Promise.all([
+  const [existingMembership, purchasedBefore, appConfig] = await Promise.all([
     getMembershipByUserId(user._id, plan.productCode),
     hasPurchasedProductBefore(user._id, plan.productCode),
+    getClientAppConfig(),
   ]);
 
   const now = Date.now();
@@ -87,7 +90,7 @@ export async function main(event: Event) {
     durationDays: plan.durationDays,
     payStatus: 'pending',
     fulfillmentStatus: 'pending',
-    payChannel: 'wechat_virtual_pay',
+    payChannel: paymentTypeToPayChannel(appConfig.paymentType),
     createdAt: now,
     updatedAt: now,
   };

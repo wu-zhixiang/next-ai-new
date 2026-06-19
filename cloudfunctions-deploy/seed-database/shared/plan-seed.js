@@ -49,6 +49,24 @@ const PLAN_SEED_SOURCE = [
     {
         productCode: 'claude_pro',
         productName: 'Claude Pro',
+        planCode: 'free',
+        planName: 'Claude Pro 免费体验',
+        virtualPaymentProductId: 'claude_free',
+        price: 0.01,
+        durationDays: 30,
+        autoRenewEnabled: false,
+        status: 'on',
+        sort: 3,
+        description: 'Claude Pro 免费体验套餐。',
+        complianceDisplay: {
+            productName: 'AI创作会员',
+            planName: 'AI创作会员免费体验套餐',
+            description: 'AI创作服务免费体验套餐。',
+        },
+    },
+    {
+        productCode: 'claude_pro',
+        productName: 'Claude Pro',
         planCode: 'pro',
         planName: 'Claude Pro',
         virtualPaymentProductId: 'claude_pro',
@@ -56,7 +74,7 @@ const PLAN_SEED_SOURCE = [
         durationDays: 30,
         autoRenewEnabled: false,
         status: 'on',
-        sort: 3,
+        sort: 4,
         description: 'Claude Pro 月度会员套餐。',
         complianceDisplay: {
             productName: 'AI创作会员',

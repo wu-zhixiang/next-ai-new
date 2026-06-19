@@ -4,6 +4,8 @@ exports.main = main;
 const db_1 = require("./shared/db");
 const utils_1 = require("./shared/utils");
 const context_1 = require("./_lib/context");
+const client_config_1 = require("./shared/client-config");
+const payment_config_1 = require("./shared/payment-config");
 function normalizeAmount(amount) {
     return Number(amount.toFixed(2));
 }
@@ -32,6 +34,10 @@ async function main(event) {
     if (!plan) {
         throw new Error('套餐不存在或已下架，请重新选择套餐');
     }
+    const [existingMembership, appConfig] = await Promise.all([
+        (0, db_1.getMembershipByUserId)(user._id, plan.productCode),
+        (0, client_config_1.getClientAppConfig)(),
+    ]);
     const now = Date.now();
     await (0, db_1.collection)('orders').doc(oldOrder._id).update({
         data: {
@@ -41,7 +47,6 @@ async function main(event) {
             updatedAt: now,
         },
     });
-    const existingMembership = await (0, db_1.getMembershipByUserId)(user._id, plan.productCode);
     const availablePoints = Math.max(0, Math.floor((_b = user.pointsBalance) !== null && _b !== void 0 ? _b : 0));
     const maxDeductiblePoints = Math.floor(plan.price);
     const usePointsDeduction = Boolean(oldOrder.pointsDeductionEnabled);
@@ -64,7 +69,7 @@ async function main(event) {
         durationDays: plan.durationDays,
         payStatus: 'pending',
         fulfillmentStatus: 'pending',
-        payChannel: oldOrder.payChannel,
+        payChannel: (0, payment_config_1.paymentTypeToPayChannel)(appConfig.paymentType),
         createdAt: now,
         updatedAt: now,
     };

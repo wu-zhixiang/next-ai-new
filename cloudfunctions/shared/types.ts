@@ -2,6 +2,7 @@ export type MembershipStatus = 'opening' | 'active' | 'expired' | 'cancelled' | 
 export type ExpireTag = 'normal' | 'within_30d' | 'within_7d' | 'within_3d' | 'expired';
 export type PayStatus = 'pending' | 'paid' | 'failed' | 'closed' | 'refunded';
 export type FulfillmentStatus = 'pending' | 'opening' | 'fulfilled' | 'failed';
+export type PayChannel = 'wechat_pay' | 'wechat_virtual_pay';
 
 export interface UserRecord {
   _id?: string;
@@ -149,7 +150,7 @@ export interface OrderRecord {
   durationDays: number;
   payStatus: PayStatus;
   fulfillmentStatus?: FulfillmentStatus;
-  payChannel: 'wechat_pay' | 'wechat_virtual_pay';
+  payChannel: PayChannel;
   transactionId?: string;
   prepayId?: string;
   payExpireAt?: number;
