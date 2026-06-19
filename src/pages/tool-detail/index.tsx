@@ -5,6 +5,7 @@ import { AppTransparentHeader } from '@/components/AppTransparentHeader';
 import { callCloudFunction } from '@/services/api';
 import type { MembershipView } from '@/types';
 import { getToolById, type OutputType } from '@/pages/tools/definitions';
+import { useResetPageScroll } from '@/hooks/useResetPageScroll';
 
 const TOOL_ADD_FILE_ICON = require('../../assets/icons/tool-add-file.svg') as string;
 const TOOL_PASTE_ICON = require('../../assets/icons/tool-paste.svg') as string;
@@ -174,6 +175,8 @@ function buildResultMarkdown(result: SummaryResult): string {
 }
 
 export default function ToolDetailPage(): JSX.Element {
+    useResetPageScroll();
+
     const [toolId, setToolId] = useState('');
     const [membershipStatus, setMembershipStatus] = useState<MembershipView['status']>('none');
     const [content, setContent] = useState('');
@@ -486,7 +489,7 @@ export default function ToolDetailPage(): JSX.Element {
                         </View>
 
                         <Text className='tool-workbench__quota'>
-                            {memberActive ? '会员免广告' : todayUsed && !adUnlocked ? '需看广告' : '今日可免费'}
+                            {memberActive ? '限时免费' : todayUsed && !adUnlocked ? '需看广告' : '今日可免费'}
                         </Text>
                     </View>
 

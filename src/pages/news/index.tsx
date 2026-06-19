@@ -5,6 +5,7 @@ import { AppTransparentHeader } from '@/components/AppTransparentHeader';
 import AuthModal, { type AuthUserInfo } from '@/components/AuthModal';
 import { callCloudFunction } from '@/services/api';
 import type { AiNewsView } from '@/types';
+import { useResetPageScroll } from '@/hooks/useResetPageScroll';
 import { clearStoredInviteCode, resolveInviteCode } from '@/utils/invite';
 import { showTabBarSafely } from '@/utils/tabbar';
 
@@ -94,6 +95,7 @@ export default function NewsPage() {
   const [sharePanelVisible, setSharePanelVisible] = useState(false);
   const [shareItem, setShareItem] = useState<AiNewsView | null>(null);
   const router = useRouter();
+  const pageScroll = useResetPageScroll();
 
   useEffect(() => {
     void initializePage();
@@ -330,12 +332,13 @@ export default function NewsPage() {
 
   return (
     <View className='page'>
-      <AppTransparentHeader title='AI资讯' showBack={false} />
+      <AppTransparentHeader title='AI资讯' />
 
       <View className='news-page'>
         <ScrollView
           className='news-scroll'
           scrollY
+          scrollTop={pageScroll.scrollTop}
           lowerThreshold={160}
           showScrollbar={false}
           onScrollToLower={() => void loadMoreNews()}

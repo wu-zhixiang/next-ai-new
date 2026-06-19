@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Button, Image, Text, View } from '@tarojs/components';
+import { Button, Image, ScrollView, Text, View } from '@tarojs/components';
 import Taro, { useLoad } from '@tarojs/taro';
 import { PaymentLockOverlay } from '@/components/PaymentLockOverlay';
 import { SaasPageFrame } from '@/components/SaasPageFrame';
@@ -8,6 +8,7 @@ import { callCloudFunction } from '@/services/api';
 import { formatDateTime } from '@/utils/format';
 import { createPayOrderPayload, MiniProgramPaymentError, requestMiniProgramPayment, type PayOrderResult } from '@/utils/payment';
 import { hideTabBarSafely, showTabBarSafely } from '@/utils/tabbar';
+import { useResetPageScroll } from '@/hooks/useResetPageScroll';
 
 interface PayResultData {
   orderNo: string;
@@ -41,6 +42,7 @@ const ORDER_CLOCK_ICON = require('../../assets/icons/order-clock.svg') as string
 const ORDER_ABANDONED_ICON = require('../../assets/icons/order-abandoned.svg') as string;
 
 export default function PayResultPage(): JSX.Element {
+  const pageScroll = useResetPageScroll();
   const [data, setData] = useState<PayResultData>({
     orderNo: '',
     payStatus: 'pending',
@@ -153,7 +155,12 @@ export default function PayResultPage(): JSX.Element {
         void Taro.switchTab({ url: '/pages/records/index' });
       }}
     >
-      <View className='pay-detail-page'>
+      <ScrollView
+        className='pay-detail-page'
+        scrollY
+        scrollTop={pageScroll.scrollTop}
+        showScrollbar={false}
+      >
 
       <View className='saas-shell pay-detail-shell'>
         <View className='saas-shell__inner'>
@@ -217,6 +224,7 @@ export default function PayResultPage(): JSX.Element {
 
         </View>
       </View>
+      </ScrollView>
 
       {!loading && isPendingPayable ? (
         <View className='pay-bottom-cta'>
@@ -226,7 +234,6 @@ export default function PayResultPage(): JSX.Element {
         </View>
       ) : null}
       <PaymentLockOverlay visible={paymentLocked} />
-      </View>
     </SaasPageFrame>
   );
 }

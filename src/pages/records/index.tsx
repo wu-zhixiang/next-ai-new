@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Image, Text, View } from '@tarojs/components';
-import Taro, { useDidShow } from '@tarojs/taro';
+import Taro, { useDidShow, usePullDownRefresh } from '@tarojs/taro';
 import { SaasPageFrame } from '@/components/SaasPageFrame';
 import { SkeletonOrderList } from '@/components/Skeleton';
 import { callCloudFunction } from '@/services/api';
 import { formatDateTime } from '@/utils/format';
 import { showTabBarSafely } from '@/utils/tabbar';
+import { useResetPageScroll } from '@/hooks/useResetPageScroll';
 
 const CHEVRON_RIGHT_ICON = require('../../assets/icons/chevron-right.svg') as string;
 
@@ -32,8 +33,8 @@ interface ListOrdersResult {
 const STATUS_LABEL: Record<PayStatus, string> = {
   pending: '待支付',
   paid: '已完成',
-  failed: '已废弃请重新下单',
-  closed: '已废弃请重新下单',
+  failed: '已废弃',
+  closed: '已废弃',
   refunded: '已退款',
 };
 
@@ -42,12 +43,14 @@ function getOrderStatusLabel(order: OrderItem): string {
     return '开通中';
   }
   if (order.payStatus === 'pending' && !order.canPay) {
-    return '已废弃请重新下单';
+    return '已废弃';
   }
   return STATUS_LABEL[order.payStatus];
 }
 
 export default function RecordsPage(): JSX.Element {
+  useResetPageScroll();
+
   const [orders, setOrders] = useState<OrderItem[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -59,13 +62,34 @@ export default function RecordsPage(): JSX.Element {
     void loadOrders();
   }, []);
 
-  async function loadOrders(): Promise<void> {
-    setLoading(true);
+  usePullDownRefresh(() => {
+    void refreshOrders();
+  });
+
+  async function loadOrders(showLoading = true): Promise<void> {
+    if (showLoading) {
+      setLoading(true);
+    }
     try {
       const result = await callCloudFunction<ListOrdersResult>('list-orders');
       setOrders(result.orders);
+    } catch (error) {
+      Taro.showToast({
+        title: error instanceof Error ? error.message : '服务记录刷新失败',
+        icon: 'none',
+      });
     } finally {
-      setLoading(false);
+      if (showLoading) {
+        setLoading(false);
+      }
+    }
+  }
+
+  async function refreshOrders(): Promise<void> {
+    try {
+      await loadOrders(false);
+    } finally {
+      Taro.stopPullDownRefresh();
     }
   }
 
@@ -90,7 +114,7 @@ export default function RecordsPage(): JSX.Element {
                 <View className='record-card__head'>
                   <View>
                     <Text className='record-card__tier'>{item.productName}</Text>
-                    <Text className='record-card__title'>{item.planName}</Text>
+                    {/* <Text className='record-card__title'>{item.planName}</Text> */}
                   </View>
                   <View className={`status-pill status-pill--${item.fulfillmentStatus === 'opening' ? 'opening' : item.payStatus}`}>
                     <Text className='status-pill__dot' />

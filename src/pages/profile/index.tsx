@@ -5,6 +5,7 @@ import { AppTransparentHeader } from '@/components/AppTransparentHeader';
 import { callCloudFunction } from '@/services/api';
 import { formatMobileDisplay } from '@/utils/mobile';
 import { enableReminderSubscription } from '@/utils/subscription';
+import { useResetPageScroll } from '@/hooks/useResetPageScroll';
 
 interface ProfileData {
   mobile?: string;
@@ -15,6 +16,8 @@ interface ProfileData {
 }
 
 export default function ProfilePage(): JSX.Element {
+  useResetPageScroll();
+
   const [profile, setProfile] = useState<ProfileData>({
     membershipStatus: 'none',
     subscribeMsgAuth: false,

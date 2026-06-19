@@ -6,6 +6,7 @@ import { callCloudFunction } from '@/services/api';
 import type { PlanView } from '@/types';
 import { isMobileBound } from '@/utils/mobile';
 import { createPayOrderPayload, requestMiniProgramPayment, type PayOrderResult } from '@/utils/payment';
+import { useResetPageScroll } from '@/hooks/useResetPageScroll';
 
 interface PlanListResult {
   plans: PlanView[];
@@ -71,6 +72,8 @@ const MOCK_PLANS: MockPlan[] = [
 ];
 
 export default function PlansPage(): JSX.Element {
+  useResetPageScroll();
+
   const router = useRouter();
   const [backendPlans, setBackendPlans] = useState<PlanView[]>([]);
   const productCode = router.params.product ?? 'ai_news';

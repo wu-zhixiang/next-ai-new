@@ -5,12 +5,15 @@ import { AppTransparentHeader } from '@/components/AppTransparentHeader';
 import { callCloudFunction } from '@/services/api';
 import type { MembershipView } from '@/types';
 import { formatDate } from '@/utils/format';
+import { useResetPageScroll } from '@/hooks/useResetPageScroll';
 
 interface HomeData {
   membership: MembershipView;
 }
 
 export default function IndexPage(): JSX.Element {
+  useResetPageScroll();
+
   const [membership, setMembership] = useState<MembershipView>({ status: 'none' });
 
   useEffect(() => {

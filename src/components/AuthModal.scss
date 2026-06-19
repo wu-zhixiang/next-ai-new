@@ -44,7 +44,7 @@
   align-items: center;
   justify-content: center;
   background: linear-gradient(135deg, var(--primary-soft), var(--primary-dim));
-  color: #154f45;
+  color: var(--primary-deep);
   font-size: 42rpx;
   font-weight: 800;
   margin-bottom: 32rpx;
@@ -70,12 +70,12 @@
   height: 88rpx;
   margin-top: 48rpx;
   border-radius: 32rpx;
-  background: linear-gradient(135deg, #154f45 0%, #31685c 100%);
+  background: linear-gradient(135deg, var(--primary-deep) 0%, var(--primary) 100%);
   color: #ffffff;
   font-size: 28rpx;
   line-height: 88rpx;
   font-weight: 600;
-  box-shadow: 0 16rpx 60rpx rgba(49, 104, 92, 0.3);
+  box-shadow: 0 16rpx 60rpx rgba(217, 119, 87, 0.3);
 }
 
 .auth-modal__button--disabled {
@@ -114,8 +114,8 @@
 }
 
 .auth-modal__checkbox--checked {
-  border-color: #31685c;
-  background: #31685c;
+  border-color: var(--primary);
+  background: var(--primary);
 }
 
 .auth-modal__checkmark {
@@ -131,7 +131,7 @@
 }
 
 .auth-modal__link {
-  color: #31685c;
+  color: var(--primary);
   font-weight: 700;
 }
 

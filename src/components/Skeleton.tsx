@@ -57,7 +57,14 @@ export function SkeletonOrderList({ count = 3, className = '' }: SkeletonGroupPr
 export function SkeletonInvitePage(): JSX.Element {
   return (
     <View>
-      <Skeleton className='invite-hero skeleton-invite-hero' height='530rpx' radius='64rpx' />
+      <View className='invite-hero skeleton-invite-hero' />
+      <View className='invite-info invite-info--skeleton'>
+        <Skeleton width='32rpx' height='32rpx' />
+        <View className='invite-info--skeleton__copy'>
+          <Skeleton width='100%' height='24rpx' />
+          <Skeleton width='82%' height='24rpx' />
+        </View>
+      </View>
       <View className='section-head'>
         <Skeleton width='150rpx' height='34rpx' radius='12rpx' />
         <Skeleton width='96rpx' height='28rpx' radius='12rpx' />
@@ -77,6 +84,33 @@ export function SkeletonInvitePage(): JSX.Element {
               </View>
             </View>
           </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+export function SkeletonNewsDetail(): JSX.Element {
+  return (
+    <View className='news-detail-article news-detail-skeleton' aria-busy='true'>
+      <Skeleton className='news-detail-skeleton__cover' height='380rpx' radius='28rpx' />
+      <View className='news-detail-skeleton__title'>
+        <Skeleton width='100%' height='46rpx' radius='14rpx' />
+        <Skeleton width='88%' height='46rpx' radius='14rpx' />
+      </View>
+      <View className='news-detail-skeleton__meta'>
+        <Skeleton width='190rpx' height='26rpx' radius='10rpx' />
+        <Skeleton width='150rpx' height='26rpx' radius='10rpx' />
+        <Skeleton width='92rpx' height='42rpx' />
+      </View>
+      <View className='news-detail-skeleton__summary'>
+        <Skeleton width='100%' height='28rpx' radius='10rpx' />
+        <Skeleton width='92%' height='28rpx' radius='10rpx' />
+        <Skeleton width='68%' height='28rpx' radius='10rpx' />
+      </View>
+      <View className='news-detail-skeleton__body'>
+        {[100, 96, 100, 84, 100, 92, 76].map((width, index) => (
+          <Skeleton key={index} width={`${width}%`} height='30rpx' radius='10rpx' />
         ))}
       </View>
     </View>

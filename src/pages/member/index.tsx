@@ -4,7 +4,7 @@ import Taro, { useDidShow } from '@tarojs/taro';
 import AuthModal, { type AuthUserInfo } from '@/components/AuthModal';
 import { PaymentLockOverlay } from '@/components/PaymentLockOverlay';
 import { PopLayout } from '@/components/PopLayout';
-import { SaasPageFrame } from '@/components/SaasPageFrame';
+import { SaasPageFrame, type PageTheme } from '@/components/SaasPageFrame';
 import { Skeleton } from '@/components/Skeleton';
 import { callCloudFunction } from '@/services/api';
 import type { MembershipView, PlanView, ProductTypeView } from '@/types';
@@ -14,6 +14,8 @@ import { isMobileBound } from '@/utils/mobile';
 import { createPayOrderPayload, requestMiniProgramPayment, type PayOrderResult } from '@/utils/payment';
 import { disableReminderSubscription, enableReminderSubscription } from '@/utils/subscription';
 import { hideTabBarSafely, showTabBarSafely } from '@/utils/tabbar';
+import { useResetPageScroll } from '@/hooks/useResetPageScroll';
+import { consumePromotedProductCode } from '@/utils/productNavigation';
 
 interface MemberHomeData {
   userInfo?: {
@@ -139,6 +141,14 @@ const CACHE_KEY = AUTH_CACHE_KEY;
 const AI_ACCOUNT_DOMAIN = '@mraclpivot.com';
 const USER_AGREEMENT_URL = 'https://cloud1-d3gbrpive8611514c-1348953433.tcloudbaseapp.com/cloud-admin/htmls/%E7%94%A8%E6%88%B7%E5%8D%8F%E8%AE%AE.html?sign=55a2a34c2317b48fc09603658d7a64b1&t=1779005578';
 const PRIVACY_AGREEMENT_URL = 'https://cloud1-d3gbrpive8611514c-1348953433.tcloudbaseapp.com/cloud-admin/htmls/%E9%9A%90%E7%A7%81%E5%8D%8F%E8%AE%AE.html?sign=3626cb47334346612df3a4d34746e859&t=1779005613';
+const MEMBER_PAGE_THEME: PageTheme = {
+  headerColor: '#927239',
+  headerFadeColor: '#F7F1E4',
+  pageBackground: '#F7F5F0',
+  accentColor: '#A78542',
+  accentDeepColor: '#59451F',
+  accentSoftColor: '#E7D5A5',
+};
 
 function buildPlanOption(plan: PlanView, index: number): ProductPlanOption {
   const periodLabel = plan.durationDays >= 365 ? '年' : plan.durationDays >= 90 ? '季' : '月';
@@ -155,6 +165,8 @@ function buildPlanOption(plan: PlanView, index: number): ProductPlanOption {
 }
 
 export default function MemberPage(): JSX.Element {
+  useResetPageScroll();
+
   const [cachedUserInfo, setCachedUserInfo] = useState<CachedUserInfo | null>(null);
   const [data, setData] = useState<MemberHomeData>({
     membership: { status: 'none' },
@@ -190,6 +202,7 @@ export default function MemberPage(): JSX.Element {
 
   useDidShow(() => {
     showTabBarSafely();
+    openPromotedProductIfReady();
   });
 
   useEffect(() => {
@@ -198,6 +211,23 @@ export default function MemberPage(): JSX.Element {
     void loadProductTypes();
     void loadPlans();
   }, []);
+
+  useEffect(() => {
+    openPromotedProductIfReady();
+  }, [productTypesLoading, backendProductTypes]);
+
+  function openPromotedProductIfReady(): void {
+    if (productTypesLoading || backendProductTypes.length === 0) {
+      return;
+    }
+    const promotedProductCode = consumePromotedProductCode();
+    if (!promotedProductCode || !backendProductTypes.some((item) => item.productCode === promotedProductCode)) {
+      return;
+    }
+    setIntroProductCode(promotedProductCode);
+    setProductTypeSheetVisible(false);
+    setProductIntroVisible(true);
+  }
 
   useEffect(() => {
     if (!paymentLocked) return;
@@ -826,6 +856,7 @@ export default function MemberPage(): JSX.Element {
     <SaasPageFrame
       title='会员中心'
       showBack={false}
+      theme={MEMBER_PAGE_THEME}
       onBack={() => {
         if (paymentLocked) {
           Taro.showToast({ title: '支付处理中，请勿返回', icon: 'none' });

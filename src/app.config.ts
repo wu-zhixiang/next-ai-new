@@ -1,6 +1,7 @@
 const appConfig = {
   cloud: true,
   pages: [
+    'pages/home/index',
     'pages/news/index',
     'pages/news-detail/index',
     'pages/tools/index',
@@ -12,14 +13,14 @@ const appConfig = {
     'pages/webview/index',
   ],
   tabBar: {
-    color: '#5f5e5e',
-    selectedColor: '#31685c',
-    backgroundColor: '#fafafa',
-    borderStyle: 'white' as const,
+    color: '#7A7A7A',
+    selectedColor: '#D97757',
+    backgroundColor: '#F7F5F2',
+    borderStyle: 'black' as const,
     list: [
       {
-        pagePath: 'pages/news/index',
-        text: 'AI资讯',
+        pagePath: 'pages/home/index',
+        text: '首页',
         iconPath: 'assets/tabbar/news.png',
         selectedIconPath: 'assets/tabbar/news-active.png',
       },
@@ -50,7 +51,7 @@ const appConfig = {
     ],
   },
   window: {
-    navigationBarTitleText: 'AI资讯',
+    navigationBarTitleText: '首页',
     navigationBarBackgroundColor: '#ffffff',
     navigationBarTextStyle: 'black',
     backgroundTextStyle: 'light',

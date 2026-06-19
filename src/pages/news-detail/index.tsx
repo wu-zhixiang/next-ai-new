@@ -1,9 +1,11 @@
 import { useState } from 'react';
-import { Button, Image, RichText, Text, View } from '@tarojs/components';
+import { Button, Image, RichText, ScrollView, Text, View } from '@tarojs/components';
 import Taro, { useLoad, useShareAppMessage, useShareTimeline } from '@tarojs/taro';
 import { SaasPageFrame } from '@/components/SaasPageFrame';
+import { SkeletonNewsDetail } from '@/components/Skeleton';
 import { callCloudFunction } from '@/services/api';
 import type { AiNewsDetailView } from '@/types';
+import { useResetPageScroll } from '@/hooks/useResetPageScroll';
 import { loginSilently } from '@/utils/auth';
 import { enableNewsReminderSubscription } from '@/utils/subscription';
 
@@ -22,7 +24,7 @@ function inlineMarkdown(value: string): string {
   return escapeHtml(value)
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" style="color:#31685c;text-decoration:underline;font-weight:700;">$1</a>');
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" style="color:#D97757;text-decoration:underline;font-weight:700;">$1</a>');
 }
 
 function markdownToHtml(markdown: string): string {
@@ -82,7 +84,7 @@ function markdownToHtml(markdown: string): string {
     if (line.startsWith('> ')) {
       flushParagraph();
       flushList();
-      blocks.push(`<blockquote style="margin:20px 0;padding:14px 16px;border-left:4px solid #31685c;border-radius:10px;background:#eef8f5;color:#40524c;font-size:15px;line-height:1.75;">${inlineMarkdown(line.slice(2))}</blockquote>`);
+      blocks.push(`<blockquote style="margin:20px 0;padding:14px 16px;border-left:4px solid #D97757;border-radius:10px;background:#F8ECE7;color:#4A4945;font-size:15px;line-height:1.75;">${inlineMarkdown(line.slice(2))}</blockquote>`);
       continue;
     }
     if (/^[-*]\s+/.test(line)) {
@@ -153,6 +155,7 @@ export default function NewsDetailPage(): JSX.Element {
   const [sharePanelVisible, setSharePanelVisible] = useState(false);
   const [isDirectEntry, setIsDirectEntry] = useState(false);
   const [newsReminderVisible, setNewsReminderVisible] = useState(false);
+  const pageScroll = useResetPageScroll();
 
   useLoad((options) => {
     enableShareMenu();
@@ -271,7 +274,7 @@ export default function NewsDetailPage(): JSX.Element {
   }
 
   function goNewsHome(): void {
-    void Taro.switchTab({ url: '/pages/news/index' });
+    void Taro.switchTab({ url: '/pages/home/index' });
   }
 
   function goBack(): void {
@@ -304,11 +307,14 @@ export default function NewsDetailPage(): JSX.Element {
         </View>
       ) : null}
     >
-      <View className='news-detail-page'>
+      <ScrollView
+        className='news-detail-page'
+        scrollY
+        scrollTop={pageScroll.scrollTop}
+        showScrollbar={false}
+      >
         {loading ? (
-          <View className='news-detail-empty'>
-            <Text>正在加载文章</Text>
-          </View>
+          <SkeletonNewsDetail />
         ) : null}
         {!loading && !detail ? (
           <View className='news-detail-empty'>
@@ -353,7 +359,7 @@ export default function NewsDetailPage(): JSX.Element {
             ) : null}
           </View>
         ) : null}
-      </View>
+      </ScrollView>
 
       {!loading && detail ? (
         <View className='news-detail-floating-actions'>

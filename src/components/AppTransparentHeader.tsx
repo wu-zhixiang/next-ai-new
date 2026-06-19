@@ -59,7 +59,7 @@ export function AppTransparentHeader({ title, showBack = true, onBack, rightActi
       return;
     }
 
-    void Taro.switchTab({ url: '/pages/news/index' });
+    void Taro.switchTab({ url: '/pages/home/index' });
   }
 
   return (

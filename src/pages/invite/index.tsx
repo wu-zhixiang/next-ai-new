@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Button, Image, Text, View } from '@tarojs/components';
 import Taro, { useDidShow, useShareAppMessage } from '@tarojs/taro';
-import { SaasPageFrame } from '@/components/SaasPageFrame';
+import { SaasPageFrame, type PageTheme } from '@/components/SaasPageFrame';
 import { SkeletonInvitePage } from '@/components/Skeleton';
 import { callCloudFunction } from '@/services/api';
 import { formatDateTime } from '@/utils/format';
 import { showTabBarSafely } from '@/utils/tabbar';
+import { useResetPageScroll } from '@/hooks/useResetPageScroll';
 
 const CACHE_KEY = 'gpt_pay_user_info';
 
@@ -49,8 +50,18 @@ function getInitial(name: string): string {
 }
 
 const FREE_SUBSCRIPTION_INVITE_TARGET = 10;
+const INVITE_PAGE_THEME: PageTheme = {
+  headerColor: '#E7C2B2',
+  headerFadeColor: '#F7F6F2',
+  pageBackground: '#F7F6F2',
+  accentColor: '#D97757',
+  accentDeepColor: '#141413',
+  accentSoftColor: '#F0D8CE',
+};
 
 export default function InvitePage(): JSX.Element {
+  useResetPageScroll();
+
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<InviteHomeResult>({
     inviteCount: 0,
@@ -127,7 +138,7 @@ export default function InvitePage(): JSX.Element {
   const inviteProgressPercent = Math.min(100, Math.round((inviteProgress / FREE_SUBSCRIPTION_INVITE_TARGET) * 100));
 
   return (
-    <SaasPageFrame title='邀请有礼' showBack={false}>
+    <SaasPageFrame title='邀请有礼' showBack={false} theme={INVITE_PAGE_THEME}>
       <View className='invite-page'>
         <View className='saas-shell invite-shell'>
           {loading ? (
@@ -135,8 +146,6 @@ export default function InvitePage(): JSX.Element {
           ) : (
             <>
               <View className='invite-hero'>
-                <View className='invite-hero__glow invite-hero__glow--right' />
-                <View className='invite-hero__glow invite-hero__glow--left' />
                 <View className='invite-stats'>
                   <View className='invite-stat'>
                     <Text className='invite-stat__label'>累计邀请</Text>
@@ -160,9 +169,14 @@ export default function InvitePage(): JSX.Element {
                   <View className='invite-progress__track'>
                     <View className='invite-progress__bar' style={{ width: `${inviteProgressPercent}%` }} />
                   </View>
-                  <Text className='invite-progress__hint'>累计邀请10人，进入免费订阅期</Text>
+                  <Text className='invite-progress__hint'>累计邀请10人，有机会进入免费订阅期</Text>
                 </View>
                 <Button className='saas-button invite-hero__button' openType='share'>立即邀请好友</Button>
+              </View>
+
+              <View className='invite-info'>
+                <Text className='invite-info__icon'>i</Text>
+                <Text className='invite-info__text'>好友通过你的链接授权登录后会自动绑定邀请关系；被邀请人后续订阅会员时，将按实付金额的 10% 折算积分返还给你，积分后续可用于支付抵扣。</Text>
               </View>
 
               <View className='section-head'>
@@ -199,11 +213,6 @@ export default function InvitePage(): JSX.Element {
                     <Text className='invite-empty__desc'>点击立即邀请好友，好友授权登录后会自动成为你的下级用户。</Text>
                   </View>
                 )}
-              </View>
-
-              <View className='invite-info'>
-                <Text className='invite-info__icon'>i</Text>
-                <Text className='invite-info__text'>好友通过你的链接授权登录后会自动绑定邀请关系；被邀请人后续订阅会员时，将按实付金额的 10% 折算积分返还给你，积分后续可用于支付抵扣。</Text>
               </View>
             </>
           )}

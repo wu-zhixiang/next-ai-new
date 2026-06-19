@@ -2,6 +2,7 @@ import { Text, View } from '@tarojs/components';
 import Taro, { useDidShow } from '@tarojs/taro';
 import { AppTransparentHeader } from '@/components/AppTransparentHeader';
 import { showTabBarSafely } from '@/utils/tabbar';
+import { useResetPageScroll } from '@/hooks/useResetPageScroll';
 import { VISIBLE_TOOLS, type ToolDefinition } from './definitions';
 
 function showComingSoon(tool: ToolDefinition): void {
@@ -14,6 +15,8 @@ function showComingSoon(tool: ToolDefinition): void {
 }
 
 export default function ToolsPage(): JSX.Element {
+  useResetPageScroll();
+
   useDidShow(() => {
     showTabBarSafely();
   });
