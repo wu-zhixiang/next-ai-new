@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Image, ScrollView, Swiper, SwiperItem, Text, View } from '@tarojs/components';
-import Taro, { useDidShow } from '@tarojs/taro';
+import Taro, { useDidShow, useRouter } from '@tarojs/taro';
 import { SaasPageFrame } from '@/components/SaasPageFrame';
 import { Skeleton } from '@/components/Skeleton';
+import AuthModal, { type AuthUserInfo } from '@/components/AuthModal';
 import { callCloudFunction } from '@/services/api';
 import type { AiNewsView, ProductTypeView } from '@/types';
 import { useResetPageScroll } from '@/hooks/useResetPageScroll';
@@ -11,6 +12,9 @@ import { setPromotedProductCode } from '@/utils/productNavigation';
 import { VISIBLE_TOOLS, type ToolDefinition } from '@/pages/tools/definitions';
 import { loadClientAppConfig } from '@/utils/appConfig';
 import { toCompliantProductType } from '@/utils/productCompliance';
+import { getCachedUserInfo, saveCachedUserInfo } from '@/utils/auth';
+import { hasAuthConsent } from '@/utils/authConsent';
+import { clearStoredInviteCode, resolveInviteCode } from '@/utils/invite';
 
 const CHEVRON_RIGHT_ICON = require('../../assets/icons/chevron-right-terracotta.svg') as string;
 const HOME_TOOLS = VISIBLE_TOOLS.filter((tool) => tool.enabled).slice(0, 3);
@@ -35,11 +39,14 @@ function formatRelativeTime(value: number): string {
 
 export default function HomePage(): JSX.Element {
   const pageScroll = useResetPageScroll();
+  const router = useRouter();
 
   const [productTypes, setProductTypes] = useState<ProductTypeView[]>([]);
   const [news, setNews] = useState<AiNewsView[]>([]);
   const [loading, setLoading] = useState(true);
   const [bannerIndex, setBannerIndex] = useState(0);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [activeInviteCode, setActiveInviteCode] = useState('');
 
   useDidShow(() => {
     showTabBarSafely();
@@ -52,6 +59,8 @@ export default function HomePage(): JSX.Element {
   async function loadHome(): Promise<void> {
     setLoading(true);
     try {
+      const inviteCode = resolveInviteCode(router.params);
+      setActiveInviteCode(inviteCode);
       const [config, productResult, newsResult] = await Promise.all([
         loadClientAppConfig(),
         callCloudFunction<ProductTypeListResult>('list-product-types').catch(() => ({ productTypes: [] })),
@@ -61,6 +70,10 @@ export default function HomePage(): JSX.Element {
           sort: 'latest',
         }).catch(() => ({ items: [] })),
       ]);
+      setShowAuthModal(
+        config.enableHomeAuthModal
+        && !hasAuthConsent(getCachedUserInfo()),
+      );
       setProductTypes(
         config.enableProductComplianceMode
           ? productResult.productTypes
@@ -101,15 +114,24 @@ export default function HomePage(): JSX.Element {
     });
   }
 
+  function handleAuthSuccess(info: AuthUserInfo): void {
+    saveCachedUserInfo(info);
+    if (activeInviteCode && info.inviterUserId) {
+      clearStoredInviteCode();
+    }
+    setShowAuthModal(false);
+  }
+
   return (
-    <SaasPageFrame title='首页' showBack={false}>
-      <ScrollView
-        className='home-page-v2'
-        scrollY
-        scrollTop={pageScroll.scrollTop}
-        showScrollbar={false}
-      >
-        <View className='saas-shell home-page-v2__shell'>
+    <>
+      <SaasPageFrame title='首页' showBack={false}>
+        <ScrollView
+          className='home-page-v2'
+          scrollY
+          scrollTop={pageScroll.scrollTop}
+          showScrollbar={false}
+        >
+          <View className='saas-shell home-page-v2__shell'>
           {loading ? (
             <View className='home-banner home-banner--skeleton'>
               <View className='home-banner__copy'>
@@ -250,8 +272,14 @@ export default function HomePage(): JSX.Element {
               </View>
             )}
           </View>
-        </View>
-      </ScrollView>
-    </SaasPageFrame>
+          </View>
+        </ScrollView>
+      </SaasPageFrame>
+      <AuthModal
+        visible={showAuthModal}
+        inviteCode={activeInviteCode}
+        onAuthSuccess={handleAuthSuccess}
+      />
+    </>
   );
 }

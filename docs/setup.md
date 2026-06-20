@@ -158,14 +158,17 @@ npm install
 ```json
 {
   "_id": "client",
-  "enableNewsAuthModal": false,
+  "enableHomeAuthModal": true,
+  "enableNewsAuthModal": true,
   "enableProductComplianceMode": false,
   "paymentType": "virtual"
 }
 ```
 
-- `enableNewsAuthModal: false`：用户首次进入 AI 资讯页不展示昵称头像授权浮层。
-- 未创建集合、未创建文档或字段缺失时，默认按 `true` 处理，保持展示授权浮层。
+- `enableHomeAuthModal: true`：用户首次进入首页且尚未明确授权登录时展示毛玻璃授权浮层。
+- `enableHomeAuthModal: false`：首页不主动展示登录授权浮层，购买等受保护操作仍会要求登录。
+- `enableNewsAuthModal` 为旧版本兼容字段。缺少 `enableHomeAuthModal` 时会读取它，后续建议只维护 `enableHomeAuthModal`。
+- 未创建集合、未创建文档或两个字段都缺失时，首页授权浮层默认开启。
 - `enableProductComplianceMode: true`：商品类型和套餐读取各自的 `complianceDisplay` 展示字段。
 - `paymentType: "virtual"`：新订单使用微信小程序虚拟支付，这是默认值。
 - `paymentType: "standard"`：新订单使用普通微信支付。

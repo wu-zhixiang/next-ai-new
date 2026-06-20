@@ -11,6 +11,7 @@ wx_server_sdk_1.default.init({
 });
 const db = wx_server_sdk_1.default.database();
 const DEFAULT_CLIENT_APP_CONFIG = {
+    enableHomeAuthModal: true,
     enableNewsAuthModal: true,
     enableProductComplianceMode: false,
     paymentType: 'virtual',
@@ -28,7 +29,11 @@ async function getClientAppConfig() {
     try {
         const result = await db.collection('app_config').doc('client').get();
         const config = ((_a = result.data) !== null && _a !== void 0 ? _a : {});
+        const enableHomeAuthModal = typeof config.enableHomeAuthModal === 'boolean'
+            ? config.enableHomeAuthModal
+            : config.enableNewsAuthModal !== false;
         return {
+            enableHomeAuthModal,
             enableNewsAuthModal: config.enableNewsAuthModal !== false,
             enableProductComplianceMode: config.enableProductComplianceMode === true,
             paymentType: (0, payment_config_1.normalizePaymentType)(config.paymentType),

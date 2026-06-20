@@ -58,8 +58,12 @@ export default function AuthModal({ visible, inviteCode, onAuthSuccess }: AuthMo
         inviteCode,
         source: inviteCode ? 'share' : 'direct',
       });
-      saveCachedUserInfo(cachedInfo);
-      onAuthSuccess(cachedInfo);
+      const authorizedInfo: CachedUserInfo = {
+        ...cachedInfo,
+        authConsentGranted: true,
+      };
+      saveCachedUserInfo(authorizedInfo);
+      onAuthSuccess(authorizedInfo);
     } catch (error) {
       Taro.showToast({
         title: error instanceof Error ? error.message : '授权登录失败，请稍后再试',

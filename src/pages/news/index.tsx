@@ -1,41 +1,16 @@
 import { useEffect, useState } from 'react';
 import { Button, Image, ScrollView, Text, View } from '@tarojs/components';
-import Taro, { useDidShow, usePullDownRefresh, useReachBottom, useRouter, useShareAppMessage, useShareTimeline } from '@tarojs/taro';
+import Taro, { useDidShow, usePullDownRefresh, useReachBottom, useShareAppMessage, useShareTimeline } from '@tarojs/taro';
 import { AppTransparentHeader } from '@/components/AppTransparentHeader';
-import AuthModal, { type AuthUserInfo } from '@/components/AuthModal';
 import { callCloudFunction } from '@/services/api';
 import type { AiNewsView } from '@/types';
 import { useResetPageScroll } from '@/hooks/useResetPageScroll';
-import { clearStoredInviteCode, resolveInviteCode } from '@/utils/invite';
 import { showTabBarSafely } from '@/utils/tabbar';
-
-const CACHE_KEY = 'gpt_pay_user_info';
-
-interface CachedUserInfo {
-  userId: string;
-  openid?: string;
-  openId?: string;
-  inviterUserId?: string;
-  nickname?: string;
-  avatarUrl?: string;
-  inviteCode?: string;
-  pointsBalance?: number;
-  aiAccountRegistered?: boolean;
-  profileAuthed?: boolean;
-}
-
-interface LoginResult extends CachedUserInfo {
-  mobileBound?: boolean;
-}
 
 interface NewsListResult {
   items: AiNewsView[];
   hasMore?: boolean;
   total?: number;
-}
-
-interface AppConfigResult {
-  enableNewsAuthModal?: boolean;
 }
 
 type NewsFilterKey = 'hot' | 'latest' | 'aiGiants' | 'tools' | 'tutorials';
@@ -83,8 +58,6 @@ function getNewsDisplayTag(tags?: string[]): string {
 }
 
 export default function NewsPage() {
-  const [showAuthModal, setShowAuthModal] = useState(false);
-  const [activeInviteCode, setActiveInviteCode] = useState('');
   const [newsList, setNewsList] = useState<AiNewsView[]>([]);
   const [newsLoading, setNewsLoading] = useState(true);
   const [newsLoadingMore, setNewsLoadingMore] = useState(false);
@@ -94,7 +67,6 @@ export default function NewsPage() {
   const [filterOpen, setFilterOpen] = useState(false);
   const [sharePanelVisible, setSharePanelVisible] = useState(false);
   const [shareItem, setShareItem] = useState<AiNewsView | null>(null);
-  const router = useRouter();
   const pageScroll = useResetPageScroll();
 
   useEffect(() => {
@@ -128,30 +100,9 @@ export default function NewsPage() {
     }
   }
 
-  async function initializePage(): Promise<void> {
+  function initializePage(): void {
     enableShareMenu();
-    const inviteCode = resolveInviteCode(router.params);
-    setActiveInviteCode(inviteCode);
-    const appConfig = await loadAppConfig();
-    if (appConfig.enableNewsAuthModal) {
-      checkAuth(inviteCode);
-    } else if (inviteCode) {
-      syncCachedLoginState(inviteCode);
-    }
     void loadNews('latest', true);
-  }
-
-  async function loadAppConfig(): Promise<Required<AppConfigResult>> {
-    try {
-      const result = await callCloudFunction<AppConfigResult>('get-app-config');
-      return {
-        enableNewsAuthModal: result.enableNewsAuthModal !== false,
-      };
-    } catch {
-      return {
-        enableNewsAuthModal: true,
-      };
-    }
   }
 
   function getShareAppMessage(item: AiNewsView | null) {
@@ -219,75 +170,6 @@ export default function NewsPage() {
     } finally {
       Taro.stopPullDownRefresh();
     }
-  }
-
-  function checkAuth(inviteCode: string) {
-    const raw = Taro.getStorageSync(CACHE_KEY) as string;
-    if (raw) {
-      try {
-        const cached: CachedUserInfo = JSON.parse(raw);
-        if (cached.userId) {
-          if (inviteCode || !cached.openId && !cached.openid) {
-            void syncLoginState(cached, inviteCode);
-          }
-          return;
-        }
-      } catch { /* ignore */ }
-    }
-
-    setShowAuthModal(true);
-  }
-
-  function syncCachedLoginState(inviteCode: string): void {
-    const raw = Taro.getStorageSync(CACHE_KEY) as string;
-    if (!raw) {
-      return;
-    }
-    try {
-      const cached: CachedUserInfo = JSON.parse(raw);
-      if (cached.userId && (inviteCode || !cached.openId && !cached.openid)) {
-        void syncLoginState(cached, inviteCode);
-      }
-    } catch {
-      // 缓存异常不影响资讯浏览。
-    }
-  }
-
-  async function syncLoginState(cached: CachedUserInfo, inviteCode: string): Promise<void> {
-    try {
-      const loginResult = await callCloudFunction<LoginResult>('user-login', {
-        nickname: cached.nickname,
-        avatarUrl: cached.avatarUrl,
-        inviteCode,
-        source: inviteCode ? 'share' : 'direct',
-      });
-      const nextInfo: CachedUserInfo = {
-        ...cached,
-        ...loginResult,
-        openid: loginResult.openid ?? loginResult.openId,
-        openId: loginResult.openId ?? loginResult.openid,
-        profileAuthed: Boolean(loginResult.nickname || loginResult.avatarUrl),
-      };
-      saveToCache(nextInfo);
-      setShowAuthModal(false);
-      if (inviteCode && loginResult.inviterUserId) {
-        clearStoredInviteCode();
-      }
-    } catch {
-      // 保留旧缓存，不打断用户浏览；下次授权或进入会员页会再次刷新。
-    }
-  }
-
-  function saveToCache(info: CachedUserInfo) {
-    Taro.setStorageSync(CACHE_KEY, JSON.stringify(info));
-  }
-
-  function handleAuthSuccess(info: AuthUserInfo) {
-    saveToCache(info);
-    if (activeInviteCode && info.inviterUserId) {
-      clearStoredInviteCode();
-    }
-    setShowAuthModal(false);
   }
 
   function openNews(item: AiNewsView): void {
@@ -457,11 +339,6 @@ export default function NewsPage() {
         </View>
       </View>
 
-      <AuthModal
-        visible={showAuthModal}
-        inviteCode={activeInviteCode}
-        onAuthSuccess={handleAuthSuccess}
-      />
     </View>
   );
 }

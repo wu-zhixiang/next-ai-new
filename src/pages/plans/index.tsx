@@ -165,9 +165,12 @@ export default function PlansPage(): JSX.Element {
   async function handleGetPhoneNumber(event: WechatPhoneEvent): Promise<void> {
     const detail = event.detail;
     if (!detail || !detail.code) {
-      Taro.showToast({
-        title: detail?.errMsg?.includes('deny') ? '你已取消手机号授权' : '未获取到手机号授权',
-        icon: 'none',
+      const errorMessage = detail?.errMsg || 'getPhoneNumber未返回code';
+      console.error('plans.getPhoneNumber.failed', { errorMessage, detail });
+      Taro.showModal({
+        title: '手机号授权失败',
+        content: errorMessage,
+        showCancel: false,
       });
       return;
     }
@@ -254,7 +257,7 @@ export default function PlansPage(): JSX.Element {
                 <Text className='plans-primary-button__icon'>→</Text>
               </Button>
             ) : (
-              <Button className='plans-primary-button' openType='getPhoneNumber' loading={submitting} onGetPhoneNumber={handleGetPhoneNumber}>
+              <Button className='plans-primary-button' openType='getPhoneNumber|agreePrivacyAuthorization' loading={submitting} onGetPhoneNumber={handleGetPhoneNumber}>
                 <Text>授权手机号并支付</Text>
                 <Text className='plans-primary-button__icon'>→</Text>
               </Button>

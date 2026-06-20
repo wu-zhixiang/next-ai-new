@@ -22,6 +22,7 @@ import {
   toCompliantPlan,
   toCompliantProductType,
 } from '@/utils/productCompliance';
+import { hasAuthConsent } from '@/utils/authConsent';
 
 interface MemberHomeData {
   userInfo?: {
@@ -351,6 +352,7 @@ export default function MemberPage(): JSX.Element {
   const expiryLabel = data.membership.status === 'none' ? '购买后开始计时' : isOpening ? '人工开通中' : formatDate(data.membership.endAt);
   const currentProductCode = data.membership.productCode ?? 'ai_news';
   const mobileBound = isMobileBound(data.userInfo?.mobile);
+  const authConsentGranted = hasAuthConsent(cachedUserInfo);
   const nickname = data.userInfo?.nickname ?? cachedUserInfo?.nickname ?? '微信用户';
   const avatarUrl = data.userInfo?.avatarUrl ?? cachedUserInfo?.avatarUrl ?? '';
   const productTypes = useMemo(
@@ -439,7 +441,7 @@ export default function MemberPage(): JSX.Element {
 
   function hasLoggedInUser(): boolean {
     const cached = getCachedUserInfo() ?? cachedUserInfo;
-    return Boolean(cached?.userId);
+    return hasAuthConsent(cached);
   }
 
   function requireAuth(action: PendingAuthAction): boolean {
@@ -761,7 +763,13 @@ export default function MemberPage(): JSX.Element {
     }
     const detail = event.detail;
     if (!detail?.code) {
-      Taro.showToast({ title: detail?.errMsg?.includes('deny') ? '你已取消手机号授权' : '未获取到手机号授权', icon: 'none' });
+      const errorMessage = detail?.errMsg || 'getPhoneNumber未返回code';
+      console.error('member.getPhoneNumber.failed', { errorMessage, detail });
+      Taro.showModal({
+        title: '手机号授权失败',
+        content: errorMessage,
+        showCancel: false,
+      });
       return;
     }
     if (submitting) {
@@ -1328,10 +1336,19 @@ export default function MemberPage(): JSX.Element {
               <Text className='plan-sheet__link' onClick={() => openAgreement(USER_AGREEMENT_URL)}>《用户协议》</Text>
               <Text className='plan-sheet__link' onClick={() => openAgreement(PRIVACY_AGREEMENT_URL)}>《隐私政策》</Text>
             </View>
-            {activeProductAvailable && !mobileBound ? (
+            {activeProductAvailable && !authConsentGranted ? (
+              <Button
+                className='saas-button plan-sheet__button'
+                onClick={() => {
+                  requireAuth({ type: 'subscribe', productCode: activeProductCode });
+                }}
+              >
+                微信授权登录后继续
+              </Button>
+            ) : activeProductAvailable && !mobileBound ? (
               <Button
                 className={`saas-button plan-sheet__button ${purchaseAgreementAccepted ? '' : 'saas-button--disabled'}`}
-                openType={purchaseAgreementAccepted ? 'getPhoneNumber' : undefined}
+                openType={purchaseAgreementAccepted ? 'getPhoneNumber|agreePrivacyAuthorization' : undefined}
                 loading={submitting}
                 onClick={() => {
                   if (!purchaseAgreementAccepted) {

@@ -15,6 +15,7 @@ export interface LoginResult {
   pointsBalance?: number;
   aiAccountRegistered?: boolean;
   profileAuthed?: boolean;
+  authConsentGranted?: boolean;
 }
 
 export type CachedUserInfo = LoginResult;
@@ -44,6 +45,7 @@ export function normalizeLoginResult(result: LoginResult, fallback?: Partial<Cac
     openid: result.openid ?? result.openId ?? fallback?.openid ?? fallback?.openId,
     openId: result.openId ?? result.openid ?? fallback?.openId ?? fallback?.openid,
     profileAuthed: Boolean(result.nickname || result.avatarUrl || fallback?.profileAuthed),
+    authConsentGranted: result.authConsentGranted ?? fallback?.authConsentGranted,
   };
 }
 

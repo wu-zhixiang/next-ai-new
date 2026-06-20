@@ -8,18 +8,21 @@ cloud.init({
 const db = cloud.database();
 
 export interface ClientAppConfig {
+  enableHomeAuthModal: boolean;
   enableNewsAuthModal: boolean;
   enableProductComplianceMode: boolean;
   paymentType: PaymentType;
 }
 
 const DEFAULT_CLIENT_APP_CONFIG: ClientAppConfig = {
+  enableHomeAuthModal: true,
   enableNewsAuthModal: true,
   enableProductComplianceMode: false,
   paymentType: 'virtual',
 };
 
 interface AppConfigRecord {
+  enableHomeAuthModal?: boolean;
   enableNewsAuthModal?: boolean;
   enableProductComplianceMode?: boolean;
   paymentType?: unknown;
@@ -40,7 +43,11 @@ export async function getClientAppConfig(): Promise<ClientAppConfig> {
   try {
     const result = await db.collection('app_config').doc('client').get();
     const config = (result.data ?? {}) as AppConfigRecord;
+    const enableHomeAuthModal = typeof config.enableHomeAuthModal === 'boolean'
+      ? config.enableHomeAuthModal
+      : config.enableNewsAuthModal !== false;
     return {
+      enableHomeAuthModal,
       enableNewsAuthModal: config.enableNewsAuthModal !== false,
       enableProductComplianceMode: config.enableProductComplianceMode === true,
       paymentType: normalizePaymentType(config.paymentType),

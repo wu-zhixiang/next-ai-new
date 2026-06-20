@@ -85,7 +85,7 @@ export default function InvitePage(): JSX.Element {
     const inviteCode = data.inviteCode || getCachedUser()?.inviteCode || '';
     return {
       title: '全球 AI 资讯，一站掌握',
-      path: `/pages/news/index${inviteCode ? `?inviteCode=${encodeURIComponent(inviteCode)}` : ''}`,
+      path: `/pages/home/index${inviteCode ? `?inviteCode=${encodeURIComponent(inviteCode)}` : ''}`,
     };
   });
 
