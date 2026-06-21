@@ -8,14 +8,14 @@ const CLAUDE_AVATAR_URL = 'https://cloud1-d3gbrpive8611514c-1348953433.tcloudbas
 export const PRODUCT_TYPE_SEED: ProductTypeRecord[] = [
   {
     productCode: DEFAULT_PRODUCT_CODE,
-    productName: 'ChatGPT Plus',
-    label: 'ChatGPT Plus',
+    productName: 'ChatGPT',
+    label: 'ChatGPT',
     tag: '稳定性',
     avatarUrl: CHATGPT_AVATAR_URL,
     available: true,
-    description: '适合 Codex、image-2重度依赖用户场景。',
+    description: '提供 Go、Plus、Pro 5x 等套餐，适合日常使用与重度 AI 用户。',
     introHighlights: [
-      { title: 'ChatGPT 权益', description: '适合 Codex、image-2重度依赖用户场景。' },
+      { title: 'ChatGPT 权益', description: '提供 Go、Plus、Pro 5x 等不同档位。' },
       { title: '会员服务', description: '开通后进入人工处理流程，完成后展示会员有效期。' },
       { title: '当前状态', description: '支持购买' },
     ],
@@ -37,15 +37,15 @@ export const PRODUCT_TYPE_SEED: ProductTypeRecord[] = [
   },
   {
     productCode: 'claude_pro',
-    productName: 'Claude Pro 会员',
-    label: 'Claude Pro',
+    productName: 'Claude',
+    label: 'Claude',
     tag: '性价比',
     avatarUrl: CLAUDE_AVATAR_URL,
     available: true,
-    description: '适合 Claude Code、微信公众号、小红书、电商运营等用户场景。',
+    description: '提供 Claude Pro、Claude Max 5x 套餐，可使用同一账号登录 Claude Code。',
     introHighlights: [
-      { title: 'Claude 权益', description: '微信公众号、小红书、电商运营等用户' },
-      { title: '独立套餐', description: '后续将接入专属套餐、订单和交付流程。' },
+      { title: 'Claude 权益', description: '提供 Claude Pro、Claude Max 5x 等不同档位。' },
+      { title: 'Claude Code', description: '使用同一个 Claude 账号登录 Claude Code。' },
       { title: '当前状态', description: '支持选择' },
     ],
     complianceDisplay: {

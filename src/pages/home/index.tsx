@@ -17,6 +17,7 @@ import { hasAuthConsent } from '@/utils/authConsent';
 import { clearStoredInviteCode, resolveInviteCode } from '@/utils/invite';
 
 const CHEVRON_RIGHT_ICON = require('../../assets/icons/chevron-right-terracotta.svg') as string;
+const SECTION_MORE_CHEVRON_ICON = require('../../assets/icons/chevron-right-home-section.svg') as string;
 const HOME_TOOLS = VISIBLE_TOOLS.filter((tool) => tool.enabled).slice(0, 3);
 
 interface ProductTypeListResult {
@@ -205,8 +206,8 @@ export default function HomePage(): JSX.Element {
             <View className='home-section__head'>
               <Text className='home-section__title'>AI工具</Text>
               <View className='home-section__more' onClick={openTools}>
-                <Text>立即使用</Text>
-                <Image className='home-inline-chevron' src={CHEVRON_RIGHT_ICON} mode='aspectFit' />
+                <Text>更多工具</Text>
+                <Image className='home-inline-chevron' src={SECTION_MORE_CHEVRON_ICON} mode='aspectFit' />
               </View>
             </View>
             <View className='home-tools'>
@@ -229,8 +230,8 @@ export default function HomePage(): JSX.Element {
             <View className='home-section__head'>
               <Text className='home-section__title'>AI资讯</Text>
               <View className='home-section__more' onClick={openNewsList}>
-                <Text>查看更多</Text>
-                <Image className='home-inline-chevron' src={CHEVRON_RIGHT_ICON} mode='aspectFit' />
+                <Text>更多资讯</Text>
+                <Image className='home-inline-chevron' src={SECTION_MORE_CHEVRON_ICON} mode='aspectFit' />
               </View>
             </View>
             {loading ? (

@@ -647,7 +647,7 @@ button::after {
   display: flex;
   align-items: center;
   gap: 4rpx;
-  color: var(--primary);
+  color: #4a4945;
   font-size: 24rpx;
   line-height: 1.4;
   font-weight: 800;
@@ -2942,6 +2942,13 @@ button::after {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+}
+
+.plan-sheet {
+  max-height: 85vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .plan-sheet__label {

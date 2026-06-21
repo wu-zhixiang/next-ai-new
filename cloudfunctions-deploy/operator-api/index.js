@@ -10,6 +10,7 @@ const constants_1 = require("./shared/constants");
 const db_1 = require("./shared/db");
 const orders_1 = require("./shared/orders");
 const utils_1 = require("./shared/utils");
+const appstore_product_scope_1 = require("./shared/appstore-product-scope");
 const DEFAULT_NEWS_REMINDER_TEMPLATE_ID = 'm7Cb5rMgtJtFdyVn3YvR671tWZwyK87qe6qKr7KPZrQ';
 const APPSTORE_EMAIL_DOMAIN = 'mraclpivot.com';
 const DEFAULT_APPSTORE_MOBILE = '15810901111';
@@ -309,11 +310,33 @@ async function listProductTypeRecords() {
     return result.data;
 }
 async function listProductTypes() {
-    const productTypes = (await listProductTypeRecords()).map(toProductTypeView);
+    const productTypes = [
+        {
+            productCode: appstore_product_scope_1.APPSTORE_ALL_PRODUCT_CODE,
+            productName: appstore_product_scope_1.APPSTORE_ALL_PRODUCT_NAME,
+            label: '全部商品（不区分）',
+            tag: '',
+            available: true,
+            description: '该 Apple Store 账号可用于任意商品类型。',
+            introHighlights: [],
+        },
+        ...(await listProductTypeRecords()).map(toProductTypeView),
+    ];
     return ok({ productTypes });
 }
 async function resolveProductType(value) {
     const productCode = normalizeProductCode(value);
+    if (productCode === appstore_product_scope_1.APPSTORE_ALL_PRODUCT_CODE) {
+        return {
+            productCode: appstore_product_scope_1.APPSTORE_ALL_PRODUCT_CODE,
+            productName: appstore_product_scope_1.APPSTORE_ALL_PRODUCT_NAME,
+            label: '全部商品（不区分）',
+            tag: '',
+            available: true,
+            description: '该 Apple Store 账号可用于任意商品类型。',
+            introHighlights: [],
+        };
+    }
     const productTypes = await listProductTypeRecords();
     const matched = productTypes.find((product) => product.productCode === productCode && product.available);
     if (!matched) {
@@ -363,7 +386,7 @@ function getOrderProductName(order) {
 }
 function isAppStoreAccountForOrder(account, order) {
     const accountProductCode = normalizeProductCode(account.productCode);
-    return accountProductCode === getOrderProductCode(order);
+    return (0, appstore_product_scope_1.appStoreAccountMatchesProduct)(accountProductCode, getOrderProductCode(order));
 }
 function assertAppStoreAccountForOrder(account, order) {
     if (!isAppStoreAccountForOrder(account, order)) {
@@ -1236,7 +1259,12 @@ async function getAvailableAppStoreAccount(orderNo, mobile) {
         .get();
     const account = result.data
         .filter((item) => !item.orderNo && !item.chatgptAccountEmail && (0, utils_1.normalizeMobile)(item.mobile).endsWith(targetTail) && isAppStoreAccountForOrder(item, order))
-        .sort((left, right) => { var _a, _b; return ((_a = left.createdAt) !== null && _a !== void 0 ? _a : 0) - ((_b = right.createdAt) !== null && _b !== void 0 ? _b : 0); })[0];
+        .sort((left, right) => {
+        var _a, _b;
+        const orderProductCode = getOrderProductCode(order);
+        const priorityDiff = (0, appstore_product_scope_1.getAppStoreProductMatchPriority)(normalizeProductCode(left.productCode), orderProductCode) - (0, appstore_product_scope_1.getAppStoreProductMatchPriority)(normalizeProductCode(right.productCode), orderProductCode);
+        return priorityDiff || ((_a = left.createdAt) !== null && _a !== void 0 ? _a : 0) - ((_b = right.createdAt) !== null && _b !== void 0 ? _b : 0);
+    })[0];
     if (!account) {
         return fail(404, `暂无尾号为 ${targetTail} 且匹配 ${getOrderProductName(order)} 的可用 Apple Store 账号，请先到注册页保存账号`);
     }

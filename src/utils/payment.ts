@@ -1,4 +1,9 @@
 import Taro from '@tarojs/taro';
+import {
+  classifyPaymentError,
+  ORDER_CLOSED_CODE,
+  PAYMENT_CANCEL_CODE,
+} from '@/utils/paymentError';
 
 export interface WechatPaymentParams {
   timeStamp: string;
@@ -60,16 +65,8 @@ export function requestVirtualPayment(params: WechatVirtualPaymentParams): Promi
       ...params,
       success: () => resolve(),
       fail: (error) => {
-        const errMsg = error.errMsg || '虚拟支付失败';
-        if (errMsg.includes('ORDER_CLOSED')) {
-          reject(new MiniProgramPaymentError('订单已关闭，请重新下单', 'ORDER_CLOSED'));
-          return;
-        }
-        if (errMsg.includes('cancel')) {
-          reject(new MiniProgramPaymentError('支付已取消', 'PAY_CANCEL'));
-          return;
-        }
-        reject(new MiniProgramPaymentError(errMsg));
+        const classified = classifyPaymentError(error);
+        reject(new MiniProgramPaymentError(classified.message, classified.code));
       },
     });
   });
@@ -81,6 +78,13 @@ export async function requestMiniProgramPayment(result: PayOrderResult): Promise
     return;
   }
   if (result.payment) {
-    await Taro.requestPayment({ ...result.payment });
+    try {
+      await Taro.requestPayment({ ...result.payment });
+    } catch (error) {
+      const classified = classifyPaymentError(error);
+      throw new MiniProgramPaymentError(classified.message, classified.code);
+    }
   }
 }
+
+export { ORDER_CLOSED_CODE, PAYMENT_CANCEL_CODE };

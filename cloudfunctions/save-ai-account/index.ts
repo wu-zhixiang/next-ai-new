@@ -1,5 +1,6 @@
 import { collection, getUserByOpenId } from '../shared/db';
 import { encryptAiAccountPassword } from '../shared/ai-account';
+import { validateAiAccountPassword } from '../shared/ai-account-password';
 import { ok } from '../shared/utils';
 import { getWxContext } from '../_lib/context';
 
@@ -28,14 +29,9 @@ function assertValidAccountName(accountName: string): void {
 }
 
 function assertValidPassword(password: string): void {
-  if (password.length < 8 || password.length > 64) {
-    throw new Error('密码需为 8-64 位');
-  }
-  if (/\s/.test(password)) {
-    throw new Error('密码不能包含空格');
-  }
-  if (!/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/[0-9]/.test(password) || !/[^A-Za-z0-9]/.test(password)) {
-    throw new Error('密码需包含大小写字母、数字和特殊符号');
+  const errorMessage = validateAiAccountPassword(password);
+  if (errorMessage) {
+    throw new Error(errorMessage);
   }
 }
 

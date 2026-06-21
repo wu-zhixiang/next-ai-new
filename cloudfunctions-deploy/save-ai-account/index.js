@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.main = main;
 const db_1 = require("./shared/db");
 const ai_account_1 = require("./shared/ai-account");
+const ai_account_password_1 = require("./shared/ai-account-password");
 const utils_1 = require("./shared/utils");
 const context_1 = require("./_lib/context");
 const AI_ACCOUNT_DOMAIN = 'mraclpivot.com';
@@ -22,14 +23,9 @@ function assertValidAccountName(accountName) {
     }
 }
 function assertValidPassword(password) {
-    if (password.length < 8 || password.length > 64) {
-        throw new Error('密码需为 8-64 位');
-    }
-    if (/\s/.test(password)) {
-        throw new Error('密码不能包含空格');
-    }
-    if (!/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/[0-9]/.test(password) || !/[^A-Za-z0-9]/.test(password)) {
-        throw new Error('密码需包含大小写字母、数字和特殊符号');
+    const errorMessage = (0, ai_account_password_1.validateAiAccountPassword)(password);
+    if (errorMessage) {
+        throw new Error(errorMessage);
     }
 }
 async function main(event) {

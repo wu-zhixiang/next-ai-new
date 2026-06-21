@@ -66,13 +66,17 @@ execFileSync(
     path.join(sourceRoot, 'shared', 'constants.ts'),
     path.join(sourceRoot, 'shared', 'client-config.ts'),
     path.join(sourceRoot, 'shared', 'ai-account.ts'),
+    path.join(sourceRoot, 'shared', 'ai-account-password.ts'),
     path.join(sourceRoot, 'shared', 'db.ts'),
     path.join(sourceRoot, 'shared', 'invite-reward-policy.ts'),
     path.join(sourceRoot, 'shared', 'operator-notify.ts'),
     path.join(sourceRoot, 'shared', 'orders.ts'),
     path.join(sourceRoot, 'shared', 'payment-config.ts'),
+    path.join(sourceRoot, 'shared', 'plan-seed-data.ts'),
     path.join(sourceRoot, 'shared', 'plan-seed.ts'),
+    path.join(sourceRoot, 'shared', 'appstore-country-data.ts'),
     path.join(sourceRoot, 'shared', 'appstore-country-seed.ts'),
+    path.join(sourceRoot, 'shared', 'appstore-product-scope.ts'),
     path.join(sourceRoot, 'shared', 'product-type-seed.ts'),
     path.join(sourceRoot, 'shared', 'types.ts'),
     path.join(sourceRoot, 'shared', 'utils.ts'),
@@ -85,7 +89,9 @@ execFileSync(
 const sharedCompileRoot = path.join(compileRoot, 'shared');
 const libCompileRoot = path.join(compileRoot, '_lib');
 const seedSharedFiles = [
+  'plan-seed-data.js',
   'plan-seed.js',
+  'appstore-country-data.js',
   'appstore-country-seed.js',
   'product-type-seed.js',
 ];
@@ -105,6 +111,12 @@ const functionsThatNeedInviteRewardPolicy = new Set([
   'pay-order',
   'user-login',
 ]);
+const functionsThatNeedAiAccountPassword = new Set([
+  'save-ai-account',
+]);
+const functionsThatNeedAppStoreProductScope = new Set([
+  'operator-api',
+]);
 
 for (const name of functionNames) {
   const targetRoot = path.join(deployRoot, name);
@@ -123,6 +135,12 @@ for (const name of functionNames) {
   }
   if (!functionsThatNeedInviteRewardPolicy.has(name)) {
     fs.rmSync(path.join(targetSharedRoot, 'invite-reward-policy.js'), { force: true });
+  }
+  if (!functionsThatNeedAiAccountPassword.has(name)) {
+    fs.rmSync(path.join(targetSharedRoot, 'ai-account-password.js'), { force: true });
+  }
+  if (!functionsThatNeedAppStoreProductScope.has(name)) {
+    fs.rmSync(path.join(targetSharedRoot, 'appstore-product-scope.js'), { force: true });
   }
   fs.cpSync(libCompileRoot, path.join(targetRoot, '_lib'), { recursive: true });
   const configFile = path.join(sourceRoot, name, 'config.json');

@@ -1,5 +1,6 @@
 import Taro from '@tarojs/taro';
 import { callCloudFunction } from '@/services/api';
+import { ensurePrivacyAuthorization } from '@/utils/privacyAuthorization';
 
 declare const RENEW_REMINDER_TEMPLATE_ID: string;
 declare const MEMBER_OPENED_TEMPLATE_ID: string;
@@ -118,6 +119,10 @@ async function saveMemberSubscribeAuth(accepted: boolean): Promise<void> {
 }
 
 export async function enableReminderSubscription(options: { source?: 'manual' | 'afterPay' } = {}): Promise<boolean> {
+  if (!await ensurePrivacyAuthorization()) {
+    return false;
+  }
+
   const templateIds = getReminderTemplateIds();
   if (templateIds.length > 0 && typeof Taro.requestSubscribeMessage === 'function') {
     try {
@@ -205,6 +210,10 @@ export async function disableReminderSubscription(): Promise<boolean> {
 }
 
 export async function enableNewsReminderSubscription(): Promise<boolean> {
+  if (!await ensurePrivacyAuthorization()) {
+    return false;
+  }
+
   const newsReminderTemplateId = typeof NEWS_REMINDER_TEMPLATE_ID === 'string' && NEWS_REMINDER_TEMPLATE_ID
     ? NEWS_REMINDER_TEMPLATE_ID
     : DEFAULT_NEWS_REMINDER_TEMPLATE_ID;

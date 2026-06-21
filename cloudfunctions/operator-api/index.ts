@@ -5,6 +5,12 @@ import { _, app, collection, ensureCollection, getLatestUnusedEmailVerificationC
 import { fulfillPaidOrderMembership } from '../shared/orders';
 import { isValidMainlandMobile, normalizeMobile } from '../shared/utils';
 import type { AiNewsRecord, AppStoreAccountRecord, AppStoreCountryRecord, AppStoreCountryView, AppStoreEmailVerificationCodeRecord, FulfillmentStatus, OrderRecord, ProductTypeRecord, ProductTypeView, UserRecord } from '../shared/types';
+import {
+  APPSTORE_ALL_PRODUCT_CODE,
+  APPSTORE_ALL_PRODUCT_NAME,
+  appStoreAccountMatchesProduct,
+  getAppStoreProductMatchPriority,
+} from '../shared/appstore-product-scope';
 
 interface Event {
   httpMethod?: string;
@@ -394,12 +400,34 @@ async function listProductTypeRecords(): Promise<ProductTypeRecord[]> {
 }
 
 async function listProductTypes(): Promise<HttpResponse> {
-  const productTypes = (await listProductTypeRecords()).map(toProductTypeView);
+  const productTypes = [
+    {
+      productCode: APPSTORE_ALL_PRODUCT_CODE,
+      productName: APPSTORE_ALL_PRODUCT_NAME,
+      label: '全部商品（不区分）',
+      tag: '',
+      available: true,
+      description: '该 Apple Store 账号可用于任意商品类型。',
+      introHighlights: [],
+    },
+    ...(await listProductTypeRecords()).map(toProductTypeView),
+  ];
   return ok({ productTypes });
 }
 
 async function resolveProductType(value: unknown): Promise<ProductTypeView> {
   const productCode = normalizeProductCode(value);
+  if (productCode === APPSTORE_ALL_PRODUCT_CODE) {
+    return {
+      productCode: APPSTORE_ALL_PRODUCT_CODE,
+      productName: APPSTORE_ALL_PRODUCT_NAME,
+      label: '全部商品（不区分）',
+      tag: '',
+      available: true,
+      description: '该 Apple Store 账号可用于任意商品类型。',
+      introHighlights: [],
+    };
+  }
   const productTypes = await listProductTypeRecords();
   const matched = productTypes.find((product) => product.productCode === productCode && product.available);
   if (!matched) {
@@ -459,7 +487,7 @@ function getOrderProductName(order: OrderRecord): string {
 
 function isAppStoreAccountForOrder(account: AppStoreAccountRecord, order: OrderRecord): boolean {
   const accountProductCode = normalizeProductCode(account.productCode);
-  return accountProductCode === getOrderProductCode(order);
+  return appStoreAccountMatchesProduct(accountProductCode, getOrderProductCode(order));
 }
 
 function assertAppStoreAccountForOrder(account: AppStoreAccountRecord, order: OrderRecord): void {
@@ -1393,7 +1421,17 @@ async function getAvailableAppStoreAccount(orderNo: string, mobile?: string): Pr
     .get();
   const account = (result.data as Array<AppStoreAccountRecord & { _id: string }>)
     .filter((item) => !item.orderNo && !item.chatgptAccountEmail && normalizeMobile(item.mobile).endsWith(targetTail) && isAppStoreAccountForOrder(item, order))
-    .sort((left, right) => (left.createdAt ?? 0) - (right.createdAt ?? 0))[0];
+    .sort((left, right) => {
+      const orderProductCode = getOrderProductCode(order);
+      const priorityDiff = getAppStoreProductMatchPriority(
+        normalizeProductCode(left.productCode),
+        orderProductCode,
+      ) - getAppStoreProductMatchPriority(
+        normalizeProductCode(right.productCode),
+        orderProductCode,
+      );
+      return priorityDiff || (left.createdAt ?? 0) - (right.createdAt ?? 0);
+    })[0];
   if (!account) {
     return fail(404, `暂无尾号为 ${targetTail} 且匹配 ${getOrderProductName(order)} 的可用 Apple Store 账号，请先到注册页保存账号`);
   }

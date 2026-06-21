@@ -3,6 +3,7 @@ import { Button, Text, View } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import { loginSilently, saveCachedUserInfo, type CachedUserInfo } from '@/utils/auth';
 import { hideTabBarSafely, showTabBarSafely } from '@/utils/tabbar';
+import { ensurePrivacyAuthorization } from '@/utils/privacyAuthorization';
 import './AuthModal.scss';
 
 const USER_AGREEMENT_URL = 'https://cloud1-d3gbrpive8611514c-1348953433.tcloudbaseapp.com/cloud-admin/htmls/%E7%94%A8%E6%88%B7%E5%8D%8F%E8%AE%AE.html?sign=55a2a34c2317b48fc09603658d7a64b1&t=1779005578';
@@ -40,6 +41,9 @@ export default function AuthModal({ visible, inviteCode, onAuthSuccess }: AuthMo
     }
     setSubmitting(true);
     try {
+      const privacyAuthorized = await ensurePrivacyAuthorization();
+      if (!privacyAuthorized) return;
+
       let nickname = '';
       let avatarUrl = '';
       try {

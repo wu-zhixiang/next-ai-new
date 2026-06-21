@@ -8,6 +8,7 @@ import type { AiNewsDetailView } from '@/types';
 import { useResetPageScroll } from '@/hooks/useResetPageScroll';
 import { loginSilently } from '@/utils/auth';
 import { enableNewsReminderSubscription } from '@/utils/subscription';
+import { ensurePrivacyAuthorization } from '@/utils/privacyAuthorization';
 
 const NEWS_BELL_ICON = require('../../assets/icons/news-bell.svg') as string;
 
@@ -240,10 +241,12 @@ export default function NewsDetailPage(): JSX.Element {
 
   async function copySourceUrl(): Promise<void> {
     if (!detail?.sourceUrl) return;
+    if (!await ensurePrivacyAuthorization()) return;
     await Taro.setClipboardData({ data: detail.sourceUrl });
   }
 
   async function copyMarkdownLink(url: string): Promise<void> {
+    if (!await ensurePrivacyAuthorization()) return;
     await Taro.setClipboardData({ data: url });
   }
 

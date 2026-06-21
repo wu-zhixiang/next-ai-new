@@ -6,11 +6,13 @@ const DEFAULT_SETTINGS = {
 };
 const FALLBACK_APPSTORE_COUNTRIES = [
   { countryCode: 'PH', countryName: '菲律宾', dialingCode: '+63', available: true },
-  { countryCode: 'NG', countryName: '尼日利亚', dialingCode: '+234', available: true }
+  { countryCode: 'NG', countryName: '尼日利亚', dialingCode: '+234', available: true },
+  { countryCode: 'US', countryName: '美国', dialingCode: '+1', available: true }
 ];
 const FALLBACK_PRODUCT_TYPES = [
-  { productCode: 'ai_news', productName: 'Open AI 资讯会员', label: 'ChatGPT Plus', available: true },
-  { productCode: 'claude_pro', productName: 'Claude Pro 会员', label: 'Claude Pro', available: true }
+  { productCode: 'all', productName: '全部商品', label: '全部商品（不区分）', available: true },
+  { productCode: 'ai_news', productName: 'ChatGPT', label: 'ChatGPT', available: true },
+  { productCode: 'claude_pro', productName: 'Claude', label: 'Claude', available: true }
 ];
 const MAX_COVER_DATA_URL_LENGTH = 2 * 1024 * 1024;
 const NEWS_TAG_TREE = [

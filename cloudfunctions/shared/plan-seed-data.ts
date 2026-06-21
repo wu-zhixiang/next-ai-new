@@ -1,0 +1,145 @@
+import type { MemberPlanRecord } from './types';
+
+const SEED_TIME = 1746921600000;
+const CHATGPT_PRODUCT_CODE = 'ai_news';
+const CLAUDE_PRODUCT_CODE = 'claude_pro';
+
+function generatePlanPid(productCode: string, planCode: string): string {
+  return `${productCode}_${planCode}`.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+}
+
+const PLAN_SEED_SOURCE: Array<Omit<MemberPlanRecord, 'pid' | 'createdAt' | 'updatedAt'>> = [
+  {
+    productCode: CHATGPT_PRODUCT_CODE,
+    productName: 'ChatGPT',
+    planCode: 'go',
+    planName: 'ChatGPT Go',
+    virtualPaymentProductId: 'chatgpt_go',
+    price: 64,
+    durationDays: 30,
+    autoRenewEnabled: false,
+    status: 'on',
+    sort: 1,
+    description: 'ChatGPT Go 月度会员套餐。',
+    complianceDisplay: {
+      productName: 'AI效率会员',
+      planName: 'AI效率会员轻享套餐',
+      description: 'AI效率服务轻享月度套餐。',
+    },
+  },
+  {
+    productCode: CHATGPT_PRODUCT_CODE,
+    productName: 'ChatGPT',
+    planCode: 'plus',
+    planName: 'ChatGPT Plus',
+    virtualPaymentProductId: 'chatgpt_plus',
+    price: 160,
+    durationDays: 30,
+    autoRenewEnabled: false,
+    status: 'on',
+    sort: 2,
+    description: 'ChatGPT Plus 月度会员套餐。',
+    complianceDisplay: {
+      productName: 'AI效率会员',
+      planName: 'AI效率会员月度套餐',
+      description: 'AI效率服务月度套餐。',
+    },
+  },
+  {
+    productCode: CHATGPT_PRODUCT_CODE,
+    productName: 'ChatGPT',
+    planCode: 'quarterly',
+    planName: 'ChatGPT Plus 季度会员',
+    virtualPaymentProductId: 'chatgpt_qtr',
+    price: 460,
+    durationDays: 90,
+    autoRenewEnabled: false,
+    status: 'on',
+    sort: 3,
+    description: 'ChatGPT Plus 季度会员套餐。',
+    complianceDisplay: {
+      productName: 'AI效率会员',
+      planName: 'AI效率会员季度套餐',
+      description: 'AI效率服务季度套餐。',
+    },
+  },
+  {
+    productCode: CHATGPT_PRODUCT_CODE,
+    productName: 'ChatGPT',
+    planCode: 'pro_5x',
+    planName: 'ChatGPT Pro 5x',
+    virtualPaymentProductId: 'chatgpt_pro_5x',
+    price: 719,
+    durationDays: 30,
+    autoRenewEnabled: false,
+    status: 'on',
+    sort: 4,
+    description: 'ChatGPT Pro 5x 月度会员套餐。',
+    complianceDisplay: {
+      productName: 'AI效率会员',
+      planName: 'AI效率会员专业套餐',
+      description: 'AI效率服务专业月度套餐。',
+    },
+  },
+  {
+    productCode: CLAUDE_PRODUCT_CODE,
+    productName: 'Claude',
+    planCode: 'free',
+    planName: 'Claude Pro 免费体验',
+    virtualPaymentProductId: 'claude_free',
+    price: 0.01,
+    durationDays: 30,
+    autoRenewEnabled: false,
+    status: 'on',
+    sort: 5,
+    description: 'Claude Pro 免费体验套餐。',
+    complianceDisplay: {
+      productName: 'AI创作会员',
+      planName: 'AI创作会员免费体验套餐',
+      description: 'AI创作服务免费体验套餐。',
+    },
+  },
+  {
+    productCode: CLAUDE_PRODUCT_CODE,
+    productName: 'Claude',
+    planCode: 'pro',
+    planName: 'Claude Pro',
+    virtualPaymentProductId: 'claude_pro',
+    price: 160,
+    durationDays: 30,
+    autoRenewEnabled: false,
+    status: 'on',
+    sort: 6,
+    description: 'Claude Pro 月度会员套餐。',
+    complianceDisplay: {
+      productName: 'AI创作会员',
+      planName: 'AI创作会员月度套餐',
+      description: 'AI创作服务月度套餐。',
+    },
+  },
+  {
+    productCode: CLAUDE_PRODUCT_CODE,
+    productName: 'Claude',
+    planCode: 'max_5x',
+    planName: 'Claude Max 5x',
+    virtualPaymentProductId: 'claude_max_5x',
+    price: 899,
+    durationDays: 30,
+    autoRenewEnabled: false,
+    status: 'on',
+    sort: 7,
+    description: 'Claude Max 5x 月度会员套餐，可使用同一 Claude 账号登录 Claude Code。',
+    complianceDisplay: {
+      productName: 'AI创作会员',
+      planName: 'AI创作会员高阶套餐',
+      description: 'AI创作服务高阶月度套餐。',
+    },
+  },
+];
+
+export const PLAN_SEED: MemberPlanRecord[] = PLAN_SEED_SOURCE.map((seed) => ({
+  ...seed,
+  pid: generatePlanPid(seed.productCode, seed.planCode),
+  createdAt: SEED_TIME,
+  updatedAt: SEED_TIME,
+}));

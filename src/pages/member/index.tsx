@@ -23,6 +23,12 @@ import {
   toCompliantProductType,
 } from '@/utils/productCompliance';
 import { hasAuthConsent } from '@/utils/authConsent';
+import { copyWithToast, maskSecret, type ClipboardLabel } from '@/utils/clipboard';
+import {
+  AI_ACCOUNT_PASSWORD_HINT,
+  validateAiAccountPassword,
+} from '@/utils/aiAccountPassword';
+import { requirePrivacyAuthorization } from '@/utils/privacyAuthorization';
 
 interface MemberHomeData {
   userInfo?: {
@@ -578,15 +584,7 @@ export default function MemberPage(): JSX.Element {
       errors.accountName = '账号格式不正确，请调整点号位置';
     }
 
-    if (!password) {
-      errors.password = '请输入账号密码';
-    } else if (password.length < 8 || password.length > 64) {
-      errors.password = '密码需为8-64位';
-    } else if (/\s/.test(password)) {
-      errors.password = '密码不能包含空格';
-    } else if (!/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/[0-9]/.test(password) || !/[^A-Za-z0-9]/.test(password)) {
-      errors.password = '密码需包含大小写字母、数字和特殊符号';
-    }
+    errors.password = password ? validateAiAccountPassword(password) : '请输入账号密码';
 
     return errors;
   }
@@ -831,9 +829,19 @@ export default function MemberPage(): JSX.Element {
     setAiAccountInfo(null);
   }
 
-  async function copyAiAccountValue(value: string, label: string): Promise<void> {
-    await Taro.setClipboardData({ data: value });
-    Taro.showToast({ title: `${label}已复制`, icon: 'none' });
+  async function copyAiAccountValue(value: string, label: ClipboardLabel): Promise<boolean> {
+    return copyWithToast(value, label, {
+      setClipboardData: async (data) => {
+        await requirePrivacyAuthorization();
+        await Taro.setClipboardData({ data });
+      },
+      hideToast: async () => {
+        await Taro.hideToast();
+      },
+      showToast: async (title) => {
+        await Taro.showToast({ title, icon: 'none', duration: 1600 });
+      },
+    });
   }
 
   async function handleShowLatestEmailCode(): Promise<void> {
@@ -887,7 +895,10 @@ export default function MemberPage(): JSX.Element {
       return;
     }
 
-    await Taro.setClipboardData({ data: verificationCode });
+    const copied = await copyAiAccountValue(verificationCode, '验证码');
+    if (!copied) {
+      return;
+    }
     if (result.codeId) {
       try {
         await callCloudFunction<{ success: boolean }>('clear-email-code', { codeId: result.codeId });
@@ -1174,7 +1185,7 @@ export default function MemberPage(): JSX.Element {
             <Input
               className='ai-account-field__input'
               value={aiAccountPassword}
-              placeholder='8-64位，含大小写字母、数字和特殊符号'
+              placeholder={AI_ACCOUNT_PASSWORD_HINT}
               password
               onInput={(event) => {
                 setAiAccountPassword(event.detail.value);
@@ -1224,7 +1235,9 @@ export default function MemberPage(): JSX.Element {
             <View className='ai-account-info__row'>
               <View>
                 <Text className='ai-account-info__label'>密码</Text>
-                <Text className='ai-account-info__value ai-account-info__value--secret'>{aiAccountInfo?.password ?? '--'}</Text>
+                <Text className='ai-account-info__value ai-account-info__value--secret'>
+                  {aiAccountInfo?.password ? maskSecret(aiAccountInfo.password) : '--'}
+                </Text>
               </View>
               <Button
                 className='ai-account-info__copy'

@@ -6,6 +6,7 @@ import { callCloudFunction } from '@/services/api';
 import type { MembershipView } from '@/types';
 import { getToolById, type OutputType } from '@/pages/tools/definitions';
 import { useResetPageScroll } from '@/hooks/useResetPageScroll';
+import { ensurePrivacyAuthorization } from '@/utils/privacyAuthorization';
 
 const TOOL_ADD_FILE_ICON = require('../../assets/icons/tool-add-file.svg') as string;
 const TOOL_PASTE_ICON = require('../../assets/icons/tool-paste.svg') as string;
@@ -320,6 +321,9 @@ export default function ToolDetailPage(): JSX.Element {
     async function chooseReferenceFile(): Promise<void> {
         if (submitting) return;
         try {
+            const privacyAuthorized = await ensurePrivacyAuthorization();
+            if (!privacyAuthorized) return;
+
             const chooseMessageFile = (Taro as typeof Taro & {
                 chooseMessageFile?: (options: { count: number; type: 'file' }) => Promise<{
                     tempFiles: Array<{ name?: string; path?: string; size?: number }>;
@@ -445,17 +449,20 @@ export default function ToolDetailPage(): JSX.Element {
 
     async function copyResult(): Promise<void> {
         if (!result?.outputText) return;
+        if (!await ensurePrivacyAuthorization()) return;
         await Taro.setClipboardData({ data: buildResultMarkdown(result) });
     }
 
     async function prepareShareToFriend(): Promise<void> {
         if (!result) return;
+        if (!await ensurePrivacyAuthorization()) return;
         await Taro.setClipboardData({ data: buildResultMarkdown(result) });
         void Taro.showToast({ title: '结果已复制，可粘贴给好友', icon: 'none' });
     }
 
     async function shareToTimeline(): Promise<void> {
         if (result) {
+            if (!await ensurePrivacyAuthorization()) return;
             await Taro.setClipboardData({ data: buildResultMarkdown(result) });
         }
         enableShareMenu();
