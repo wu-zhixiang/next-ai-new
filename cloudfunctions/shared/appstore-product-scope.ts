@@ -14,3 +14,30 @@ export function getAppStoreProductMatchPriority(accountProductCode: string, orde
   }
   return 2;
 }
+
+interface ReusableAppStoreAccount {
+  productCode?: string;
+  status?: string;
+  updatedAt?: number;
+}
+
+export function selectReusableAppStoreAccount<T extends ReusableAppStoreAccount>(
+  accounts: T[],
+  orderProductCode: string,
+): T | null {
+  return accounts
+    .filter((account) => (
+      account.status === 'bound'
+      && appStoreAccountMatchesProduct(account.productCode ?? '', orderProductCode)
+    ))
+    .sort((left, right) => {
+      const priorityDiff = getAppStoreProductMatchPriority(
+        left.productCode ?? '',
+        orderProductCode,
+      ) - getAppStoreProductMatchPriority(
+        right.productCode ?? '',
+        orderProductCode,
+      );
+      return priorityDiff || (right.updatedAt ?? 0) - (left.updatedAt ?? 0);
+    })[0] ?? null;
+}

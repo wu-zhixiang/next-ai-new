@@ -10,6 +10,7 @@ import {
   APPSTORE_ALL_PRODUCT_NAME,
   appStoreAccountMatchesProduct,
   getAppStoreProductMatchPriority,
+  selectReusableAppStoreAccount,
 } from '../shared/appstore-product-scope';
 
 interface Event {
@@ -521,13 +522,21 @@ async function getAppStoreAccountByOrderNo(orderNo: string): Promise<(AppStoreAc
   return (result.data[0] as (AppStoreAccountRecord & { _id: string }) | undefined) ?? null;
 }
 
-async function getAppStoreAccountByChatgptEmail(chatgptAccountEmail: string): Promise<(AppStoreAccountRecord & { _id: string }) | null> {
+async function getAppStoreAccountByChatgptEmail(
+  chatgptAccountEmail: string,
+  orderProductCode: string,
+): Promise<(AppStoreAccountRecord & { _id: string }) | null> {
   if (!chatgptAccountEmail) {
     return null;
   }
   await ensureCollection('appstoreAccounts');
-  const result = await collection('appstoreAccounts').where({ chatgptAccountEmail }).limit(1).get();
-  return (result.data[0] as (AppStoreAccountRecord & { _id: string }) | undefined) ?? null;
+  const result = await collection('appstoreAccounts')
+    .where({ chatgptAccountEmail: chatgptAccountEmail.toLowerCase() })
+    .get();
+  return selectReusableAppStoreAccount(
+    result.data as Array<AppStoreAccountRecord & { _id: string }>,
+    orderProductCode,
+  );
 }
 
 async function resolveSubmittedAppStoreAccount(
@@ -611,15 +620,11 @@ async function resolveOrderAppStoreAccount(order: OrderRecord, user?: UserRecord
   if (byOrderNo) {
     return byOrderNo;
   }
-  const email = user?.aiAccountEmail ?? '';
+  const email = user?.aiAccountEmail?.toLowerCase() ?? '';
   if (!email) {
     return null;
   }
-  const byAccountEmail = await getAppStoreAccountByChatgptEmail(email);
-  if (!byAccountEmail || !isAppStoreAccountForOrder(byAccountEmail, order)) {
-    return null;
-  }
-  return byAccountEmail;
+  return getAppStoreAccountByChatgptEmail(email, getOrderProductCode(order));
 }
 
 async function generateUniqueAppStoreEmail(): Promise<string> {
@@ -1056,6 +1061,11 @@ async function sendNewsReminderToSubscribers(newsId: string, record: AiNewsRecor
 async function buildTask(order: OrderRecord & { _id: string }) {
   const user = await getUserById(order.userId);
   const appStoreAccount = await resolveOrderAppStoreAccount(order, user);
+  const reusedAppleStoreAccount = Boolean(
+    appStoreAccount
+    && appStoreAccount.chatgptAccountEmail
+    && appStoreAccount.orderNo !== order.orderNo,
+  );
   let password = '';
   if (user?.aiAccountPasswordEncrypted) {
     try {
@@ -1087,6 +1097,7 @@ async function buildTask(order: OrderRecord & { _id: string }) {
     email: user?.aiAccountEmail ?? '',
     password,
     appleStoreAccount: appStoreAccount ? serializeAppStoreAccount(appStoreAccount) : null,
+    reusedAppleStoreAccount,
   };
 }
 

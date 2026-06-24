@@ -301,7 +301,7 @@ function renderTasks(tasks) {
     node.querySelector('.task-card__paid-at').textContent = formatTime(task.paidAt);
     node.querySelector('.task-card__email').value = task.email || '';
     node.querySelector('.task-card__password').value = task.password || '';
-    applyAppleStoreAccountToTask(node, task.appleStoreAccount);
+    applyAppleStoreAccountToTask(node, task.appleStoreAccount, task.reusedAppleStoreAccount);
 
     node.querySelector('.copy-email').addEventListener('click', () => copyText(task.email || '', '账号已复制'));
     node.querySelector('.copy-password').addEventListener('click', () => copyText(task.password || '', '密码已复制'));
@@ -336,7 +336,7 @@ async function fetchVerificationCode(orderNo, node, button) {
   }
 }
 
-function applyAppleStoreAccountToTask(node, account) {
+function applyAppleStoreAccountToTask(node, account, reused = false) {
   const emailInput = node.querySelector('.task-card__apple-email');
   const passwordInput = node.querySelector('.task-card__apple-password');
   const fetchButton = node.querySelector('.fetch-apple-account');
@@ -345,9 +345,10 @@ function applyAppleStoreAccountToTask(node, account) {
   node.dataset.appleStoreAccountSource = normalized?.id ? 'pool' : '';
   node.dataset.appleStoreCountryCode = normalized?.countryCode || '';
   node.dataset.appleStoreCountryName = normalized?.countryName || '';
+  node.dataset.appleStoreAccountReused = reused ? 'true' : '';
   emailInput.value = normalized?.email || '';
   passwordInput.value = normalized?.password || '';
-  fetchButton.textContent = normalized?.email ? '已取' : '获取';
+  fetchButton.textContent = normalized?.email ? (reused ? '已复用' : '已取') : '获取';
 }
 
 function markManualAppleStoreAccount(node) {
@@ -355,6 +356,7 @@ function markManualAppleStoreAccount(node) {
   node.dataset.appleStoreAccountSource = 'manual';
   node.dataset.appleStoreCountryCode = '';
   node.dataset.appleStoreCountryName = '';
+  node.dataset.appleStoreAccountReused = '';
   const fetchButton = node.querySelector('.fetch-apple-account');
   if (fetchButton) {
     fetchButton.textContent = '获取';
@@ -370,13 +372,15 @@ async function fetchAppleStoreAccount(orderNo, node, button) {
     const mobile = (settings.appstoreMobile || DEFAULT_SETTINGS.appstoreMobile).trim();
     const query = mobile ? `?mobile=${encodeURIComponent(mobile)}` : '';
     const result = await apiRequest(`/operator/tasks/${encodeURIComponent(orderNo)}/appstore-account${query}`, { method: 'GET' });
-    applyAppleStoreAccountToTask(node, result.account);
+    applyAppleStoreAccountToTask(node, result.account, result.reused);
     await copyText(result.account?.email || '', result.reused ? '已复用并复制 Apple 邮箱' : '已获取并复制 Apple 邮箱');
   } catch (error) {
     showError(error);
   } finally {
     button.disabled = false;
-    button.textContent = node.dataset.appleStoreAccountId ? '已取' : originalText;
+    button.textContent = node.dataset.appleStoreAccountId
+      ? (node.dataset.appleStoreAccountReused ? '已复用' : '已取')
+      : originalText;
   }
 }
 

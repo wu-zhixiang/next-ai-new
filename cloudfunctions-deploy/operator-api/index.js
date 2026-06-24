@@ -419,14 +419,15 @@ async function getAppStoreAccountByOrderNo(orderNo) {
     const result = await (0, db_1.collection)('appstoreAccounts').where({ orderNo }).limit(1).get();
     return (_a = result.data[0]) !== null && _a !== void 0 ? _a : null;
 }
-async function getAppStoreAccountByChatgptEmail(chatgptAccountEmail) {
-    var _a;
+async function getAppStoreAccountByChatgptEmail(chatgptAccountEmail, orderProductCode) {
     if (!chatgptAccountEmail) {
         return null;
     }
     await (0, db_1.ensureCollection)('appstoreAccounts');
-    const result = await (0, db_1.collection)('appstoreAccounts').where({ chatgptAccountEmail }).limit(1).get();
-    return (_a = result.data[0]) !== null && _a !== void 0 ? _a : null;
+    const result = await (0, db_1.collection)('appstoreAccounts')
+        .where({ chatgptAccountEmail: chatgptAccountEmail.toLowerCase() })
+        .get();
+    return (0, appstore_product_scope_1.selectReusableAppStoreAccount)(result.data, orderProductCode);
 }
 async function resolveSubmittedAppStoreAccount(body, operatorMobile, order) {
     var _a, _b, _c, _d, _e, _f;
@@ -498,20 +499,16 @@ async function resolveSubmittedAppStoreAccount(body, operatorMobile, order) {
     };
 }
 async function resolveOrderAppStoreAccount(order, user) {
-    var _a;
+    var _a, _b;
     const byOrderNo = await getAppStoreAccountByOrderNo(order.orderNo);
     if (byOrderNo) {
         return byOrderNo;
     }
-    const email = (_a = user === null || user === void 0 ? void 0 : user.aiAccountEmail) !== null && _a !== void 0 ? _a : '';
+    const email = (_b = (_a = user === null || user === void 0 ? void 0 : user.aiAccountEmail) === null || _a === void 0 ? void 0 : _a.toLowerCase()) !== null && _b !== void 0 ? _b : '';
     if (!email) {
         return null;
     }
-    const byAccountEmail = await getAppStoreAccountByChatgptEmail(email);
-    if (!byAccountEmail || !isAppStoreAccountForOrder(byAccountEmail, order)) {
-        return null;
-    }
-    return byAccountEmail;
+    return getAppStoreAccountByChatgptEmail(email, getOrderProductCode(order));
 }
 async function generateUniqueAppStoreEmail() {
     await (0, db_1.ensureCollection)('appstoreAccounts');
@@ -908,6 +905,9 @@ async function buildTask(order) {
     var _a, _b, _c, _d, _e;
     const user = await (0, db_1.getUserById)(order.userId);
     const appStoreAccount = await resolveOrderAppStoreAccount(order, user);
+    const reusedAppleStoreAccount = Boolean(appStoreAccount
+        && appStoreAccount.chatgptAccountEmail
+        && appStoreAccount.orderNo !== order.orderNo);
     let password = '';
     if (user === null || user === void 0 ? void 0 : user.aiAccountPasswordEncrypted) {
         try {
@@ -939,6 +939,7 @@ async function buildTask(order) {
         email: (_e = user === null || user === void 0 ? void 0 : user.aiAccountEmail) !== null && _e !== void 0 ? _e : '',
         password,
         appleStoreAccount: appStoreAccount ? serializeAppStoreAccount(appStoreAccount) : null,
+        reusedAppleStoreAccount,
     };
 }
 async function listTasks(event) {
