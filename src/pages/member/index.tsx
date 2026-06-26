@@ -96,6 +96,7 @@ interface SaveAiAccountResult {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MINUTE_MS = 60 * 1000;
+const EMAIL_CODE_VISIBLE_WINDOW_MS = 5 * MINUTE_MS;
 
 function formatRemainCountdown(endAt?: number, now = Date.now()): { value: string; label: string; remainMs: number } {
   if (!endAt) {
@@ -123,6 +124,10 @@ interface LatestEmailCodeResult {
   receivedAt?: number;
   expiresAt?: number;
   expired?: boolean;
+}
+
+function isEmailCodeTooOld(receivedAt?: number, now = Date.now()): boolean {
+  return typeof receivedAt === 'number' && now - receivedAt > EMAIL_CODE_VISIBLE_WINDOW_MS;
 }
 
 interface AiAccountFormErrors {
@@ -882,6 +887,19 @@ export default function MemberPage(): JSX.Element {
         showCancel: false,
         confirmText: '知道了',
       });
+      return;
+    }
+
+    if (isEmailCodeTooOld(result.receivedAt)) {
+      const modalResult = await Taro.showModal({
+        title: '获取验证码',
+        content: `账号：\n${result.email}\n\n验证码还没收到，请稍等片刻`,
+        confirmText: '刷新',
+        cancelText: '关闭',
+      });
+      if (modalResult.confirm) {
+        await handleShowLatestEmailCode();
+      }
       return;
     }
 
