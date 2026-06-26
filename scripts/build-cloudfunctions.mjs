@@ -67,6 +67,7 @@ execFileSync(
     path.join(sourceRoot, 'shared', 'client-config.ts'),
     path.join(sourceRoot, 'shared', 'ai-account.ts'),
     path.join(sourceRoot, 'shared', 'ai-account-password.ts'),
+    path.join(sourceRoot, 'shared', 'ai-news-sort.ts'),
     path.join(sourceRoot, 'shared', 'db.ts'),
     path.join(sourceRoot, 'shared', 'invite-reward-policy.ts'),
     path.join(sourceRoot, 'shared', 'operator-notify.ts'),
@@ -81,6 +82,7 @@ execFileSync(
     path.join(sourceRoot, 'shared', 'types.ts'),
     path.join(sourceRoot, 'shared', 'utils.ts'),
     path.join(sourceRoot, 'shared', 'wechat.ts'),
+    path.join(sourceRoot, 'shared', 'x-video.ts'),
     ...functionNames.map((name) => path.join(sourceRoot, name, 'index.ts')),
   ],
   { stdio: 'inherit' },
@@ -114,7 +116,13 @@ const functionsThatNeedInviteRewardPolicy = new Set([
 const functionsThatNeedAiAccountPassword = new Set([
   'save-ai-account',
 ]);
+const functionsThatNeedAiNewsSort = new Set([
+  'list-ai-news',
+]);
 const functionsThatNeedAppStoreProductScope = new Set([
+  'operator-api',
+]);
+const functionsThatNeedXVideo = new Set([
   'operator-api',
 ]);
 
@@ -139,8 +147,14 @@ for (const name of functionNames) {
   if (!functionsThatNeedAiAccountPassword.has(name)) {
     fs.rmSync(path.join(targetSharedRoot, 'ai-account-password.js'), { force: true });
   }
+  if (!functionsThatNeedAiNewsSort.has(name)) {
+    fs.rmSync(path.join(targetSharedRoot, 'ai-news-sort.js'), { force: true });
+  }
   if (!functionsThatNeedAppStoreProductScope.has(name)) {
     fs.rmSync(path.join(targetSharedRoot, 'appstore-product-scope.js'), { force: true });
+  }
+  if (!functionsThatNeedXVideo.has(name)) {
+    fs.rmSync(path.join(targetSharedRoot, 'x-video.js'), { force: true });
   }
   fs.cpSync(libCompileRoot, path.join(targetRoot, '_lib'), { recursive: true });
   const configFile = path.join(sourceRoot, name, 'config.json');

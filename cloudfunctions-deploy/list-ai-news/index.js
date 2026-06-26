@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.main = main;
 const db_1 = require("./shared/db");
 const utils_1 = require("./shared/utils");
+const ai_news_sort_1 = require("./shared/ai-news-sort");
 function toView(record) {
     var _a;
     return {
@@ -10,6 +11,9 @@ function toView(record) {
         title: record.title,
         summary: record.summary,
         coverFileId: record.coverFileId,
+        mediaType: record.mediaType,
+        videoFileId: record.videoFileId,
+        videoPosterFileId: record.videoPosterFileId,
         sourceName: record.sourceName,
         sourceUrl: record.sourceUrl,
         authorName: record.authorName,
@@ -82,13 +86,47 @@ async function main(event = {}) {
     var _a;
     const limit = Math.max(1, Math.min(Number(event.limit) || 20, 50));
     const offset = Math.max(0, Number(event.offset) || 0);
-    let result;
+    const tag = (_a = event.tag) === null || _a === void 0 ? void 0 : _a.trim();
+    const sort = (0, ai_news_sort_1.normalizeAiNewsSort)(event.sort);
+    const sortField = (0, ai_news_sort_1.getAiNewsPrimarySortField)(sort);
+    const pageSize = limit + 1;
+    let records = [];
     try {
-        result = await (0, db_1.collection)('aiNews')
-            .where({
-            status: 'published',
-        })
-            .get();
+        if (!tag) {
+            const result = await (0, db_1.collection)('aiNews')
+                .where({ status: 'published' })
+                .orderBy(sortField, 'desc')
+                .skip(offset)
+                .limit(pageSize)
+                .get();
+            records = result.data;
+        }
+        else {
+            const matched = [];
+            let scanned = 0;
+            const batchSize = 100;
+            const target = offset + pageSize;
+            while (matched.length < target) {
+                const result = await (0, db_1.collection)('aiNews')
+                    .where({ status: 'published' })
+                    .orderBy(sortField, 'desc')
+                    .skip(scanned)
+                    .limit(batchSize)
+                    .get();
+                const batch = result.data;
+                if (batch.length === 0) {
+                    break;
+                }
+                matched.push(...batch.filter((item) => matchesCategory(item, tag)));
+                scanned += batch.length;
+                if (batch.length < batchSize) {
+                    break;
+                }
+            }
+            records = matched
+                .sort((left, right) => (0, ai_news_sort_1.compareAiNewsRecords)(sort, left, right))
+                .slice(offset, offset + pageSize);
+        }
     }
     catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -97,23 +135,12 @@ async function main(event = {}) {
         }
         throw error;
     }
-    const tag = (_a = event.tag) === null || _a === void 0 ? void 0 : _a.trim();
-    const sort = event.sort === 'latest' ? 'latest' : 'hot';
-    const orderedItems = result.data
-        .filter((item) => !tag || matchesCategory(item, tag))
-        .sort((left, right) => {
-        if (sort === 'latest') {
-            return (right.publishedAt || right.createdAt) - (left.publishedAt || left.createdAt);
-        }
-        const scoreDiff = (right.score || 0) - (left.score || 0);
-        return scoreDiff || (right.publishedAt || right.createdAt) - (left.publishedAt || left.createdAt);
-    });
-    const items = orderedItems
-        .slice(offset, offset + limit)
+    const items = records
+        .slice(0, limit)
         .map(toView);
     return (0, utils_1.ok)({
         items,
-        hasMore: offset + items.length < orderedItems.length,
-        total: orderedItems.length,
+        hasMore: records.length > limit,
+        total: offset + items.length + (records.length > limit ? 1 : 0),
     });
 }

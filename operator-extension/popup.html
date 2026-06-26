@@ -63,10 +63,18 @@
               <img id="newsCoverPreview" class="cover-dropzone__preview hidden" alt="头图预览" />
               <div class="cover-dropzone__placeholder">
                 <strong>粘贴头图或点击选择</strong>
-                <small id="newsCoverStatus">复制网页图片后，点击这里按 Cmd/Ctrl + V</small>
+                <small id="newsCoverStatus">必传。复制网页图片后，点击这里按 Cmd/Ctrl + V</small>
               </div>
             </div>
             <input id="newsCover" class="cover-file-input" type="file" accept="image/png,image/jpeg,image/webp" />
+          </label>
+          <label class="field">
+            <span>X 视频链接</span>
+            <div class="copy-row">
+              <input id="newsVideoUrl" placeholder="https://x.com/xxx/status/xxx/video/1" />
+              <button id="importNewsVideoBtn" type="button">上传视频</button>
+            </div>
+            <p id="newsVideoStatus" class="helper-text">可选。填写后会下载 X 视频并上传到小程序云存储；详情页优先展示视频。</p>
           </label>
           <label class="field">
             <span>文章正文 Markdown</span>

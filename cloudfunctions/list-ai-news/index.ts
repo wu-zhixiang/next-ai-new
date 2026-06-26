@@ -1,6 +1,7 @@
 import { collection } from '../shared/db';
 import { ok } from '../shared/utils';
 import type { AiNewsRecord, AiNewsView } from '../shared/types';
+import { compareAiNewsRecords, getAiNewsPrimarySortField, normalizeAiNewsSort } from '../shared/ai-news-sort';
 
 interface Event {
   limit?: number;
@@ -9,12 +10,22 @@ interface Event {
   sort?: 'hot' | 'latest';
 }
 
+interface NewsQuery {
+  orderBy(fieldName: string, order: 'asc' | 'desc'): NewsQuery;
+  skip(count: number): NewsQuery;
+  limit(count: number): NewsQuery;
+  get(): Promise<{ data: Array<AiNewsRecord & { _id: string }> }>;
+}
+
 function toView(record: AiNewsRecord & { _id: string }): AiNewsView {
   return {
     id: record._id,
     title: record.title,
     summary: record.summary,
     coverFileId: record.coverFileId,
+    mediaType: record.mediaType,
+    videoFileId: record.videoFileId,
+    videoPosterFileId: record.videoPosterFileId,
     sourceName: record.sourceName,
     sourceUrl: record.sourceUrl,
     authorName: record.authorName,
@@ -89,13 +100,46 @@ function matchesCategory(record: AiNewsRecord, tag: string): boolean {
 export async function main(event: Event = {}) {
   const limit = Math.max(1, Math.min(Number(event.limit) || 20, 50));
   const offset = Math.max(0, Number(event.offset) || 0);
-  let result: { data: Array<AiNewsRecord & { _id: string }> };
+  const tag = event.tag?.trim();
+  const sort = normalizeAiNewsSort(event.sort);
+  const sortField = getAiNewsPrimarySortField(sort);
+  const pageSize = limit + 1;
+  let records: Array<AiNewsRecord & { _id: string }> = [];
   try {
-    result = await collection('aiNews')
-      .where({
-        status: 'published',
-      })
-      .get() as { data: Array<AiNewsRecord & { _id: string }> };
+    if (!tag) {
+      const result = await (collection('aiNews')
+        .where({ status: 'published' }) as unknown as NewsQuery)
+        .orderBy(sortField, 'desc')
+        .skip(offset)
+        .limit(pageSize)
+        .get();
+      records = result.data;
+    } else {
+      const matched: Array<AiNewsRecord & { _id: string }> = [];
+      let scanned = 0;
+      const batchSize = 100;
+      const target = offset + pageSize;
+      while (matched.length < target) {
+        const result = await (collection('aiNews')
+          .where({ status: 'published' }) as unknown as NewsQuery)
+          .orderBy(sortField, 'desc')
+          .skip(scanned)
+          .limit(batchSize)
+          .get();
+        const batch = result.data;
+        if (batch.length === 0) {
+          break;
+        }
+        matched.push(...batch.filter((item) => matchesCategory(item, tag)));
+        scanned += batch.length;
+        if (batch.length < batchSize) {
+          break;
+        }
+      }
+      records = matched
+        .sort((left, right) => compareAiNewsRecords(sort, left, right))
+        .slice(offset, offset + pageSize);
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (message.includes('collection not exists') || message.includes('DATABASE_COLLECTION_NOT_EXIST') || message.includes('Table not exist')) {
@@ -104,24 +148,13 @@ export async function main(event: Event = {}) {
     throw error;
   }
 
-  const tag = event.tag?.trim();
-  const sort = event.sort === 'latest' ? 'latest' : 'hot';
-  const orderedItems = result.data
-    .filter((item) => !tag || matchesCategory(item, tag))
-    .sort((left, right) => {
-      if (sort === 'latest') {
-        return (right.publishedAt || right.createdAt) - (left.publishedAt || left.createdAt);
-      }
-      const scoreDiff = (right.score || 0) - (left.score || 0);
-      return scoreDiff || (right.publishedAt || right.createdAt) - (left.publishedAt || left.createdAt);
-    });
-  const items = orderedItems
-    .slice(offset, offset + limit)
+  const items = records
+    .slice(0, limit)
     .map(toView);
 
   return ok({
     items,
-    hasMore: offset + items.length < orderedItems.length,
-    total: orderedItems.length,
+    hasMore: records.length > limit,
+    total: offset + items.length + (records.length > limit ? 1 : 0),
   });
 }

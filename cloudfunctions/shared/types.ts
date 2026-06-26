@@ -241,6 +241,12 @@ export interface AiNewsRecord {
   title: string;
   summary: string;
   coverFileId?: string;
+  mediaType?: 'article' | 'video';
+  videoFileId?: string;
+  videoPosterFileId?: string;
+  videoSourceUrl?: string;
+  videoDuration?: number;
+  videoSize?: number;
   contentMarkdown: string;
   sourceName: string;
   sourceUrl?: string;
@@ -303,6 +309,9 @@ export interface AiNewsView {
   title: string;
   summary: string;
   coverFileId?: string;
+  mediaType?: AiNewsRecord['mediaType'];
+  videoFileId?: string;
+  videoPosterFileId?: string;
   sourceName: string;
   sourceUrl?: string;
   authorName?: string;
@@ -314,6 +323,9 @@ export interface AiNewsView {
 
 export interface AiNewsDetailView extends AiNewsView {
   contentMarkdown: string;
+  videoSourceUrl?: string;
+  videoDuration?: number;
+  videoSize?: number;
 }
 
 export interface MembershipView {

@@ -10,6 +10,9 @@ function toView(record) {
         title: record.title,
         summary: record.summary,
         coverFileId: record.coverFileId,
+        mediaType: record.mediaType,
+        videoFileId: record.videoFileId,
+        videoPosterFileId: record.videoPosterFileId,
         contentMarkdown: record.contentMarkdown,
         sourceName: record.sourceName,
         sourceUrl: record.sourceUrl,
@@ -18,6 +21,9 @@ function toView(record) {
         tags: (_a = record.tags) !== null && _a !== void 0 ? _a : [],
         heat: Math.max(0, Math.round(record.score || record.viewCount || 0)),
         publishedAt: record.publishedAt,
+        videoSourceUrl: record.videoSourceUrl,
+        videoDuration: record.videoDuration,
+        videoSize: record.videoSize,
     };
 }
 async function main(event = {}) {

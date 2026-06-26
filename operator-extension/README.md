@@ -35,6 +35,7 @@
 GET /operator/tasks?status=opening
 POST /operator/tasks/:orderNo
 POST /operator/news/cover
+POST /operator/news/video/import
 POST /operator/news
 GET /operator/appstore-accounts/email-code?email=xxx@mraclpivot.com
 POST /operator/appstore-accounts/email-code/clear
@@ -108,6 +109,14 @@ failed
 读取 X 页面数据依赖浏览器扩展的 `activeTab` 和 `scripting` 权限。更新插件文件后，需要在浏览器扩展管理页重新加载一次插件。
 
 上传后 `operator-api` 会优先通过腾讯云 AI 能力生成标题和摘要；如果云端 AI 未配置，会从 Markdown 正文中自动提取标题和摘要兜底。小程序 `AI资讯` 页会通过 `list-ai-news` 云函数读取并按热度展示，用户点击卡片进入原生详情页阅读 Markdown 文章。
+
+如需上传 X 视频，先在资讯表单填写 X 帖子视频链接并点击「上传视频」，或在发布时自动上传。`operator-api` 会通过 X API 获取帖子媒体信息、下载最高码率 MP4 并上传到小程序云存储。视频资讯在小程序详情页优先展示视频，不展示头图；头图仍为必传，用于资讯列表和首页卡片展示。
+
+给 `operator-api` 配置：
+
+```text
+X_API_BEARER_TOKEN=X API Bearer Token
+```
 
 如需开启腾讯云 AI 生成标题和摘要，给 `operator-api` 配置：
 

@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Image, ScrollView, Swiper, SwiperItem, Text, View } from '@tarojs/components';
-import Taro, { useDidShow, useRouter } from '@tarojs/taro';
+import Taro, { useDidShow, useRouter, useShareAppMessage, useShareTimeline } from '@tarojs/taro';
 import { SaasPageFrame } from '@/components/SaasPageFrame';
 import { Skeleton } from '@/components/Skeleton';
 import AuthModal, { type AuthUserInfo } from '@/components/AuthModal';
@@ -45,20 +45,42 @@ export default function HomePage(): JSX.Element {
   const [productTypes, setProductTypes] = useState<ProductTypeView[]>([]);
   const [news, setNews] = useState<AiNewsView[]>([]);
   const [loading, setLoading] = useState(true);
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [bannerIndex, setBannerIndex] = useState(0);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [activeInviteCode, setActiveInviteCode] = useState('');
 
   useDidShow(() => {
     showTabBarSafely();
+    enableShareMenu();
+    void loadHome(!hasLoaded);
   });
 
-  useEffect(() => {
-    void loadHome();
-  }, []);
+  useShareAppMessage(() => ({
+    title: 'AIO AI资讯会员',
+    path: '/pages/home/index',
+  }));
 
-  async function loadHome(): Promise<void> {
-    setLoading(true);
+  useShareTimeline(() => ({
+    title: 'AIO AI资讯会员',
+    query: '',
+  }));
+
+  function enableShareMenu(): void {
+    try {
+      Taro.showShareMenu({
+        withShareTicket: true,
+        menus: ['shareAppMessage', 'shareTimeline'],
+      } as unknown as Parameters<typeof Taro.showShareMenu>[0]);
+    } catch {
+      // 部分基础库不支持 shareTimeline 菜单参数，忽略即可。
+    }
+  }
+
+  async function loadHome(showSkeleton = false): Promise<void> {
+    if (showSkeleton) {
+      setLoading(true);
+    }
     try {
       const inviteCode = resolveInviteCode(router.params);
       setActiveInviteCode(inviteCode);
@@ -84,6 +106,7 @@ export default function HomePage(): JSX.Element {
       );
       setNews(newsResult.items.slice(0, 5));
     } finally {
+      setHasLoaded(true);
       setLoading(false);
     }
   }

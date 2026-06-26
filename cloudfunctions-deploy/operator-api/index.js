@@ -11,6 +11,7 @@ const db_1 = require("./shared/db");
 const orders_1 = require("./shared/orders");
 const utils_1 = require("./shared/utils");
 const appstore_product_scope_1 = require("./shared/appstore-product-scope");
+const x_video_1 = require("./shared/x-video");
 const DEFAULT_NEWS_REMINDER_TEMPLATE_ID = 'm7Cb5rMgtJtFdyVn3YvR671tWZwyK87qe6qKr7KPZrQ';
 const APPSTORE_EMAIL_DOMAIN = 'mraclpivot.com';
 const DEFAULT_APPSTORE_MOBILE = '15810901111';
@@ -19,6 +20,8 @@ const DEFAULT_APPSTORE_COUNTRY_NAME = '菲律宾';
 const DEFAULT_APPSTORE_DIALING_CODE = '+63';
 const SUPER_OPERATOR_MOBILE = '15501130351';
 const APPSTORE_PASSWORD_SPECIALS = '!@#$%^&*';
+const MAX_NEWS_VIDEO_BYTES = 25 * 1024 * 1024;
+const MAX_NEWS_POSTER_BYTES = 5 * 1024 * 1024;
 let cachedWechatAccessToken = '';
 let cachedWechatAccessTokenExpireAt = 0;
 const CORS_HEADERS = {
@@ -132,6 +135,9 @@ function matchTaskRoute(event) {
     if (event.action === 'uploadNewsCover') {
         return { action: 'uploadNewsCover' };
     }
+    if (event.action === 'importNewsVideo') {
+        return { action: 'importNewsVideo' };
+    }
     const method = getMethod(event);
     const path = getPath(event).replace(/\/$/, '');
     if (method === 'GET' && /(?:^|\/)(?:operator\/)?tasks$/.test(path)) {
@@ -142,6 +148,9 @@ function matchTaskRoute(event) {
     }
     if (method === 'POST' && /(?:^|\/)(?:operator\/)?news\/cover$/.test(path)) {
         return { action: 'uploadNewsCover' };
+    }
+    if (method === 'POST' && /(?:^|\/)(?:operator\/)?news\/video\/import$/.test(path)) {
+        return { action: 'importNewsVideo' };
     }
     if (method === 'POST' && /(?:^|\/)(?:operator\/)?appstore-accounts\/generate$/.test(path)) {
         return { action: 'generateAppStoreAccount' };
@@ -686,6 +695,76 @@ function getJson(url) {
         }).on('error', reject);
     });
 }
+function getJsonWithHeaders(url, headers) {
+    return new Promise((resolve, reject) => {
+        const request = node_https_1.default.request(url, {
+            method: 'GET',
+            headers,
+        }, (response) => {
+            const chunks = [];
+            response.on('data', (chunk) => chunks.push(chunk));
+            response.on('end', () => {
+                var _a;
+                const text = Buffer.concat(chunks).toString('utf8');
+                if (((_a = response.statusCode) !== null && _a !== void 0 ? _a : 500) >= 400) {
+                    reject(new Error(`X API 请求失败：${response.statusCode} ${text.slice(0, 200)}`));
+                    return;
+                }
+                try {
+                    resolve(JSON.parse(text));
+                }
+                catch (_b) {
+                    reject(new Error('X API 返回非 JSON'));
+                }
+            });
+        });
+        request.setTimeout(8000, () => request.destroy(new Error('X API 请求超时')));
+        request.on('error', reject);
+        request.end();
+    });
+}
+function downloadBinary(url, maxBytes, redirectCount = 0) {
+    if (redirectCount > 3) {
+        return Promise.reject(new Error('下载重定向次数过多'));
+    }
+    return new Promise((resolve, reject) => {
+        const request = node_https_1.default.get(url, (response) => {
+            var _a;
+            const statusCode = (_a = response.statusCode) !== null && _a !== void 0 ? _a : 500;
+            const location = response.headers.location;
+            if (statusCode >= 300 && statusCode < 400 && location) {
+                response.resume();
+                const redirectedUrl = new URL(location, url).toString();
+                downloadBinary(redirectedUrl, maxBytes, redirectCount + 1).then(resolve).catch(reject);
+                return;
+            }
+            if (statusCode >= 400) {
+                response.resume();
+                reject(new Error(`文件下载失败：${statusCode}`));
+                return;
+            }
+            const chunks = [];
+            let total = 0;
+            response.on('data', (chunk) => {
+                total += chunk.length;
+                if (total > maxBytes) {
+                    request.destroy(new Error(`文件不能超过 ${Math.floor(maxBytes / 1024 / 1024)}MB`));
+                    return;
+                }
+                chunks.push(chunk);
+            });
+            response.on('end', () => {
+                var _a;
+                resolve({
+                    bytes: Buffer.concat(chunks),
+                    contentType: String((_a = response.headers['content-type']) !== null && _a !== void 0 ? _a : '').split(';')[0].toLowerCase(),
+                });
+            });
+        });
+        request.setTimeout(25000, () => request.destroy(new Error('文件下载超时，请选择更短的视频或稍后重试')));
+        request.on('error', reject);
+    });
+}
 function getWechatOpenApiConfig() {
     return {
         appid: process.env.WX_APPID || process.env.WX_PAY_APPID || '',
@@ -820,6 +899,92 @@ async function uploadNewsCoverFromEvent(event) {
     const file = parseImageEventBody(event);
     const coverFileId = await uploadNewsCoverFile(file, now);
     return ok({ coverFileId });
+}
+function getPosterExtension(contentType) {
+    if (contentType.includes('png'))
+        return 'png';
+    if (contentType.includes('webp'))
+        return 'webp';
+    return 'jpg';
+}
+async function uploadNewsVideoFile(bytes, now) {
+    if (bytes.length === 0) {
+        throw new Error('视频文件为空');
+    }
+    if (bytes.length > MAX_NEWS_VIDEO_BYTES) {
+        throw new Error('视频不能超过 25MB');
+    }
+    const random = Math.floor(Math.random() * 100000).toString().padStart(5, '0');
+    const result = await db_1.app.uploadFile({
+        cloudPath: `ai-news/videos/${now}-${random}.mp4`,
+        fileContent: bytes,
+    });
+    return result.fileID;
+}
+async function uploadNewsVideoPosterFile(bytes, contentType, now) {
+    if (bytes.length === 0 || bytes.length > MAX_NEWS_POSTER_BYTES) {
+        return '';
+    }
+    const extension = getPosterExtension(contentType);
+    const random = Math.floor(Math.random() * 100000).toString().padStart(5, '0');
+    const result = await db_1.app.uploadFile({
+        cloudPath: `ai-news/video-posters/${now}-${random}.${extension}`,
+        fileContent: bytes,
+    });
+    return result.fileID;
+}
+function normalizeXMediaList(response) {
+    const includes = response === null || response === void 0 ? void 0 : response.includes;
+    return Array.isArray(includes === null || includes === void 0 ? void 0 : includes.media) ? includes.media : [];
+}
+async function importNewsVideo(body) {
+    var _a;
+    const sourceUrl = sanitizeText(body.url, 500);
+    if (!sourceUrl) {
+        return fail(400, '缺少 X 视频链接');
+    }
+    const bearerToken = process.env.X_API_BEARER_TOKEN || process.env.TWITTER_API_BEARER_TOKEN || '';
+    if (!bearerToken) {
+        return fail(500, '缺少 X_API_BEARER_TOKEN 配置');
+    }
+    const statusId = (0, x_video_1.parseXStatusId)(sourceUrl);
+    const apiUrl = [
+        `https://api.twitter.com/2/tweets/${encodeURIComponent(statusId)}`,
+        '?expansions=attachments.media_keys',
+        '&media.fields=type,variants,preview_image_url,duration_ms',
+    ].join('');
+    const response = await getJsonWithHeaders(apiUrl, {
+        authorization: `Bearer ${bearerToken}`,
+    });
+    const media = (0, x_video_1.selectXVideoMedia)(normalizeXMediaList(response));
+    const variant = media ? (0, x_video_1.selectSmallestXMp4Variant)((_a = media.variants) !== null && _a !== void 0 ? _a : []) : null;
+    if (!media || !(variant === null || variant === void 0 ? void 0 : variant.url)) {
+        return fail(404, '该 X 帖子未找到可下载 MP4 视频');
+    }
+    const now = Date.now();
+    const video = await downloadBinary(variant.url, MAX_NEWS_VIDEO_BYTES);
+    if (video.contentType && video.contentType !== 'video/mp4') {
+        return fail(400, `视频格式不支持：${video.contentType}`);
+    }
+    const videoFileId = await uploadNewsVideoFile(video.bytes, now);
+    let posterFileId = '';
+    if (media.preview_image_url) {
+        try {
+            const poster = await downloadBinary(media.preview_image_url, MAX_NEWS_POSTER_BYTES);
+            if (/^image\/(?:png|jpe?g|webp)$/.test(poster.contentType)) {
+                posterFileId = await uploadNewsVideoPosterFile(poster.bytes, poster.contentType, now);
+            }
+        }
+        catch (error) {
+            console.warn('ai.news.video.poster.upload.failed', error instanceof Error ? error.message : String(error));
+        }
+    }
+    return ok({
+        videoFileId,
+        posterFileId,
+        sourceUrl,
+        size: video.bytes.length,
+    });
 }
 function calcNewsScore(input) {
     const ageHours = Math.max(0, (Date.now() - input.publishedAt) / (60 * 60 * 1000));
@@ -1284,12 +1449,24 @@ async function createNews(body) {
     }
     const publishedAt = sanitizeNumber(body.publishedAt) || now;
     const coverFileId = sanitizeText(body.coverFileId, 500) || await uploadNewsCover(body.coverDataUrl, now);
+    if (!coverFileId) {
+        return fail(400, '资讯图片为必传项');
+    }
+    const videoFileId = sanitizeText(body.videoFileId, 500);
+    const videoPosterFileId = sanitizeText(body.videoPosterFileId, 500);
+    const videoSourceUrl = sanitizeText(body.videoSourceUrl, 500) || (videoFileId ? sourceUrl : '');
     const aiMeta = await generateNewsMetaByTencentAi(contentMarkdown);
     const meta = aiMeta !== null && aiMeta !== void 0 ? aiMeta : fallbackNewsMeta(contentMarkdown);
     const record = {
         title: meta.title,
         summary: meta.summary,
         coverFileId,
+        mediaType: videoFileId ? 'video' : 'article',
+        videoFileId,
+        videoPosterFileId,
+        videoSourceUrl,
+        videoDuration: sanitizeNumber(body.videoDuration),
+        videoSize: sanitizeNumber(body.videoSize),
         contentMarkdown,
         sourceName: sanitizeText(body.sourceName, 30) || 'X',
         sourceUrl,
@@ -1381,6 +1558,9 @@ async function main(event) {
         }
         if (route.action === 'uploadNewsCover') {
             return uploadNewsCoverFromEvent(event);
+        }
+        if (route.action === 'importNewsVideo') {
+            return importNewsVideo(parseBody(event));
         }
         return updateTask(route.orderNo, parseBody(event), event);
     }

@@ -78,6 +78,9 @@ export interface AiNewsView {
   title: string;
   summary: string;
   coverFileId?: string;
+  mediaType?: 'article' | 'video';
+  videoFileId?: string;
+  videoPosterFileId?: string;
   sourceName: string;
   sourceUrl?: string;
   authorName?: string;
@@ -89,4 +92,7 @@ export interface AiNewsView {
 
 export interface AiNewsDetailView extends AiNewsView {
   contentMarkdown: string;
+  videoSourceUrl?: string;
+  videoDuration?: number;
+  videoSize?: number;
 }

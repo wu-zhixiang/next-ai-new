@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, Image, RichText, ScrollView, Text, View } from '@tarojs/components';
+import { Button, Image, RichText, ScrollView, Text, Video, View } from '@tarojs/components';
 import Taro, { useLoad, useShareAppMessage, useShareTimeline } from '@tarojs/taro';
 import { SaasPageFrame } from '@/components/SaasPageFrame';
 import { SkeletonNewsDetail } from '@/components/Skeleton';
@@ -258,6 +258,13 @@ export default function NewsDetailPage(): JSX.Element {
     });
   }
 
+  function openVideoFullscreen(): void {
+    if (!detail?.videoFileId) return;
+    Taro.createVideoContext('newsDetailVideo').requestFullScreen({
+      direction: 0,
+    });
+  }
+
   function openSharePanel(): void {
     setSharePanelVisible(true);
     enableShareMenu();
@@ -326,7 +333,20 @@ export default function NewsDetailPage(): JSX.Element {
         ) : null}
         {detail ? (
           <View className='news-detail-article'>
-            {detail.coverFileId ? (
+            {detail.videoFileId ? (
+              <Video
+                id='newsDetailVideo'
+                className='news-detail-article__video'
+                src={detail.videoFileId}
+                poster={detail.videoPosterFileId || detail.coverFileId}
+                autoplay
+                controls
+                showFullscreenBtn
+                enableProgressGesture
+                objectFit='contain'
+                onClick={openVideoFullscreen}
+              />
+            ) : detail.coverFileId ? (
               <Image className='news-detail-article__cover' src={detail.coverFileId} mode='widthFix' onClick={previewCover} />
             ) : null}
             <Text className='news-detail-article__title'>{detail.title}</Text>

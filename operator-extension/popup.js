@@ -57,6 +57,9 @@ const els = {
   newsCoverPreview: document.querySelector('#newsCoverPreview'),
   newsCoverStatus: document.querySelector('#newsCoverStatus'),
   newsCover: document.querySelector('#newsCover'),
+  newsVideoUrl: document.querySelector('#newsVideoUrl'),
+  importNewsVideoBtn: document.querySelector('#importNewsVideoBtn'),
+  newsVideoStatus: document.querySelector('#newsVideoStatus'),
   newsContentMarkdown: document.querySelector('#newsContentMarkdown'),
   newsSourceName: document.querySelector('#newsSourceName'),
   newsAuthorName: document.querySelector('#newsAuthorName'),
@@ -99,6 +102,7 @@ let pendingFulfill = null;
 let toastTimer = null;
 let pastedCoverDataUrl = '';
 let coverPreviewObjectUrl = '';
+let importedNewsVideo = null;
 let selectedNewsTags = new Set();
 let lastAppleVerificationCodeId = '';
 let lastAppleVerificationEmail = '';
@@ -145,6 +149,11 @@ function bindActions() {
   els.newsCoverDropzone.addEventListener('click', () => els.newsCover.click());
   els.newsCoverDropzone.addEventListener('paste', handleCoverPaste);
   els.newsCover.addEventListener('change', handleCoverFileChange);
+  els.importNewsVideoBtn.addEventListener('click', () => importNewsVideoFromUrl());
+  els.newsVideoUrl.addEventListener('input', () => {
+    importedNewsVideo = null;
+    els.newsVideoStatus.textContent = '视频链接已修改，发布前需要重新上传视频。';
+  });
   els.generateAppleAccountBtn.addEventListener('click', generateAppleAccount);
   els.saveAppleAccountBtn.addEventListener('click', saveAppleAccount);
   els.clearAppleAccountBtn.addEventListener('click', clearAppleAccountForm);
@@ -694,6 +703,11 @@ async function fillNewsFromCurrentTab() {
   if (!els.newsSourceName.value.trim()) {
     els.newsSourceName.value = 'AIO';
   }
+  if (isXPage && tab.url && /\/status(?:es)?\/\d+/.test(new URL(tab.url).pathname) && !els.newsVideoUrl.value.trim()) {
+    els.newsVideoUrl.value = tab.url;
+    importedNewsVideo = null;
+    els.newsVideoStatus.textContent = '已填入当前 X 帖子链接，发布前会上传视频。';
+  }
 
   if (!isXPage || !tab.id) {
     showToast('已读取当前页');
@@ -834,6 +848,7 @@ function clearNewsForm() {
     els.newsContentMarkdown,
     els.newsSourceName,
     els.newsAuthorName,
+    els.newsVideoUrl,
     els.newsViewCount,
     els.newsLikeCount,
     els.newsRepostCount,
@@ -848,8 +863,59 @@ function clearNewsForm() {
   });
   updateNewsTagsTrigger();
   closeNewsTagsDropdown();
+  importedNewsVideo = null;
+  els.newsVideoStatus.textContent = '可选。填写后会下载 X 视频并上传到小程序云存储；详情页优先展示视频。';
   els.newsCover.value = '';
   resetCoverPreview();
+}
+
+async function importNewsVideoFromUrl() {
+  settings = await getSettings();
+  updateSetupNotice();
+  if (!isConfigured()) return null;
+
+  const url = els.newsVideoUrl.value.trim();
+  if (!url) {
+    showToast('请填写 X 视频链接');
+    return null;
+  }
+
+  els.importNewsVideoBtn.disabled = true;
+  els.importNewsVideoBtn.textContent = '上传中';
+  els.newsVideoStatus.textContent = '正在下载 X 视频并上传到云存储...';
+  try {
+    const result = await apiRequest('/operator/news/video/import', {
+      method: 'POST',
+      body: JSON.stringify({ url })
+    });
+    importedNewsVideo = {
+      videoFileId: result.videoFileId || '',
+      videoPosterFileId: result.posterFileId || '',
+      sourceUrl: result.sourceUrl || url,
+      size: result.size || 0
+    };
+    const sizeMb = importedNewsVideo.size ? `，${(importedNewsVideo.size / 1024 / 1024).toFixed(1)}MB` : '';
+    els.newsVideoStatus.textContent = `视频已上传${sizeMb}`;
+    showToast('视频上传成功');
+    return importedNewsVideo;
+  } catch (error) {
+    importedNewsVideo = null;
+    els.newsVideoStatus.textContent = error instanceof Error ? error.message : '视频上传失败';
+    showError(error);
+    return null;
+  } finally {
+    els.importNewsVideoBtn.disabled = false;
+    els.importNewsVideoBtn.textContent = '上传视频';
+  }
+}
+
+async function ensureImportedNewsVideo() {
+  const url = els.newsVideoUrl.value.trim();
+  if (!url) return null;
+  if (importedNewsVideo && importedNewsVideo.sourceUrl === url) {
+    return importedNewsVideo;
+  }
+  return importNewsVideoFromUrl();
 }
 
 async function submitNews() {
@@ -875,11 +941,30 @@ async function submitNews() {
     els.submitNewsBtn.textContent = '上传发布';
     return;
   }
+  if (!coverFileId) {
+    showToast('请上传资讯图片');
+    els.submitNewsBtn.disabled = false;
+    els.submitNewsBtn.textContent = '上传发布';
+    return;
+  }
+
+  els.submitNewsBtn.textContent = '上传视频';
+  const video = await ensureImportedNewsVideo();
+  if (els.newsVideoUrl.value.trim() && !video) {
+    els.submitNewsBtn.disabled = false;
+    els.submitNewsBtn.textContent = '上传发布';
+    return;
+  }
 
   const payload = {
     coverFileId,
+    videoFileId: video?.videoFileId || '',
+    videoPosterFileId: video?.videoPosterFileId || '',
+    videoSourceUrl: video?.sourceUrl || '',
+    videoSize: video?.size || 0,
     contentMarkdown,
     sourceName: els.newsSourceName.value.trim() || 'AIO',
+    sourceUrl: video?.sourceUrl || els.newsVideoUrl.value.trim(),
     authorName: els.newsAuthorName.value.trim(),
     sourcePlatform: inferPlatform(els.newsSourceName.value),
     tags: Array.from(selectedNewsTags).join(','),
