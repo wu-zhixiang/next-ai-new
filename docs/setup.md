@@ -13,6 +13,7 @@ npm install
 - 创建以下集合：
   - `users`
   - `member_plans`
+  - `ai_account_email_domains`
   - `memberships`
   - `orders`
   - `deliveries`
@@ -33,7 +34,9 @@ npm install
 }
 ```
 
-如需人工导入，也可以使用 [database-seed.json](/Users/qitmac001343/Desktop/ai-business/gpt-pay/docs/database-seed.json) 中的 `member_plans`。
+如需人工导入，也可以使用 [database-seed.json](/Users/qitmac001343/Desktop/ai-business/gpt-pay/docs/database-seed.json) 中的 `member_plans` 和 `ai_account_email_domains`。
+
+`ai_account_email_domains` 用于控制 AI 账号注册邮箱后缀。注册时会按 `available=true`、`status=on`、`sort` 从小到大取第一个可用域名。配置表不存在或为空时回退 `mraclpivot.com`；如果表内已有记录但全部关闭，则阻止注册并提示暂无可用邮箱域名。
 
 ## 4. 上传云函数
 

@@ -104,6 +104,17 @@ export interface ProductTypeRecord {
   updatedAt: number;
 }
 
+export interface AiAccountEmailDomainRecord {
+  _id?: string;
+  domain: string;
+  available: boolean;
+  status: 'on' | 'off';
+  sort: number;
+  note?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface AppStoreCountryRecord {
   _id?: string;
   countryCode: string;

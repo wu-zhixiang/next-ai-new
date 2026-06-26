@@ -2,6 +2,7 @@ export const COLLECTIONS = {
   users: 'users',
   memberPlans: 'member_plans',
   productTypes: 'product_types',
+  aiAccountEmailDomains: 'ai_account_email_domains',
   appstoreCountries: 'appstore_countries',
   memberships: 'memberships',
   orders: 'orders',

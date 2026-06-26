@@ -1,6 +1,7 @@
 import { collection, getUserByOpenId } from '../shared/db';
 import { encryptAiAccountPassword } from '../shared/ai-account';
 import { validateAiAccountPassword } from '../shared/ai-account-password';
+import { getAvailableAiAccountEmailDomain } from '../shared/ai-account-email-domain';
 import { ok } from '../shared/utils';
 import { getWxContext } from '../_lib/context';
 
@@ -10,12 +11,10 @@ interface Event {
   password?: string;
 }
 
-const AI_ACCOUNT_DOMAIN = 'mraclpivot.com';
-
-function normalizeAccountName(event: Event): string {
+function normalizeAccountName(event: Event, domain: string): string {
   const raw = (event.accountName ?? event.email ?? '').trim().toLowerCase();
-  return raw.endsWith(`@${AI_ACCOUNT_DOMAIN}`)
-    ? raw.slice(0, -AI_ACCOUNT_DOMAIN.length - 1)
+  return raw.endsWith(`@${domain}`)
+    ? raw.slice(0, -domain.length - 1)
     : raw;
 }
 
@@ -36,8 +35,9 @@ function assertValidPassword(password: string): void {
 }
 
 export async function main(event: Event) {
-  const accountName = normalizeAccountName(event);
-  const email = `${accountName}@${AI_ACCOUNT_DOMAIN}`;
+  const emailDomain = await getAvailableAiAccountEmailDomain();
+  const accountName = normalizeAccountName(event, emailDomain);
+  const email = `${accountName}@${emailDomain}`;
   const password = event.password ?? '';
 
   assertValidAccountName(accountName);

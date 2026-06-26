@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { collection, ensureCollection, getUserByAiAccountEmail } from '../shared/db';
+import { listAllowedAiAccountEmailDomains } from '../shared/ai-account-email-domain';
 import { COLLECTIONS } from '../shared/constants';
 import type { AppStoreEmailVerificationCodeRecord, EmailVerificationCodeRecord } from '../shared/types';
 import { ok } from '../shared/utils';
@@ -27,13 +28,13 @@ type EmailCodePayload = Required<Pick<Event, 'to' | 'from' | 'subject' | 'code'>
 };
 
 const CODE_TTL_MS = 10 * 60 * 1000;
-const EMAIL_DOMAIN = '@mraclpivot.com';
 export async function main(event: Event = {}) {
   const payload = normalizeEvent(event);
   assertWebhookSecret(event);
 
   const email = normalizeEmail(payload.to);
-  if (!email.endsWith(EMAIL_DOMAIN)) {
+  const allowedDomains = await listAllowedAiAccountEmailDomains();
+  if (!allowedDomains.some((domain) => email.endsWith(`@${domain}`))) {
     throw new Error('邮箱域名不合法');
   }
 

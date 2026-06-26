@@ -1,4 +1,15 @@
 {
+  "ai_account_email_domains": [
+    {
+      "domain": "mraclpivot.com",
+      "available": true,
+      "status": "on",
+      "sort": 1,
+      "note": "默认 AI 账号注册邮箱域名",
+      "createdAt": 1746921600000,
+      "updatedAt": 1746921600000
+    }
+  ],
   "member_plans": [
     {
       "productCode": "ai_news",

@@ -1,6 +1,7 @@
 import { COLLECTIONS } from '../shared/constants';
 import { collection } from '../shared/db';
 import { seedAppStoreCountries } from '../shared/appstore-country-seed';
+import { seedAiAccountEmailDomains } from '../shared/ai-account-email-domain';
 import { seedMemberPlans } from '../shared/plan-seed';
 import { seedProductTypes } from '../shared/product-type-seed';
 import { ok } from '../shared/utils';
@@ -11,6 +12,7 @@ interface Event {
   includeUsers?: boolean;
   includeMemberPlans?: boolean;
   includeProductTypes?: boolean;
+  includeAiAccountEmailDomains?: boolean;
   includeAppStoreCountries?: boolean;
 }
 
@@ -105,6 +107,7 @@ export async function main(event: Event = {}) {
     ...(event.includeUsers ? (['users'] as CollectionKey[]) : []),
     ...(event.includeMemberPlans ? (['memberPlans'] as CollectionKey[]) : []),
     ...(event.includeProductTypes ? (['productTypes'] as CollectionKey[]) : []),
+    ...(event.includeAiAccountEmailDomains ? (['aiAccountEmailDomains'] as CollectionKey[]) : []),
     ...(event.includeAppStoreCountries ? (['appstoreCountries'] as CollectionKey[]) : []),
   ];
 
@@ -122,6 +125,7 @@ export async function main(event: Event = {}) {
       counts,
       seedMemberPlans: true,
       seedProductTypes: true,
+      seedAiAccountEmailDomains: true,
       seedAppStoreCountries: true,
     });
   }
@@ -132,6 +136,7 @@ export async function main(event: Event = {}) {
   }
   const resetUserPointsCount = event.includeUsers ? 0 : await resetUserPoints();
   const seededProductTypes = await seedProductTypes();
+  const seededAiAccountEmailDomains = await seedAiAccountEmailDomains();
   const seededAppStoreCountries = await seedAppStoreCountries();
   const seededPlans = await seedMemberPlans();
 
@@ -140,11 +145,13 @@ export async function main(event: Event = {}) {
     removed,
     resetUserPointsCount,
     seededProductTypes,
+    seededAiAccountEmailDomains,
     seededAppStoreCountries,
     seededPlans,
     includeUsers: Boolean(event.includeUsers),
     includeMemberPlans: Boolean(event.includeMemberPlans),
     includeProductTypes: Boolean(event.includeProductTypes),
+    includeAiAccountEmailDomains: Boolean(event.includeAiAccountEmailDomains),
     includeAppStoreCountries: Boolean(event.includeAppStoreCountries),
   });
 }

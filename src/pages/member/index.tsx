@@ -39,6 +39,8 @@ interface MemberHomeData {
     aiAccount?: {
       registered: boolean;
       email?: string;
+      emailDomain?: string;
+      emailDomainAvailable?: boolean;
     };
   };
   membership: MembershipView;
@@ -156,7 +158,7 @@ const VERIFICATION_CODE_ICON = require('../../assets/member/verification-code.sv
 const MESSAGE_REMINDER_ICON = require('../../assets/member/message-reminder.svg') as string;
 const CHEVRON_RIGHT_ICON = require('../../assets/icons/chevron-right.svg') as string;
 const CACHE_KEY = AUTH_CACHE_KEY;
-const AI_ACCOUNT_DOMAIN = '@mraclpivot.com';
+const DEFAULT_AI_ACCOUNT_EMAIL_SUFFIX = '@mraclpivot.com';
 const USER_AGREEMENT_URL = 'https://cloud1-d3gbrpive8611514c-1348953433.tcloudbaseapp.com/cloud-admin/htmls/%E7%94%A8%E6%88%B7%E5%8D%8F%E8%AE%AE.html?sign=55a2a34c2317b48fc09603658d7a64b1&t=1779005578';
 const PRIVACY_AGREEMENT_URL = 'https://cloud1-d3gbrpive8611514c-1348953433.tcloudbaseapp.com/cloud-admin/htmls/%E9%9A%90%E7%A7%81%E5%8D%8F%E8%AE%AE.html?sign=3626cb47334346612df3a4d34746e859&t=1779005613';
 const MEMBER_PAGE_THEME: PageTheme = {
@@ -398,6 +400,13 @@ export default function MemberPage(): JSX.Element {
   const finalPayAmount = selectedPlan ? Math.max(0, Number((selectedPlan.price - (usePointsDeduction ? pointsDeductAmount : 0)).toFixed(2))) : 0;
   const pointsDeductionAvailable = activeProductAvailable && maxPointsDeducted > 0;
   const aiAccountRegistered = Boolean(data.userInfo?.aiAccount?.registered || data.userInfo?.aiAccount?.email || cachedUserInfo?.aiAccountRegistered);
+  const aiAccountEmailDomainAvailable = data.userInfo?.aiAccount?.emailDomainAvailable !== false;
+  const aiAccountEmailSuffix = data.userInfo?.aiAccount?.emailDomain ?? DEFAULT_AI_ACCOUNT_EMAIL_SUFFIX;
+  const aiAccountSheetDescription = !aiAccountEmailDomainAvailable
+    ? '当前暂无可用邮箱域名，请联系管理员配置后再注册。'
+    : aiAccountSheetSource === 'purchase'
+      ? `请填写用于后台系统注册和交付的账号前缀，系统会自动拼接 ${aiAccountEmailSuffix}。注册成功后将继续选择套餐。`
+      : `你还没有注册交付账号。请填写账号前缀，系统会自动拼接 ${aiAccountEmailSuffix}。`;
   const messageReminderAvailable = activeProductAvailable;
 
   function openPlanSheet(productCode: string): void {
@@ -515,7 +524,7 @@ export default function MemberPage(): JSX.Element {
     openSubscriptionFlow(introProduct.productCode);
   }
 
-  async function handleSaveAiAccount(): Promise<void> {
+    async function handleSaveAiAccount(): Promise<void> {
     if (submitting) {
       return;
     }
@@ -523,8 +532,15 @@ export default function MemberPage(): JSX.Element {
       return;
     }
     const validationErrors = validateAiAccountForm(aiAccountName, aiAccountPassword);
+    if (!aiAccountEmailDomainAvailable) {
+      validationErrors.submit = '当前暂无可用邮箱域名，请联系管理员配置后再注册';
+    }
     setAiAccountErrors(validationErrors);
     if (Object.keys(validationErrors).length > 0) {
+      const firstError = validationErrors.submit ?? validationErrors.accountName ?? validationErrors.password;
+      if (firstError) {
+        Taro.showToast({ title: firstError, icon: 'none' });
+      }
       return;
     }
     setSubmitting(true);
@@ -589,7 +605,10 @@ export default function MemberPage(): JSX.Element {
       errors.accountName = '账号格式不正确，请调整点号位置';
     }
 
-    errors.password = password ? validateAiAccountPassword(password) : '请输入账号密码';
+    const passwordError = password ? validateAiAccountPassword(password) : '请输入账号密码';
+    if (passwordError) {
+      errors.password = passwordError;
+    }
 
     return errors;
   }
@@ -1177,11 +1196,7 @@ export default function MemberPage(): JSX.Element {
           </View>
           <Text className='plan-sheet__close' onClick={() => setAiAccountSheetVisible(false)}>×</Text>
         </View>
-        <Text className='plan-sheet__desc'>
-          {aiAccountSheetSource === 'purchase'
-            ? `请填写用于后台系统注册和交付的账号前缀，系统会自动拼接 ${AI_ACCOUNT_DOMAIN}。注册成功后将继续选择套餐。`
-            : `你还没有注册交付账号。请填写账号前缀，系统会自动拼接 ${AI_ACCOUNT_DOMAIN}。`}
-        </Text>
+        <Text className='plan-sheet__desc'>{aiAccountSheetDescription}</Text>
         <View className='ai-account-form'>
           <View className='ai-account-field'>
             <Text className='ai-account-field__label'>AI账号</Text>
@@ -1195,7 +1210,7 @@ export default function MemberPage(): JSX.Element {
                 setAiAccountErrors((prev) => ({ ...prev, accountName: undefined, submit: undefined }));
               }}
             />
-            <Text className='ai-account-field__suffix'>{AI_ACCOUNT_DOMAIN}</Text>
+            <Text className='ai-account-field__suffix'>{aiAccountEmailDomainAvailable ? aiAccountEmailSuffix : '--'}</Text>
             {aiAccountErrors.accountName ? <Text className='ai-account-field__error'>{aiAccountErrors.accountName}</Text> : null}
           </View>
           <View className='ai-account-field'>

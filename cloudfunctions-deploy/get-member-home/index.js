@@ -4,11 +4,20 @@ exports.main = main;
 const constants_1 = require("./shared/constants");
 const db_1 = require("./shared/db");
 const utils_1 = require("./shared/utils");
+const ai_account_email_domain_1 = require("./shared/ai-account-email-domain");
 const context_1 = require("./_lib/context");
 async function main() {
     var _a, _b, _c;
     const { OPENID } = (0, context_1.getWxContext)();
     const user = await (0, db_1.getUserByOpenId)(OPENID);
+    let aiAccountEmailSuffix;
+    let aiAccountEmailDomainAvailable = true;
+    try {
+        aiAccountEmailSuffix = (0, ai_account_email_domain_1.getAiAccountEmailSuffix)(await (0, ai_account_email_domain_1.getAvailableAiAccountEmailDomain)());
+    }
+    catch (_d) {
+        aiAccountEmailDomainAvailable = false;
+    }
     if (!user) {
         return (0, utils_1.ok)({
             userInfo: {},
@@ -32,6 +41,8 @@ async function main() {
             aiAccount: {
                 registered: aiAccountRegistered,
                 email: user.aiAccountEmail,
+                emailDomain: aiAccountEmailSuffix,
+                emailDomainAvailable: aiAccountEmailDomainAvailable,
             },
         },
         membership: (0, utils_1.normalizeMembership)(membership),

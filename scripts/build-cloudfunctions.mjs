@@ -66,6 +66,8 @@ execFileSync(
     path.join(sourceRoot, 'shared', 'constants.ts'),
     path.join(sourceRoot, 'shared', 'client-config.ts'),
     path.join(sourceRoot, 'shared', 'ai-account.ts'),
+    path.join(sourceRoot, 'shared', 'ai-account-email-domain-core.ts'),
+    path.join(sourceRoot, 'shared', 'ai-account-email-domain.ts'),
     path.join(sourceRoot, 'shared', 'ai-account-password.ts'),
     path.join(sourceRoot, 'shared', 'ai-news-sort.ts'),
     path.join(sourceRoot, 'shared', 'db.ts'),
@@ -116,6 +118,13 @@ const functionsThatNeedInviteRewardPolicy = new Set([
 const functionsThatNeedAiAccountPassword = new Set([
   'save-ai-account',
 ]);
+const functionsThatNeedAiAccountEmailDomain = new Set([
+  'email-code-webhook',
+  'get-member-home',
+  'reset-database',
+  'save-ai-account',
+  'seed-database',
+]);
 const functionsThatNeedAiNewsSort = new Set([
   'list-ai-news',
 ]);
@@ -146,6 +155,10 @@ for (const name of functionNames) {
   }
   if (!functionsThatNeedAiAccountPassword.has(name)) {
     fs.rmSync(path.join(targetSharedRoot, 'ai-account-password.js'), { force: true });
+  }
+  if (!functionsThatNeedAiAccountEmailDomain.has(name)) {
+    fs.rmSync(path.join(targetSharedRoot, 'ai-account-email-domain-core.js'), { force: true });
+    fs.rmSync(path.join(targetSharedRoot, 'ai-account-email-domain.js'), { force: true });
   }
   if (!functionsThatNeedAiNewsSort.has(name)) {
     fs.rmSync(path.join(targetSharedRoot, 'ai-news-sort.js'), { force: true });

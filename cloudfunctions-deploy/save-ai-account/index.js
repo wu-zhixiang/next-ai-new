@@ -4,14 +4,14 @@ exports.main = main;
 const db_1 = require("./shared/db");
 const ai_account_1 = require("./shared/ai-account");
 const ai_account_password_1 = require("./shared/ai-account-password");
+const ai_account_email_domain_1 = require("./shared/ai-account-email-domain");
 const utils_1 = require("./shared/utils");
 const context_1 = require("./_lib/context");
-const AI_ACCOUNT_DOMAIN = 'mraclpivot.com';
-function normalizeAccountName(event) {
+function normalizeAccountName(event, domain) {
     var _a, _b;
     const raw = ((_b = (_a = event.accountName) !== null && _a !== void 0 ? _a : event.email) !== null && _b !== void 0 ? _b : '').trim().toLowerCase();
-    return raw.endsWith(`@${AI_ACCOUNT_DOMAIN}`)
-        ? raw.slice(0, -AI_ACCOUNT_DOMAIN.length - 1)
+    return raw.endsWith(`@${domain}`)
+        ? raw.slice(0, -domain.length - 1)
         : raw;
 }
 function assertValidAccountName(accountName) {
@@ -30,8 +30,9 @@ function assertValidPassword(password) {
 }
 async function main(event) {
     var _a;
-    const accountName = normalizeAccountName(event);
-    const email = `${accountName}@${AI_ACCOUNT_DOMAIN}`;
+    const emailDomain = await (0, ai_account_email_domain_1.getAvailableAiAccountEmailDomain)();
+    const accountName = normalizeAccountName(event, emailDomain);
+    const email = `${accountName}@${emailDomain}`;
     const password = (_a = event.password) !== null && _a !== void 0 ? _a : '';
     assertValidAccountName(accountName);
     if (!password) {

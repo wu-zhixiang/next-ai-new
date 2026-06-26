@@ -6,11 +6,19 @@ import {
   listMembershipsByUserId,
 } from '../shared/db';
 import { calcExpireTag, calcRemainDays, maskMobile, normalizeMembership, ok } from '../shared/utils';
+import { getAiAccountEmailSuffix, getAvailableAiAccountEmailDomain } from '../shared/ai-account-email-domain';
 import { getWxContext } from '../_lib/context';
 
 export async function main() {
   const { OPENID } = getWxContext();
   const user = await getUserByOpenId(OPENID);
+  let aiAccountEmailSuffix: string | undefined;
+  let aiAccountEmailDomainAvailable = true;
+  try {
+    aiAccountEmailSuffix = getAiAccountEmailSuffix(await getAvailableAiAccountEmailDomain());
+  } catch {
+    aiAccountEmailDomainAvailable = false;
+  }
 
   if (!user) {
     return ok({
@@ -40,6 +48,8 @@ export async function main() {
       aiAccount: {
         registered: aiAccountRegistered,
         email: user.aiAccountEmail,
+        emailDomain: aiAccountEmailSuffix,
+        emailDomainAvailable: aiAccountEmailDomainAvailable,
       },
     },
     membership: normalizeMembership(membership),
