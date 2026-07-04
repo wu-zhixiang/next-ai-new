@@ -4,31 +4,69 @@ exports.main = main;
 const constants_1 = require("./shared/constants");
 const db_1 = require("./shared/db");
 const utils_1 = require("./shared/utils");
-const ai_account_email_domain_1 = require("./shared/ai-account-email-domain");
 const context_1 = require("./_lib/context");
+const DAY_MS = 24 * 60 * 60 * 1000;
+function buildMembershipFromOrder(order) {
+    var _a;
+    if (order.payStatus !== 'paid' || order.fulfillmentStatus !== 'fulfilled') {
+        return null;
+    }
+    const startAt = (_a = order.fulfilledAt) !== null && _a !== void 0 ? _a : order.paidAt;
+    if (!startAt || !order.durationDays) {
+        return null;
+    }
+    const endAt = startAt + order.durationDays * DAY_MS;
+    return {
+        userId: order.userId,
+        productCode: order.productCode,
+        productName: order.productName,
+        planCode: order.planCode,
+        planName: order.planName,
+        status: 'active',
+        startAt,
+        endAt,
+        remainDays: (0, utils_1.calcRemainDays)(endAt),
+        autoRenewStatus: 'off',
+        createdAt: startAt,
+        updatedAt: order.updatedAt,
+    };
+}
 async function main() {
-    var _a, _b, _c;
+    var _a, _b;
     const { OPENID } = (0, context_1.getWxContext)();
     const user = await (0, db_1.getUserByOpenId)(OPENID);
-    let aiAccountEmailSuffix;
-    let aiAccountEmailDomainAvailable = true;
-    try {
-        aiAccountEmailSuffix = (0, ai_account_email_domain_1.getAiAccountEmailSuffix)(await (0, ai_account_email_domain_1.getAvailableAiAccountEmailDomain)());
-    }
-    catch (_d) {
-        aiAccountEmailDomainAvailable = false;
-    }
     if (!user) {
         return (0, utils_1.ok)({
             userInfo: {},
             membership: { status: 'none', openStatusLabel: '立即开通' },
+            activeServices: [],
             deliverySummary: {
                 hasDeliveryInfo: false,
             },
             subscribeMsgAuth: false,
         });
     }
-    const membership = (_b = (_a = (await (0, db_1.getMembershipByUserId)(user._id, constants_1.DEFAULT_PRODUCT_CODE))) !== null && _a !== void 0 ? _a : (await (0, db_1.listMembershipsByUserId)(user._id)).find((item) => item.status === 'active' || item.status === 'opening')) !== null && _b !== void 0 ? _b : null;
+    const now = Date.now();
+    const [memberships, orders] = await Promise.all([
+        (0, db_1.listMembershipsByUserId)(user._id),
+        (0, db_1.listOrdersByUserId)(user._id),
+    ]);
+    const activeMembershipProductCodes = new Set(memberships
+        .filter((item) => item.status === 'active' && item.endAt > now)
+        .map((item) => item.productCode));
+    const orderDerivedMemberships = orders
+        .map(buildMembershipFromOrder)
+        .filter((item) => Boolean(item))
+        .filter((item) => item.endAt > now && !activeMembershipProductCodes.has(item.productCode));
+    const effectiveMemberships = [...memberships, ...orderDerivedMemberships];
+    const isVisibleMembership = (item) => (item.status === 'opening'
+        || (item.status === 'active' && item.endAt > now));
+    const defaultMembership = effectiveMemberships.find((item) => item.productCode === constants_1.DEFAULT_PRODUCT_CODE && isVisibleMembership(item));
+    const membership = (_a = defaultMembership !== null && defaultMembership !== void 0 ? defaultMembership : effectiveMemberships.find(isVisibleMembership)) !== null && _a !== void 0 ? _a : null;
+    const activeServices = effectiveMemberships
+        .filter((item) => item.status === 'active' && item.endAt > now)
+        .sort((left, right) => right.endAt - left.endAt)
+        .map(utils_1.normalizeMembership);
     const delivery = await (0, db_1.getDeliveryByUserId)(user._id);
     const aiAccountRegistered = Boolean(user.aiAccountRegistered || user.aiAccountEmail);
     return (0, utils_1.ok)({
@@ -37,15 +75,14 @@ async function main() {
             nickname: user.nickname,
             avatarUrl: user.avatarUrl,
             inviteCode: user.inviteCode,
-            pointsBalance: (_c = user.pointsBalance) !== null && _c !== void 0 ? _c : 0,
+            pointsBalance: (_b = user.pointsBalance) !== null && _b !== void 0 ? _b : 0,
             aiAccount: {
                 registered: aiAccountRegistered,
                 email: user.aiAccountEmail,
-                emailDomain: aiAccountEmailSuffix,
-                emailDomainAvailable: aiAccountEmailDomainAvailable,
             },
         },
         membership: (0, utils_1.normalizeMembership)(membership),
+        activeServices,
         deliverySummary: delivery
             ? {
                 hasDeliveryInfo: true,

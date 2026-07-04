@@ -15,6 +15,7 @@ exports.COLLECTIONS = {
     appstoreEmailVerificationCodes: 'appstore_email_verification_codes',
     appstoreAccounts: 'appstore_accounts',
     aiNews: 'ai_news',
+    invoiceRequests: 'invoice_requests',
     deliveries: 'deliveries',
     reminderLogs: 'reminder_logs',
     auditLogs: 'audit_logs',

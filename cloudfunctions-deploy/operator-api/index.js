@@ -26,7 +26,7 @@ let cachedWechatAccessToken = '';
 let cachedWechatAccessTokenExpireAt = 0;
 const CORS_HEADERS = {
     'access-control-allow-origin': '*',
-    'access-control-allow-methods': 'GET,POST,OPTIONS',
+    'access-control-allow-methods': 'GET,POST,DELETE,OPTIONS',
     'access-control-allow-headers': 'content-type,authorization',
     'content-type': 'application/json; charset=utf-8',
 };
@@ -105,6 +105,9 @@ function matchTaskRoute(event) {
     if (event.action === 'updateTask' && event.orderNo) {
         return { action: 'updateTask', orderNo: event.orderNo };
     }
+    if (event.action === 'deleteTask' && event.orderNo) {
+        return { action: 'deleteTask', orderNo: event.orderNo };
+    }
     if (event.action === 'getVerificationCode' && event.orderNo) {
         return { action: 'getVerificationCode', orderNo: event.orderNo };
     }
@@ -119,6 +122,12 @@ function matchTaskRoute(event) {
     }
     if (event.action === 'listProductTypes') {
         return { action: 'listProductTypes' };
+    }
+    if (event.action === 'listInvoices') {
+        return { action: 'listInvoices' };
+    }
+    if (event.action === 'updateInvoice' && event.orderNo) {
+        return { action: 'updateInvoice', orderNo: event.orderNo };
     }
     if (event.action === 'getAvailableAppStoreAccount' && event.orderNo) {
         return { action: 'getAvailableAppStoreAccount', orderNo: event.orderNo };
@@ -164,6 +173,13 @@ function matchTaskRoute(event) {
     if (method === 'GET' && /(?:^|\/)(?:operator\/)?product-types$/.test(path)) {
         return { action: 'listProductTypes' };
     }
+    if (method === 'GET' && /(?:^|\/)(?:operator\/)?invoices$/.test(path)) {
+        return { action: 'listInvoices' };
+    }
+    const invoiceMatched = path.match(/(?:^|\/)(?:operator\/)?invoices\/([^/]+)$/);
+    if (method === 'POST' && (invoiceMatched === null || invoiceMatched === void 0 ? void 0 : invoiceMatched[1])) {
+        return { action: 'updateInvoice', orderNo: decodeURIComponent(invoiceMatched[1]) };
+    }
     if (method === 'GET' && /(?:^|\/)(?:operator\/)?appstore-accounts\/email-code$/.test(path)) {
         return { action: 'getAppStoreVerificationCode' };
     }
@@ -181,6 +197,9 @@ function matchTaskRoute(event) {
     const matched = path.match(/(?:^|\/)(?:operator\/)?tasks\/([^/]+)$/);
     if (method === 'POST' && (matched === null || matched === void 0 ? void 0 : matched[1])) {
         return { action: 'updateTask', orderNo: decodeURIComponent(matched[1]) };
+    }
+    if (method === 'DELETE' && (matched === null || matched === void 0 ? void 0 : matched[1])) {
+        return { action: 'deleteTask', orderNo: decodeURIComponent(matched[1]) };
     }
     return null;
 }
@@ -304,6 +323,7 @@ function toProductTypeView(record) {
         label: record.label,
         tag: record.tag,
         avatarUrl: record.avatarUrl,
+        detailPageUrl: record.detailPageUrl,
         available: record.available,
         description: record.description,
         introHighlights: (_a = record.introHighlights) !== null && _a !== void 0 ? _a : [],
@@ -1142,13 +1162,119 @@ async function listTasks(event) {
     const tasks = await Promise.all(orders.map(buildTask));
     return ok({ tasks });
 }
+function normalizeInvoiceStatus(value) {
+    if (value === 'processing' || value === 'issued' || value === 'failed' || value === 'rejected') {
+        return value;
+    }
+    return 'submitted';
+}
+function isInvoiceVisibleForStatus(invoice, status) {
+    return invoice.status === status;
+}
+async function buildInvoice(invoice) {
+    var _a, _b, _c, _d, _e, _f, _g, _h;
+    const user = await (0, db_1.getUserById)(invoice.userId);
+    return {
+        invoiceNo: invoice.invoiceNo,
+        orderNos: invoice.orderNos,
+        orders: invoice.orders,
+        amount: invoice.amount,
+        titleType: invoice.titleType,
+        title: invoice.title,
+        taxNo: (_a = invoice.taxNo) !== null && _a !== void 0 ? _a : '',
+        email: invoice.email,
+        status: invoice.status,
+        operatorNote: (_b = invoice.operatorNote) !== null && _b !== void 0 ? _b : '',
+        rejectReason: (_c = invoice.rejectReason) !== null && _c !== void 0 ? _c : '',
+        invoiceCode: (_d = invoice.invoiceCode) !== null && _d !== void 0 ? _d : '',
+        invoiceNumber: (_e = invoice.invoiceNumber) !== null && _e !== void 0 ? _e : '',
+        invoiceFileUrl: (_f = invoice.invoiceFileUrl) !== null && _f !== void 0 ? _f : '',
+        issuedAt: invoice.issuedAt,
+        createdAt: invoice.createdAt,
+        updatedAt: invoice.updatedAt,
+        userId: invoice.userId,
+        mobile: (_g = user === null || user === void 0 ? void 0 : user.mobile) !== null && _g !== void 0 ? _g : '',
+        nickname: (_h = user === null || user === void 0 ? void 0 : user.nickname) !== null && _h !== void 0 ? _h : '',
+    };
+}
+async function listInvoices(event) {
+    var _a, _b;
+    const status = normalizeInvoiceStatus((_b = (_a = event.queryStringParameters) === null || _a === void 0 ? void 0 : _a.status) !== null && _b !== void 0 ? _b : event.status);
+    let invoiceRecords = [];
+    try {
+        const result = await (0, db_1.collection)('invoiceRequests').where({ status }).get();
+        invoiceRecords = result.data;
+    }
+    catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (!message.includes('collection not exists') && !message.includes('DATABASE_COLLECTION_NOT_EXIST') && !message.includes('Table not exist')) {
+            throw error;
+        }
+        await (0, db_1.ensureCollection)('invoiceRequests');
+    }
+    const invoices = await Promise.all(invoiceRecords
+        .filter((invoice) => isInvoiceVisibleForStatus(invoice, status))
+        .sort((left, right) => right.createdAt - left.createdAt)
+        .slice(0, 80)
+        .map(buildInvoice));
+    return ok({ invoices });
+}
+async function updateInvoice(invoiceNo, body, event) {
+    var _a, _b, _c;
+    const status = normalizeInvoiceStatus(String((_b = (_a = body.status) !== null && _a !== void 0 ? _a : event.status) !== null && _b !== void 0 ? _b : ''));
+    const operatorNote = sanitizeText((_c = body.operatorNote) !== null && _c !== void 0 ? _c : body.note, 300);
+    const rejectReason = sanitizeText(body.rejectReason, 300);
+    const invoiceCode = sanitizeText(body.invoiceCode, 80);
+    const invoiceNumber = sanitizeText(body.invoiceNumber, 80);
+    const invoiceFileUrl = sanitizeText(body.invoiceFileUrl, 500);
+    const result = await (0, db_1.collection)('invoiceRequests').where({ invoiceNo }).limit(1).get();
+    const invoice = result.data[0];
+    if (!invoice) {
+        return fail(404, '发票申请不存在');
+    }
+    if (invoice.status === 'issued' && status !== 'issued') {
+        return fail(400, '已开票申请不能回退状态');
+    }
+    if (status === 'rejected' && !rejectReason) {
+        return fail(400, '驳回时请填写原因');
+    }
+    const now = Date.now();
+    const updateData = {
+        status,
+        operatorNote,
+        updatedAt: now,
+        operatorUpdatedAt: now,
+    };
+    if (status === 'issued') {
+        updateData.invoiceCode = invoiceCode;
+        updateData.invoiceNumber = invoiceNumber;
+        updateData.invoiceFileUrl = invoiceFileUrl;
+        updateData.issuedAt = now;
+        updateData.rejectReason = '';
+    }
+    if (status === 'rejected') {
+        updateData.rejectReason = rejectReason;
+    }
+    await (0, db_1.collection)('invoiceRequests').doc(invoice._id).update({ data: updateData });
+    const orderResult = await (0, db_1.collection)('orders').where({ orderNo: db_1._.in(invoice.orderNos) }).get();
+    const orders = orderResult.data;
+    await Promise.all(orders.map((order) => (0, db_1.collection)('orders').doc(order._id).update({
+        data: {
+            invoiceStatus: status,
+            invoiceNo: invoice.invoiceNo,
+            updatedAt: now,
+        },
+    })));
+    return ok({
+        success: true,
+        invoiceNo: invoice.invoiceNo,
+        status,
+    });
+}
 async function updateTask(orderNo, body, event) {
-    var _a, _b, _c, _d, _e, _f;
+    var _a, _b, _c;
     const status = normalizeStatus(String((_b = (_a = body.status) !== null && _a !== void 0 ? _a : event.status) !== null && _b !== void 0 ? _b : ''));
     const note = sanitizeNote((_c = body.note) !== null && _c !== void 0 ? _c : event.note);
-    const operatorMobile = normalizeAppStoreMobile((_f = (_d = body.mobile) !== null && _d !== void 0 ? _d : (_e = event.queryStringParameters) === null || _e === void 0 ? void 0 : _e.mobile) !== null && _f !== void 0 ? _f : DEFAULT_APPSTORE_MOBILE);
-    const operatorTail = getAppStoreMobileTail(operatorMobile);
-    const privileged = isSuperOperatorMobile(operatorMobile);
     const order = await (0, db_1.getOrderByNo)(orderNo);
     if (!order) {
         return fail(404, '订单不存在');
@@ -1158,44 +1284,9 @@ async function updateTask(orderNo, body, event) {
     }
     const now = Date.now();
     if (status === 'fulfilled') {
-        const user = await (0, db_1.getUserById)(order.userId);
-        if (!(user === null || user === void 0 ? void 0 : user.aiAccountEmail)) {
-            return fail(400, '该订单用户暂未填写 ChatGPT 注册邮箱');
-        }
-        let appStoreAccount;
-        try {
-            appStoreAccount = await resolveSubmittedAppStoreAccount(body, operatorMobile, order);
-        }
-        catch (error) {
-            return fail(400, error instanceof Error ? error.message : 'Apple Store 账号信息不正确');
-        }
-        if (!appStoreAccount) {
-            return fail(400, '请先获取或输入 Apple Store 账号和密码');
-        }
-        if (!privileged && !(0, utils_1.normalizeMobile)(appStoreAccount.mobile).endsWith(operatorTail)) {
-            return fail(403, '只能使用本手机号注册的 Apple Store 账号');
-        }
-        if (appStoreAccount.status === 'disabled') {
-            return fail(400, 'Apple Store 账号已停用');
-        }
-        if (appStoreAccount.status === 'bound' && appStoreAccount.orderNo !== order.orderNo && appStoreAccount.chatgptAccountEmail !== user.aiAccountEmail) {
-            return fail(400, 'Apple Store 账号已绑定其他订单');
-        }
-        await (0, db_1.collection)('appstoreAccounts').doc(appStoreAccount._id).update({
-            data: {
-                status: 'bound',
-                chatgptAccountEmail: user.aiAccountEmail,
-                orderNo: order.orderNo,
-                userId: order.userId,
-                boundAt: now,
-                updatedAt: now,
-            },
-        });
         await (0, orders_1.fulfillPaidOrderMembership)(order, { fulfilledAt: now });
         await (0, db_1.collection)('orders').doc(order._id).update({
             data: {
-                appleStoreAccountId: appStoreAccount._id,
-                appleStoreEmail: appStoreAccount.email,
                 operatorNote: note,
                 updatedAt: now,
             },
@@ -1204,15 +1295,6 @@ async function updateTask(orderNo, body, event) {
             success: true,
             orderNo: order.orderNo,
             status: 'fulfilled',
-            appleStoreAccount: serializeAppStoreAccount({
-                ...appStoreAccount,
-                status: 'bound',
-                chatgptAccountEmail: user.aiAccountEmail,
-                orderNo: order.orderNo,
-                userId: order.userId,
-                boundAt: now,
-                updatedAt: now,
-            }),
         });
     }
     if (status === 'failed') {
@@ -1235,6 +1317,15 @@ async function updateTask(orderNo, body, event) {
         },
     });
     return ok({ success: true, orderNo: order.orderNo, status: 'processing' });
+}
+async function deleteTask(orderNo) {
+    const order = await (0, db_1.getOrderByNo)(orderNo);
+    if (!order) {
+        return fail(404, '订单不存在');
+    }
+    const orderDoc = (0, db_1.collection)('orders').doc(order._id);
+    await orderDoc.remove();
+    return ok({ success: true, orderNo });
 }
 async function getVerificationCode(orderNo) {
     const order = await (0, db_1.getOrderByNo)(orderNo);
@@ -1529,6 +1620,9 @@ async function main(event) {
         if (route.action === 'listTasks') {
             return listTasks(event);
         }
+        if (route.action === 'deleteTask') {
+            return deleteTask(route.orderNo);
+        }
         if (route.action === 'getVerificationCode') {
             return getVerificationCode(route.orderNo);
         }
@@ -1543,6 +1637,12 @@ async function main(event) {
         }
         if (route.action === 'listProductTypes') {
             return listProductTypes();
+        }
+        if (route.action === 'listInvoices') {
+            return listInvoices(event);
+        }
+        if (route.action === 'updateInvoice') {
+            return updateInvoice(route.orderNo, parseBody(event), event);
         }
         if (route.action === 'getAvailableAppStoreAccount') {
             return getAvailableAppStoreAccount(route.orderNo, (_a = event.queryStringParameters) === null || _a === void 0 ? void 0 : _a.mobile);

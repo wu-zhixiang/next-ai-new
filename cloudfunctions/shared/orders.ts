@@ -197,12 +197,12 @@ export async function fulfillPaidOrderMembership(
   if (order.payStatus !== 'paid') {
     throw new Error('订单未支付，不能确认开通');
   }
-  if (order.fulfillmentStatus === 'fulfilled') {
+  const existingMembership = await getMembershipByUserId(order.userId, order.productCode);
+  if (order.fulfillmentStatus === 'fulfilled' && existingMembership) {
     return;
   }
 
-  const fulfilledAt = options.fulfilledAt ?? Date.now();
-  const existingMembership = await getMembershipByUserId(order.userId, order.productCode);
+  const fulfilledAt = options.fulfilledAt ?? order.fulfilledAt ?? Date.now();
   const startAt = existingMembership && existingMembership.status === 'active' && existingMembership.endAt > fulfilledAt
     ? existingMembership.endAt
     : fulfilledAt;

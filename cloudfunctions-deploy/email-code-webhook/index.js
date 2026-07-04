@@ -3,7 +3,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.main = main;
 const node_crypto_1 = require("node:crypto");
 const db_1 = require("./shared/db");
-const ai_account_email_domain_1 = require("./shared/ai-account-email-domain");
 const constants_1 = require("./shared/constants");
 const utils_1 = require("./shared/utils");
 const CODE_TTL_MS = 10 * 60 * 1000;
@@ -12,10 +11,6 @@ async function main(event = {}) {
     const payload = normalizeEvent(event);
     assertWebhookSecret(event);
     const email = normalizeEmail(payload.to);
-    const allowedDomains = await (0, ai_account_email_domain_1.listAllowedAiAccountEmailDomains)();
-    if (!allowedDomains.some((domain) => email.endsWith(`@${domain}`))) {
-        throw new Error('邮箱域名不合法');
-    }
     const appleEmail = isAppleEmail(payload.from, payload.subject);
     const receivedAt = normalizeReceivedAt(payload.receivedAt);
     if (appleEmail) {

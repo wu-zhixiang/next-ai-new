@@ -9,6 +9,8 @@ const appConfig = {
     'pages/records/index',
     'pages/invite/index',
     'pages/member/index',
+    'pages/active-services/index',
+    'pages/invoice/index',
     'pages/pay-result/index',
     'pages/webview/index',
   ],

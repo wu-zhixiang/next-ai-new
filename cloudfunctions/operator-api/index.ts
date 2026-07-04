@@ -4,7 +4,7 @@ import { DEFAULT_PRODUCT_CODE, DEFAULT_PRODUCT_NAME } from '../shared/constants'
 import { _, app, collection, ensureCollection, getLatestUnusedEmailVerificationCode, getOrderByNo, getUserById } from '../shared/db';
 import { fulfillPaidOrderMembership } from '../shared/orders';
 import { isValidMainlandMobile, normalizeMobile } from '../shared/utils';
-import type { AiNewsRecord, AppStoreAccountRecord, AppStoreCountryRecord, AppStoreCountryView, AppStoreEmailVerificationCodeRecord, FulfillmentStatus, OrderRecord, ProductTypeRecord, ProductTypeView, UserRecord } from '../shared/types';
+import type { AiNewsRecord, AppStoreAccountRecord, AppStoreCountryRecord, AppStoreCountryView, AppStoreEmailVerificationCodeRecord, FulfillmentStatus, InvoiceRequestRecord, OrderRecord, ProductTypeRecord, ProductTypeView, UserRecord } from '../shared/types';
 import {
   APPSTORE_ALL_PRODUCT_CODE,
   APPSTORE_ALL_PRODUCT_NAME,
@@ -31,11 +31,14 @@ interface Event {
   action?:
     | 'listTasks'
     | 'updateTask'
+    | 'deleteTask'
     | 'getVerificationCode'
     | 'getAppStoreVerificationCode'
     | 'clearAppStoreVerificationCode'
     | 'listAppStoreCountries'
     | 'listProductTypes'
+    | 'listInvoices'
+    | 'updateInvoice'
     | 'getAvailableAppStoreAccount'
     | 'generateAppStoreAccount'
     | 'saveAppStoreAccount'
@@ -54,6 +57,7 @@ interface HttpResponse {
 }
 
 type OperatorTaskStatus = 'opening' | 'processing' | 'fulfilled' | 'failed';
+type OperatorInvoiceStatus = 'submitted' | 'processing' | 'issued' | 'failed' | 'rejected';
 
 const DEFAULT_NEWS_REMINDER_TEMPLATE_ID = 'm7Cb5rMgtJtFdyVn3YvR671tWZwyK87qe6qKr7KPZrQ';
 const APPSTORE_EMAIL_DOMAIN = 'mraclpivot.com';
@@ -71,7 +75,7 @@ let cachedWechatAccessTokenExpireAt = 0;
 
 const CORS_HEADERS = {
   'access-control-allow-origin': '*',
-  'access-control-allow-methods': 'GET,POST,OPTIONS',
+  'access-control-allow-methods': 'GET,POST,DELETE,OPTIONS',
   'access-control-allow-headers': 'content-type,authorization',
   'content-type': 'application/json; charset=utf-8',
 };
@@ -154,11 +158,14 @@ function matchTaskRoute(event: Event): {
   action:
     | 'listTasks'
     | 'updateTask'
+    | 'deleteTask'
     | 'getVerificationCode'
     | 'getAppStoreVerificationCode'
     | 'clearAppStoreVerificationCode'
     | 'listAppStoreCountries'
     | 'listProductTypes'
+    | 'listInvoices'
+    | 'updateInvoice'
     | 'getAvailableAppStoreAccount'
     | 'generateAppStoreAccount'
     | 'saveAppStoreAccount'
@@ -172,6 +179,9 @@ function matchTaskRoute(event: Event): {
   }
   if (event.action === 'updateTask' && event.orderNo) {
     return { action: 'updateTask', orderNo: event.orderNo };
+  }
+  if (event.action === 'deleteTask' && event.orderNo) {
+    return { action: 'deleteTask', orderNo: event.orderNo };
   }
   if (event.action === 'getVerificationCode' && event.orderNo) {
     return { action: 'getVerificationCode', orderNo: event.orderNo };
@@ -187,6 +197,12 @@ function matchTaskRoute(event: Event): {
   }
   if (event.action === 'listProductTypes') {
     return { action: 'listProductTypes' };
+  }
+  if (event.action === 'listInvoices') {
+    return { action: 'listInvoices' };
+  }
+  if (event.action === 'updateInvoice' && event.orderNo) {
+    return { action: 'updateInvoice', orderNo: event.orderNo };
   }
   if (event.action === 'getAvailableAppStoreAccount' && event.orderNo) {
     return { action: 'getAvailableAppStoreAccount', orderNo: event.orderNo };
@@ -241,6 +257,15 @@ function matchTaskRoute(event: Event): {
     return { action: 'listProductTypes' };
   }
 
+  if (method === 'GET' && /(?:^|\/)(?:operator\/)?invoices$/.test(path)) {
+    return { action: 'listInvoices' };
+  }
+
+  const invoiceMatched = path.match(/(?:^|\/)(?:operator\/)?invoices\/([^/]+)$/);
+  if (method === 'POST' && invoiceMatched?.[1]) {
+    return { action: 'updateInvoice', orderNo: decodeURIComponent(invoiceMatched[1]) };
+  }
+
   if (method === 'GET' && /(?:^|\/)(?:operator\/)?appstore-accounts\/email-code$/.test(path)) {
     return { action: 'getAppStoreVerificationCode' };
   }
@@ -262,6 +287,9 @@ function matchTaskRoute(event: Event): {
   const matched = path.match(/(?:^|\/)(?:operator\/)?tasks\/([^/]+)$/);
   if (method === 'POST' && matched?.[1]) {
     return { action: 'updateTask', orderNo: decodeURIComponent(matched[1]) };
+  }
+  if (method === 'DELETE' && matched?.[1]) {
+    return { action: 'deleteTask', orderNo: decodeURIComponent(matched[1]) };
   }
 
   return null;
@@ -401,6 +429,7 @@ function toProductTypeView(record: ProductTypeRecord): ProductTypeView {
     label: record.label,
     tag: record.tag,
     avatarUrl: record.avatarUrl,
+    detailPageUrl: record.detailPageUrl,
     available: record.available,
     description: record.description,
     introHighlights: record.introHighlights ?? [],
@@ -1316,12 +1345,124 @@ async function listTasks(event: Event): Promise<HttpResponse> {
   return ok({ tasks });
 }
 
+function normalizeInvoiceStatus(value?: string): OperatorInvoiceStatus {
+  if (value === 'processing' || value === 'issued' || value === 'failed' || value === 'rejected') {
+    return value;
+  }
+  return 'submitted';
+}
+
+function isInvoiceVisibleForStatus(invoice: InvoiceRequestRecord, status: OperatorInvoiceStatus): boolean {
+  return invoice.status === status;
+}
+
+async function buildInvoice(invoice: InvoiceRequestRecord & { _id: string }) {
+  const user = await getUserById(invoice.userId);
+  return {
+    invoiceNo: invoice.invoiceNo,
+    orderNos: invoice.orderNos,
+    orders: invoice.orders,
+    amount: invoice.amount,
+    titleType: invoice.titleType,
+    title: invoice.title,
+    taxNo: invoice.taxNo ?? '',
+    email: invoice.email,
+    status: invoice.status,
+    operatorNote: invoice.operatorNote ?? '',
+    rejectReason: invoice.rejectReason ?? '',
+    invoiceCode: invoice.invoiceCode ?? '',
+    invoiceNumber: invoice.invoiceNumber ?? '',
+    invoiceFileUrl: invoice.invoiceFileUrl ?? '',
+    issuedAt: invoice.issuedAt,
+    createdAt: invoice.createdAt,
+    updatedAt: invoice.updatedAt,
+    userId: invoice.userId,
+    mobile: user?.mobile ?? '',
+    nickname: user?.nickname ?? '',
+  };
+}
+
+async function listInvoices(event: Event): Promise<HttpResponse> {
+  const status = normalizeInvoiceStatus(event.queryStringParameters?.status ?? event.status);
+  let invoiceRecords: Array<InvoiceRequestRecord & { _id: string }> = [];
+  try {
+    const result = await collection('invoiceRequests').where({ status }).get();
+    invoiceRecords = result.data as Array<InvoiceRequestRecord & { _id: string }>;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!message.includes('collection not exists') && !message.includes('DATABASE_COLLECTION_NOT_EXIST') && !message.includes('Table not exist')) {
+      throw error;
+    }
+    await ensureCollection('invoiceRequests');
+  }
+  const invoices = await Promise.all(
+    invoiceRecords
+      .filter((invoice) => isInvoiceVisibleForStatus(invoice, status))
+      .sort((left, right) => right.createdAt - left.createdAt)
+      .slice(0, 80)
+      .map(buildInvoice),
+  );
+  return ok({ invoices });
+}
+
+async function updateInvoice(invoiceNo: string, body: Record<string, unknown>, event: Event): Promise<HttpResponse> {
+  const status = normalizeInvoiceStatus(String(body.status ?? event.status ?? ''));
+  const operatorNote = sanitizeText(body.operatorNote ?? body.note, 300);
+  const rejectReason = sanitizeText(body.rejectReason, 300);
+  const invoiceCode = sanitizeText(body.invoiceCode, 80);
+  const invoiceNumber = sanitizeText(body.invoiceNumber, 80);
+  const invoiceFileUrl = sanitizeText(body.invoiceFileUrl, 500);
+  const result = await collection('invoiceRequests').where({ invoiceNo }).limit(1).get();
+  const invoice = result.data[0] as (InvoiceRequestRecord & { _id: string }) | undefined;
+  if (!invoice) {
+    return fail(404, '发票申请不存在');
+  }
+  if (invoice.status === 'issued' && status !== 'issued') {
+    return fail(400, '已开票申请不能回退状态');
+  }
+  if (status === 'rejected' && !rejectReason) {
+    return fail(400, '驳回时请填写原因');
+  }
+
+  const now = Date.now();
+  const updateData: Partial<InvoiceRequestRecord> = {
+    status,
+    operatorNote,
+    updatedAt: now,
+    operatorUpdatedAt: now,
+  };
+  if (status === 'issued') {
+    updateData.invoiceCode = invoiceCode;
+    updateData.invoiceNumber = invoiceNumber;
+    updateData.invoiceFileUrl = invoiceFileUrl;
+    updateData.issuedAt = now;
+    updateData.rejectReason = '';
+  }
+  if (status === 'rejected') {
+    updateData.rejectReason = rejectReason;
+  }
+
+  await collection('invoiceRequests').doc(invoice._id).update({ data: updateData });
+  const orderResult = await collection('orders').where({ orderNo: _.in(invoice.orderNos) }).get();
+  const orders = orderResult.data as Array<OrderRecord & { _id: string }>;
+  await Promise.all(orders.map((order) => collection('orders').doc(order._id).update({
+    data: {
+      invoiceStatus: status,
+      invoiceNo: invoice.invoiceNo,
+      updatedAt: now,
+    },
+  })));
+
+  return ok({
+    success: true,
+    invoiceNo: invoice.invoiceNo,
+    status,
+  });
+}
+
 async function updateTask(orderNo: string, body: Record<string, unknown>, event: Event): Promise<HttpResponse> {
   const status = normalizeStatus(String(body.status ?? event.status ?? ''));
   const note = sanitizeNote(body.note ?? event.note);
-  const operatorMobile = normalizeAppStoreMobile(body.mobile ?? event.queryStringParameters?.mobile ?? DEFAULT_APPSTORE_MOBILE);
-  const operatorTail = getAppStoreMobileTail(operatorMobile);
-  const privileged = isSuperOperatorMobile(operatorMobile);
   const order = await getOrderByNo(orderNo);
   if (!order) {
     return fail(404, '订单不存在');
@@ -1332,43 +1473,9 @@ async function updateTask(orderNo: string, body: Record<string, unknown>, event:
 
   const now = Date.now();
   if (status === 'fulfilled') {
-    const user = await getUserById(order.userId);
-    if (!user?.aiAccountEmail) {
-      return fail(400, '该订单用户暂未填写 ChatGPT 注册邮箱');
-    }
-    let appStoreAccount: (AppStoreAccountRecord & { _id: string }) | null;
-    try {
-      appStoreAccount = await resolveSubmittedAppStoreAccount(body, operatorMobile, order);
-    } catch (error) {
-      return fail(400, error instanceof Error ? error.message : 'Apple Store 账号信息不正确');
-    }
-    if (!appStoreAccount) {
-      return fail(400, '请先获取或输入 Apple Store 账号和密码');
-    }
-    if (!privileged && !normalizeMobile(appStoreAccount.mobile).endsWith(operatorTail)) {
-      return fail(403, '只能使用本手机号注册的 Apple Store 账号');
-    }
-    if (appStoreAccount.status === 'disabled') {
-      return fail(400, 'Apple Store 账号已停用');
-    }
-    if (appStoreAccount.status === 'bound' && appStoreAccount.orderNo !== order.orderNo && appStoreAccount.chatgptAccountEmail !== user.aiAccountEmail) {
-      return fail(400, 'Apple Store 账号已绑定其他订单');
-    }
-    await collection('appstoreAccounts').doc(appStoreAccount._id).update({
-      data: {
-        status: 'bound',
-        chatgptAccountEmail: user.aiAccountEmail,
-        orderNo: order.orderNo,
-        userId: order.userId,
-        boundAt: now,
-        updatedAt: now,
-      },
-    });
     await fulfillPaidOrderMembership(order, { fulfilledAt: now });
     await collection('orders').doc(order._id).update({
       data: {
-        appleStoreAccountId: appStoreAccount._id,
-        appleStoreEmail: appStoreAccount.email,
         operatorNote: note,
         updatedAt: now,
       },
@@ -1377,15 +1484,6 @@ async function updateTask(orderNo: string, body: Record<string, unknown>, event:
       success: true,
       orderNo: order.orderNo,
       status: 'fulfilled' as FulfillmentStatus,
-      appleStoreAccount: serializeAppStoreAccount({
-        ...appStoreAccount,
-        status: 'bound',
-        chatgptAccountEmail: user.aiAccountEmail,
-        orderNo: order.orderNo,
-        userId: order.userId,
-        boundAt: now,
-        updatedAt: now,
-      }),
     });
   }
 
@@ -1410,6 +1508,16 @@ async function updateTask(orderNo: string, body: Record<string, unknown>, event:
     },
   });
   return ok({ success: true, orderNo: order.orderNo, status: 'processing' });
+}
+
+async function deleteTask(orderNo: string): Promise<HttpResponse> {
+  const order = await getOrderByNo(orderNo);
+  if (!order) {
+    return fail(404, '订单不存在');
+  }
+  const orderDoc = collection('orders').doc(order._id) as unknown as { remove(): Promise<unknown> };
+  await orderDoc.remove();
+  return ok({ success: true, orderNo });
 }
 
 async function getVerificationCode(orderNo: string): Promise<HttpResponse> {
@@ -1725,6 +1833,9 @@ export async function main(event: Event) {
     if (route.action === 'listTasks') {
       return listTasks(event);
     }
+    if (route.action === 'deleteTask') {
+      return deleteTask(route.orderNo as string);
+    }
     if (route.action === 'getVerificationCode') {
       return getVerificationCode(route.orderNo as string);
     }
@@ -1739,6 +1850,12 @@ export async function main(event: Event) {
     }
     if (route.action === 'listProductTypes') {
       return listProductTypes();
+    }
+    if (route.action === 'listInvoices') {
+      return listInvoices(event);
+    }
+    if (route.action === 'updateInvoice') {
+      return updateInvoice(route.orderNo as string, parseBody(event), event);
     }
     if (route.action === 'getAvailableAppStoreAccount') {
       return getAvailableAppStoreAccount(route.orderNo as string, event.queryStringParameters?.mobile);

@@ -3,6 +3,7 @@ export type ExpireTag = 'normal' | 'within_30d' | 'within_7d' | 'within_3d' | 'e
 export type PayStatus = 'pending' | 'paid' | 'failed' | 'closed' | 'refunded';
 export type FulfillmentStatus = 'pending' | 'opening' | 'fulfilled' | 'failed';
 export type PayChannel = 'wechat_pay' | 'wechat_virtual_pay';
+export type InvoiceStatus = 'none' | 'submitted' | 'processing' | 'issued' | 'failed' | 'rejected';
 
 export interface UserRecord {
   _id?: string;
@@ -17,6 +18,10 @@ export interface UserRecord {
   aiAccountRegistered?: boolean;
   aiAccountEmail?: string;
   aiAccountPasswordEncrypted?: string;
+  invoiceTitleType?: 'personal' | 'company';
+  invoiceTitle?: string;
+  invoiceTaxNo?: string;
+  invoiceEmail?: string;
   gender?: number;
   status: 'active' | 'disabled';
   subscribeMsgAuth: boolean;
@@ -81,6 +86,7 @@ export interface ProductTypeRecord {
   label: string;
   tag: string;
   avatarUrl?: string;
+  detailPageUrl?: string;
   available: boolean;
   description: string;
   introHighlights?: Array<{
@@ -92,6 +98,7 @@ export interface ProductTypeRecord {
     label: string;
     tag: string;
     avatarUrl?: string;
+    detailPageUrl?: string;
     description: string;
     introHighlights?: Array<{
       title: string;
@@ -167,6 +174,8 @@ export interface OrderRecord {
   payExpireAt?: number;
   paidAt?: number;
   fulfilledAt?: number;
+  invoiceStatus?: InvoiceStatus;
+  invoiceNo?: string;
   operatorNotifiedAt?: number;
   operatorNotifyChannel?: string;
   operatorProcessingAt?: number;
@@ -174,6 +183,51 @@ export interface OrderRecord {
   operatorNote?: string;
   closedAt?: number;
   closeReason?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface InvoiceRequestRecord {
+  _id?: string;
+  invoiceNo: string;
+  userId: string;
+  openid: string;
+  scene?: 'WITH_WECHATPAY' | 'WITHOUT_WECHATPAY';
+  fapiaoApplyId?: string;
+  fapiaoId?: string;
+  wechatTransactionId?: string;
+  orderNos: string[];
+  orders: Array<{
+    orderNo: string;
+    productCode: string;
+    productName: string;
+    planCode: string;
+    planName: string;
+    amount: number;
+    paidAt?: number;
+    fulfilledAt?: number;
+  }>;
+  amount: number;
+  titleType: 'personal' | 'company';
+  title: string;
+  taxNo?: string;
+  email: string;
+  status: Exclude<InvoiceStatus, 'none'>;
+  operatorNote?: string;
+  rejectReason?: string;
+  failReason?: string;
+  wechatFapiaoStatus?: string;
+  cardOpenid?: string;
+  invoiceCode?: string;
+  invoiceNumber?: string;
+  invoiceNoFromWechat?: string;
+  invoiceFileUrl?: string;
+  invoiceFileId?: string;
+  invoiceDownloadUrl?: string;
+  invoiceDownloadUrlExpireAt?: number;
+  sm3Digest?: string;
+  issuedAt?: number;
+  operatorUpdatedAt?: number;
   createdAt: number;
   updatedAt: number;
 }
@@ -299,6 +353,7 @@ export interface ProductTypeView {
   label: string;
   tag: string;
   avatarUrl?: string;
+  detailPageUrl?: string;
   available: boolean;
   description: string;
   introHighlights: Array<{
@@ -344,6 +399,7 @@ export interface MembershipView {
   openStatusLabel?: '立即开通' | '开通中' | '已开通';
   productCode?: string;
   productName?: string;
+  planCode?: string;
   planName?: string;
   startAt?: number;
   endAt?: number;

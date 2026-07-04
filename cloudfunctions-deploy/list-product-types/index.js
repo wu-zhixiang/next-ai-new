@@ -11,6 +11,7 @@ function toProductTypeView(record) {
         label: record.label,
         tag: record.tag,
         avatarUrl: record.avatarUrl,
+        detailPageUrl: record.detailPageUrl,
         available: record.available,
         description: record.description,
         introHighlights: (_a = record.introHighlights) !== null && _a !== void 0 ? _a : [],

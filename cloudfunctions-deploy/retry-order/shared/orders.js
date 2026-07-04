@@ -176,15 +176,15 @@ async function markOrderPaidAndStartOpening(order, options = {}) {
     });
 }
 async function fulfillPaidOrderMembership(order, options = {}) {
-    var _a;
+    var _a, _b;
     if (order.payStatus !== 'paid') {
         throw new Error('订单未支付，不能确认开通');
     }
-    if (order.fulfillmentStatus === 'fulfilled') {
+    const existingMembership = await (0, db_1.getMembershipByUserId)(order.userId, order.productCode);
+    if (order.fulfillmentStatus === 'fulfilled' && existingMembership) {
         return;
     }
-    const fulfilledAt = (_a = options.fulfilledAt) !== null && _a !== void 0 ? _a : Date.now();
-    const existingMembership = await (0, db_1.getMembershipByUserId)(order.userId, order.productCode);
+    const fulfilledAt = (_b = (_a = options.fulfilledAt) !== null && _a !== void 0 ? _a : order.fulfilledAt) !== null && _b !== void 0 ? _b : Date.now();
     const startAt = existingMembership && existingMembership.status === 'active' && existingMembership.endAt > fulfilledAt
         ? existingMembership.endAt
         : fulfilledAt;

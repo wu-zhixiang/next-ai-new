@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto';
 import { collection, ensureCollection, getUserByAiAccountEmail } from '../shared/db';
-import { listAllowedAiAccountEmailDomains } from '../shared/ai-account-email-domain';
 import { COLLECTIONS } from '../shared/constants';
 import type { AppStoreEmailVerificationCodeRecord, EmailVerificationCodeRecord } from '../shared/types';
 import { ok } from '../shared/utils';
@@ -33,11 +32,6 @@ export async function main(event: Event = {}) {
   assertWebhookSecret(event);
 
   const email = normalizeEmail(payload.to);
-  const allowedDomains = await listAllowedAiAccountEmailDomains();
-  if (!allowedDomains.some((domain) => email.endsWith(`@${domain}`))) {
-    throw new Error('邮箱域名不合法');
-  }
-
   const appleEmail = isAppleEmail(payload.from, payload.subject);
   const receivedAt = normalizeReceivedAt(payload.receivedAt);
   if (appleEmail) {

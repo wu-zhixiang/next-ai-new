@@ -101,7 +101,7 @@ npm install
 
 ## 7. 运营插件接口配置
 
-运营插件通过 `operator-api` 云函数读取待开通订单、查看账号密码、把订单标记为处理中或已开通，并上传 AI 资讯文章。
+运营插件通过 `operator-api` 云函数读取待开通订单、查看账号密码、把订单标记为处理中或已开通，并上传 AI 资讯文章。发票能力当前按“用户申请 + 运营人工开票”MVP 落地。
 
 需要给 `operator-api` 配置：
 
@@ -124,6 +124,44 @@ npm install
   填 `operator-api` 的 HTTP 访问地址，不需要自己追加 `/operator/tasks`。
 - `运营密钥`
   填与 `OPERATOR_API_TOKEN` 完全一致的值。
+
+### 7.1 发票 MVP：用户申请 + 运营人工开票
+
+发票开发文档见：
+
+- [invoice-mvp-plan.md](/Users/qitmac001343/Desktop/ai-business/gpt-pay/docs/invoice-mvp-plan.md)
+- [wechatpay-fapiao-flow.md](/Users/qitmac001343/Desktop/ai-business/gpt-pay/docs/wechatpay-fapiao-flow.md)
+
+当前约束：
+
+- 只支持 `payStatus=paid` 且 `fulfillmentStatus=fulfilled` 的订单。
+- 用户提交后只创建本地 `invoice_requests` 申请记录，不再调用微信支付电子发票 API。
+- 运营插件 `开发票` tab 读取 `submitted` 申请，人工开票后填写发票号码或发票链接并标记已开票。
+- 运营插件支持导出税务局“发票开具项目信息导入模板”格式的项目明细 XLSX。导出时填写项目名称、税率和可选税收分类编码。
+- 用户侧已开票记录如果存在云存储文件会直接打开；如果运营填写的是外部发票链接，会复制链接给用户。
+
+需要部署的发票云函数：
+
+- `list-invoice-orders`
+- `submit-invoice-request`
+- `get-fapiao-file`
+- `operator-api`
+
+按云函数拆分的 token / 环境变量：
+
+- `submit-invoice-request`
+  - 不需要自定义 token
+  - 不需要微信支付 v3 环境变量
+- `get-fapiao-file`
+  - 不需要自定义 token
+  - 手动开票链接模式不需要微信支付 v3 环境变量；只有未来恢复微信支付自动开票下载文件时才需要。
+- `list-invoice-orders`
+  - 不需要自定义 token
+  - 不需要微信支付密钥
+- `operator-api`
+  - 需要运营接口密钥：`OPERATOR_API_TOKEN`
+
+`setup-fapiao-config`、`fapiao-notify` 和微信支付 v3 电子发票配置当前暂不参与 MVP 主流程。后续接入电子发票服务商或恢复微信支付自动开票时再启用。
 
 ## 8. AI 工具配置
 

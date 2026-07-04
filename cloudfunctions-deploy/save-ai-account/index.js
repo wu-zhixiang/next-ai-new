@@ -2,43 +2,24 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.main = main;
 const db_1 = require("./shared/db");
-const ai_account_1 = require("./shared/ai-account");
-const ai_account_password_1 = require("./shared/ai-account-password");
-const ai_account_email_domain_1 = require("./shared/ai-account-email-domain");
 const utils_1 = require("./shared/utils");
 const context_1 = require("./_lib/context");
-function normalizeAccountName(event, domain) {
+function normalizeEmail(event) {
     var _a, _b;
     const raw = ((_b = (_a = event.accountName) !== null && _a !== void 0 ? _a : event.email) !== null && _b !== void 0 ? _b : '').trim().toLowerCase();
-    return raw.endsWith(`@${domain}`)
-        ? raw.slice(0, -domain.length - 1)
-        : raw;
+    return raw;
 }
-function assertValidAccountName(accountName) {
-    if (!/^[a-z][a-z0-9._-]{2,31}$/.test(accountName)) {
-        throw new Error('账号需为3-32位小写字母开头，可含数字、点、下划线或中划线');
+function assertValidEmail(email) {
+    if (!email) {
+        throw new Error('请输入账号邮箱');
     }
-    if (accountName.includes('..') || accountName.startsWith('.') || accountName.endsWith('.')) {
-        throw new Error('账号格式不正确，请调整点号位置');
-    }
-}
-function assertValidPassword(password) {
-    const errorMessage = (0, ai_account_password_1.validateAiAccountPassword)(password);
-    if (errorMessage) {
-        throw new Error(errorMessage);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        throw new Error('请输入正确的邮箱账号');
     }
 }
 async function main(event) {
-    var _a;
-    const emailDomain = await (0, ai_account_email_domain_1.getAvailableAiAccountEmailDomain)();
-    const accountName = normalizeAccountName(event, emailDomain);
-    const email = `${accountName}@${emailDomain}`;
-    const password = (_a = event.password) !== null && _a !== void 0 ? _a : '';
-    assertValidAccountName(accountName);
-    if (!password) {
-        throw new Error('请输入账号密码');
-    }
-    assertValidPassword(password);
+    const email = normalizeEmail(event);
+    assertValidEmail(email);
     const { OPENID } = (0, context_1.getWxContext)();
     const user = await (0, db_1.getUserByOpenId)(OPENID);
     if (!user) {
@@ -49,7 +30,7 @@ async function main(event) {
         data: {
             aiAccountRegistered: true,
             aiAccountEmail: email,
-            aiAccountPasswordEncrypted: (0, ai_account_1.encryptAiAccountPassword)(password),
+            aiAccountPasswordEncrypted: '',
             updatedAt: now,
         },
     });

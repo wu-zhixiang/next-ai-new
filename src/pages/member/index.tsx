@@ -23,11 +23,7 @@ import {
   toCompliantProductType,
 } from '@/utils/productCompliance';
 import { hasAuthConsent } from '@/utils/authConsent';
-import { copyWithToast, maskSecret, type ClipboardLabel } from '@/utils/clipboard';
-import {
-  AI_ACCOUNT_PASSWORD_HINT,
-  validateAiAccountPassword,
-} from '@/utils/aiAccountPassword';
+import { copyWithToast, type ClipboardLabel } from '@/utils/clipboard';
 import { requirePrivacyAuthorization } from '@/utils/privacyAuthorization';
 
 interface MemberHomeData {
@@ -39,11 +35,10 @@ interface MemberHomeData {
     aiAccount?: {
       registered: boolean;
       email?: string;
-      emailDomain?: string;
-      emailDomainAvailable?: boolean;
     };
   };
   membership: MembershipView;
+  activeServices?: MembershipView[];
   deliverySummary: {
     hasDeliveryInfo: boolean;
     emailAccount?: string;
@@ -115,7 +110,7 @@ function formatRemainCountdown(endAt?: number, now = Date.now()): { value: strin
 
 interface AiAccountResult {
   email: string;
-  password: string;
+  password?: string;
 }
 
 interface LatestEmailCodeResult {
@@ -134,11 +129,11 @@ function isEmailCodeTooOld(receivedAt?: number, now = Date.now()): boolean {
 
 interface AiAccountFormErrors {
   accountName?: string;
-  password?: string;
   submit?: string;
 }
 
 type AiAccountSheetSource = 'purchase' | 'profile';
+type ProductIntroSource = 'productType' | 'planSheet';
 type PendingAuthAction =
   | { type: 'subscribe'; productCode: string }
   | { type: 'saveAiAccount' };
@@ -156,11 +151,16 @@ const ACCOUNT_INFO_ICON = require('../../assets/member/account-info.svg') as str
 const CUSTOMER_SUPPORT_ICON = require('../../assets/member/customer-support.svg') as string;
 const VERIFICATION_CODE_ICON = require('../../assets/member/verification-code.svg') as string;
 const MESSAGE_REMINDER_ICON = require('../../assets/member/message-reminder.svg') as string;
+const INVOICE_ICON = require('../../assets/member/invoice.svg') as string;
+const ACTIVE_SERVICE_ICON = require('../../assets/member/active-service.svg') as string;
 const CHEVRON_RIGHT_ICON = require('../../assets/icons/chevron-right.svg') as string;
 const CACHE_KEY = AUTH_CACHE_KEY;
-const DEFAULT_AI_ACCOUNT_EMAIL_SUFFIX = '@mraclpivot.com';
 const USER_AGREEMENT_URL = 'https://cloud1-d3gbrpive8611514c-1348953433.tcloudbaseapp.com/cloud-admin/htmls/%E7%94%A8%E6%88%B7%E5%8D%8F%E8%AE%AE.html?sign=55a2a34c2317b48fc09603658d7a64b1&t=1779005578';
 const PRIVACY_AGREEMENT_URL = 'https://cloud1-d3gbrpive8611514c-1348953433.tcloudbaseapp.com/cloud-admin/htmls/%E9%9A%90%E7%A7%81%E5%8D%8F%E8%AE%AE.html?sign=3626cb47334346612df3a4d34746e859&t=1779005613';
+const PRODUCT_DETAIL_PAGE_URLS: Record<string, string> = {
+  ai_news: 'pages/news-detail/index?id=516f04746a473228001c688068c819b7',
+  quota_points: 'pages/news-detail/index?id=e1a876e86a47362d000e27b855d8b1ed',
+};
 const MEMBER_PAGE_THEME: PageTheme = {
   headerColor: '#927239',
   headerFadeColor: '#F7F1E4',
@@ -200,14 +200,14 @@ export default function MemberPage(): JSX.Element {
   const [productTypeSheetVisible, setProductTypeSheetVisible] = useState(false);
   const [planSheetVisible, setPlanSheetVisible] = useState(false);
   const [productIntroVisible, setProductIntroVisible] = useState(false);
-  const [introProductCode, setIntroProductCode] = useState('ai_news');
+  const [productIntroSource, setProductIntroSource] = useState<ProductIntroSource>('productType');
+  const [introProduct, setIntroProduct] = useState<ProductTypeView | null>(null);
   const [aiAccountSheetVisible, setAiAccountSheetVisible] = useState(false);
   const [aiAccountSheetSource, setAiAccountSheetSource] = useState<AiAccountSheetSource>('purchase');
   const [aiAccountInfoVisible, setAiAccountInfoVisible] = useState(false);
   const [aiAccountInfo, setAiAccountInfo] = useState<AiAccountResult | null>(null);
   const [pendingProductCode, setPendingProductCode] = useState('ai_news');
   const [aiAccountName, setAiAccountName] = useState('');
-  const [aiAccountPassword, setAiAccountPassword] = useState('');
   const [aiAccountErrors, setAiAccountErrors] = useState<AiAccountFormErrors>({});
   const [selectedPlanCode, setSelectedPlanCode] = useState('');
   const [purchaseAgreementAccepted, setPurchaseAgreementAccepted] = useState(false);
@@ -258,7 +258,13 @@ export default function MemberPage(): JSX.Element {
     ) {
       return;
     }
-    setIntroProductCode(promotedProductCode);
+    const displayProduct = productComplianceMode === true
+      ? toCompliantProductType(promotedProduct)
+      : promotedProduct;
+    if (!displayProduct) {
+      return;
+    }
+    setIntroProduct(displayProduct);
     setProductTypeSheetVisible(false);
     setProductIntroVisible(true);
   }
@@ -349,37 +355,39 @@ export default function MemberPage(): JSX.Element {
 
   const isActive = data.membership.status === 'active';
   const isOpening = data.membership.status === 'opening';
-  const memberStatusLabel = data.membership.status === 'none' ? '立即开通' : data.membership.openStatusLabel ?? '立即开通';
   const displayedMembership = productComplianceMode === true
     ? toCompliantMembership(data.membership, backendProductTypes, backendPlans)
     : data.membership;
-  const planLabel = isActive || isOpening ? displayedMembership.planName ?? '会员套餐' : '普通会员';
   const remainCountdown = isActive
     ? formatRemainCountdown(data.membership.endAt, clockNow)
     : { value: String(data.membership.remainDays ?? 0), label: '剩余天数', remainMs: 0 };
-  const renewAvailable = isActive && remainCountdown.remainMs > 0 && remainCountdown.remainMs <= 2 * DAY_MS;
+  const hasVisibleMembership = isOpening || (isActive && Number(remainCountdown.value) > 0);
+  const noVisibleMembership = !hasVisibleMembership;
+  const memberActionLabel = noVisibleMembership ? '立即开通' : data.membership.openStatusLabel ?? '立即开通';
+  const memberActionStatus = noVisibleMembership ? 'none' : data.membership.status;
+  const planLabel = hasVisibleMembership ? displayedMembership.planName ?? '会员套餐' : '暂无会员';
+  const renewAvailable = isActive && remainCountdown.remainMs > DAY_MS && remainCountdown.remainMs <= 2 * DAY_MS;
   const membershipDurationMs = data.membership.startAt && data.membership.endAt
     ? Math.max(DAY_MS, data.membership.endAt - data.membership.startAt)
     : 30 * DAY_MS;
-  const progress = Math.max(8, Math.min(100, isActive ? Math.round((remainCountdown.remainMs / membershipDurationMs) * 100) : 8));
-  const expiryLabel = data.membership.status === 'none' ? '购买后开始计时' : isOpening ? '人工开通中' : formatDate(data.membership.endAt);
+  const progress = Math.max(8, Math.min(100, hasVisibleMembership && isActive ? Math.round((remainCountdown.remainMs / membershipDurationMs) * 100) : 8));
+  const expiryLabel = noVisibleMembership ? '开通后展示到期时间' : isOpening ? '人工开通中' : formatDate(data.membership.endAt);
   const currentProductCode = data.membership.productCode ?? 'ai_news';
   const mobileBound = isMobileBound(data.userInfo?.mobile);
   const authConsentGranted = hasAuthConsent(cachedUserInfo);
   const nickname = data.userInfo?.nickname ?? cachedUserInfo?.nickname ?? '微信用户';
   const avatarUrl = data.userInfo?.avatarUrl ?? cachedUserInfo?.avatarUrl ?? '';
   const productTypes = useMemo(
-    () => productComplianceMode === true
+    () => (productComplianceMode === true
       ? backendProductTypes
           .map(toCompliantProductType)
           .filter((item): item is ProductTypeView => Boolean(item))
-      : backendProductTypes,
+      : backendProductTypes).filter((item) => item.productCode !== 'claude_pro'),
     [backendProductTypes, productComplianceMode],
   );
   const membershipProduct = productTypes.find((item) => item.productCode === currentProductCode);
-  const memberCardAvatarUrl = data.membership.status === 'none' ? avatarUrl : membershipProduct?.avatarUrl || avatarUrl;
+  const memberCardAvatarUrl = noVisibleMembership ? avatarUrl : membershipProduct?.avatarUrl || avatarUrl;
   const activeProduct = productTypes.find((item) => item.productCode === activeProductCode);
-  const introProduct = productTypes.find((item) => item.productCode === introProductCode);
   const plansByProduct = useMemo(() => {
     const nextMap: Record<string, ProductPlanOption[]> = {};
     backendPlans.forEach((rawPlan) => {
@@ -400,13 +408,9 @@ export default function MemberPage(): JSX.Element {
   const finalPayAmount = selectedPlan ? Math.max(0, Number((selectedPlan.price - (usePointsDeduction ? pointsDeductAmount : 0)).toFixed(2))) : 0;
   const pointsDeductionAvailable = activeProductAvailable && maxPointsDeducted > 0;
   const aiAccountRegistered = Boolean(data.userInfo?.aiAccount?.registered || data.userInfo?.aiAccount?.email || cachedUserInfo?.aiAccountRegistered);
-  const aiAccountEmailDomainAvailable = data.userInfo?.aiAccount?.emailDomainAvailable !== false;
-  const aiAccountEmailSuffix = data.userInfo?.aiAccount?.emailDomain ?? DEFAULT_AI_ACCOUNT_EMAIL_SUFFIX;
-  const aiAccountSheetDescription = !aiAccountEmailDomainAvailable
-    ? '当前暂无可用邮箱域名，请联系管理员配置后再注册。'
-    : aiAccountSheetSource === 'purchase'
-      ? `请填写用于后台系统注册和交付的账号前缀，系统会自动拼接 ${aiAccountEmailSuffix}。注册成功后将继续选择套餐。`
-      : `你还没有注册交付账号。请填写账号前缀，系统会自动拼接 ${aiAccountEmailSuffix}。`;
+  const aiAccountSheetDescription = aiAccountSheetSource === 'purchase'
+    ? '请填写你已经注册好的账号邮箱。保存成功后将继续选择套餐。'
+    : '请填写你已经注册好的账号邮箱，后续服务会使用该账号信息。';
   const messageReminderAvailable = activeProductAvailable;
 
   function openPlanSheet(productCode: string): void {
@@ -432,18 +436,26 @@ export default function MemberPage(): JSX.Element {
     setProductTypeSheetVisible(false);
   }
 
-  function openProductIntro(productCode: string): void {
-    if (!productTypes.some((item) => item.productCode === productCode)) {
+  function openProductIntro(product: ProductTypeView | undefined, source: ProductIntroSource = 'productType'): void {
+    if (!product) {
       Taro.showToast({ title: '商品信息加载失败，请刷新后重试', icon: 'none' });
       return;
     }
-    setIntroProductCode(productCode);
-    setProductTypeSheetVisible(false);
+    setIntroProduct(product);
+    setProductIntroSource(source);
+    if (source === 'planSheet') {
+      setPlanSheetVisible(false);
+    } else {
+      setProductTypeSheetVisible(false);
+    }
     setProductIntroVisible(true);
   }
 
   function closeProductIntro(): void {
     setProductIntroVisible(false);
+    if (productIntroSource === 'planSheet') {
+      setPlanSheetVisible(true);
+    }
   }
 
   function closePlanSheet(): void {
@@ -457,6 +469,26 @@ export default function MemberPage(): JSX.Element {
     Taro.navigateTo({
       url: `/pages/webview/index?url=${encodeURIComponent(url)}`,
     });
+  }
+
+  function openProductDetailPage(): void {
+    const detailPageUrl = introProduct?.detailPageUrl ?? (introProduct ? PRODUCT_DETAIL_PAGE_URLS[introProduct.productCode] : undefined);
+    if (!detailPageUrl) {
+      Taro.showToast({ title: '详情页暂未配置', icon: 'none' });
+      return;
+    }
+    const targetUrl = detailPageUrl.startsWith('/')
+      ? detailPageUrl
+      : `/${detailPageUrl}`;
+    Taro.navigateTo({ url: targetUrl });
+  }
+
+  function openInvoicePage(): void {
+    Taro.navigateTo({ url: '/pages/invoice/index' });
+  }
+
+  function openActiveServicesPage(): void {
+    Taro.navigateTo({ url: '/pages/active-services/index' });
   }
 
   function hasLoggedInUser(): boolean {
@@ -521,6 +553,10 @@ export default function MemberPage(): JSX.Element {
       return;
     }
     setProductIntroVisible(false);
+    if (productIntroSource === 'planSheet') {
+      setPlanSheetVisible(true);
+      return;
+    }
     openSubscriptionFlow(introProduct.productCode);
   }
 
@@ -531,13 +567,10 @@ export default function MemberPage(): JSX.Element {
     if (!requireAuth({ type: 'saveAiAccount' })) {
       return;
     }
-    const validationErrors = validateAiAccountForm(aiAccountName, aiAccountPassword);
-    if (!aiAccountEmailDomainAvailable) {
-      validationErrors.submit = '当前暂无可用邮箱域名，请联系管理员配置后再注册';
-    }
+    const validationErrors = validateAiAccountForm(aiAccountName);
     setAiAccountErrors(validationErrors);
     if (Object.keys(validationErrors).length > 0) {
-      const firstError = validationErrors.submit ?? validationErrors.accountName ?? validationErrors.password;
+      const firstError = validationErrors.submit ?? validationErrors.accountName;
       if (firstError) {
         Taro.showToast({ title: firstError, icon: 'none' });
       }
@@ -546,8 +579,7 @@ export default function MemberPage(): JSX.Element {
     setSubmitting(true);
     try {
       const result = await callCloudFunction<SaveAiAccountResult>('save-ai-account', {
-        accountName: aiAccountName.trim(),
-        password: aiAccountPassword,
+        email: aiAccountName.trim(),
       });
       setData((prev) => ({
         ...prev,
@@ -562,7 +594,6 @@ export default function MemberPage(): JSX.Element {
       updateCachedUserInfo({ aiAccountRegistered: result.aiAccountRegistered });
       setAiAccountSheetVisible(false);
       setAiAccountName('');
-      setAiAccountPassword('');
       setAiAccountErrors({});
       if (aiAccountSheetSource === 'purchase') {
         openPlanSheet(pendingProductCode);
@@ -594,20 +625,13 @@ export default function MemberPage(): JSX.Element {
     setCachedUserInfo(nextInfo);
   }
 
-  function validateAiAccountForm(accountName: string, password: string): AiAccountFormErrors {
+  function validateAiAccountForm(accountName: string): AiAccountFormErrors {
     const errors: AiAccountFormErrors = {};
     const normalizedAccountName = accountName.trim().toLowerCase();
     if (!normalizedAccountName) {
-      errors.accountName = '请输入AI账号';
-    } else if (!/^[a-z][a-z0-9._-]{2,31}$/.test(normalizedAccountName)) {
-      errors.accountName = '账号需为3-32位小写字母开头，可含数字、点、下划线或中划线';
-    } else if (normalizedAccountName.includes('..') || normalizedAccountName.startsWith('.') || normalizedAccountName.endsWith('.')) {
-      errors.accountName = '账号格式不正确，请调整点号位置';
-    }
-
-    const passwordError = password ? validateAiAccountPassword(password) : '请输入账号密码';
-    if (passwordError) {
-      errors.password = passwordError;
+      errors.accountName = '请输入账号邮箱';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedAccountName)) {
+      errors.accountName = '请输入正确的邮箱账号';
     }
 
     return errors;
@@ -872,7 +896,7 @@ export default function MemberPage(): JSX.Element {
     if (!aiAccountRegistered) {
       await Taro.showModal({
         title: '暂无验证码',
-        content: '你还没有注册交付账号，暂无可查看的验证码。',
+        content: '你还没有填写账号信息，暂无可查看的验证码。',
         showCancel: false,
         confirmText: '知道了',
       });
@@ -983,10 +1007,10 @@ export default function MemberPage(): JSX.Element {
                 </View>
                 <View className='member-profile__copy'>
                   <Text
-                    className={`member-plan-title__status member-plan-title__status--${renewAvailable ? 'none' : data.membership.status}`}
-                    onClick={() => (data.membership.status === 'none' || renewAvailable) && openProductTypeSheet()}
+                    className={`member-plan-title__status member-plan-title__status--${renewAvailable ? 'none' : memberActionStatus}`}
+                    onClick={() => (noVisibleMembership || renewAvailable) && openProductTypeSheet()}
                   >
-                    {renewAvailable ? '立即续费' : memberStatusLabel}
+                    {renewAvailable ? '立即续费' : memberActionLabel}
                   </Text>
                 </View>
               </View>
@@ -1037,7 +1061,7 @@ export default function MemberPage(): JSX.Element {
                   {index > 0 ? <View className='member-divider' /> : null}
                   <View
                     className={`member-right-item ${product.available ? '' : 'member-right-item--disabled'}`}
-                    onClick={() => openProductIntro(product.productCode)}
+                    onClick={() => openProductIntro(product)}
                   >
                     <View className='member-product-type__main'>
                       {product.avatarUrl ? (
@@ -1068,6 +1092,17 @@ export default function MemberPage(): JSX.Element {
         <View className='member-section'>
           <Text className='member-section__title'>服务与支持</Text>
           <View className='member-list-card'>
+            <View className='member-service-item' onClick={openActiveServicesPage}>
+              <View className='member-service-item__icon'>
+                <Image className='member-service-item__image' src={ACTIVE_SERVICE_ICON} mode='aspectFit' />
+              </View>
+              <View className='member-service-item__copy'>
+                <Text className='member-service-item__title'>生效服务</Text>
+                <Text className='member-service-item__desc'>查看当前有效期内的商品</Text>
+              </View>
+              <Image className='member-service-item__arrow' src={CHEVRON_RIGHT_ICON} mode='aspectFit' />
+            </View>
+            <View className='member-divider' />
             <View className='member-service-item' onClick={() => void handleShowAiAccount()}>
               <View className='member-service-item__icon'>
                 <Image className='member-service-item__image' src={ACCOUNT_INFO_ICON} mode='aspectFit' />
@@ -1100,6 +1135,17 @@ export default function MemberPage(): JSX.Element {
               </View>
               <Image className='member-service-item__arrow' src={CHEVRON_RIGHT_ICON} mode='aspectFit' />
             </Button>
+            <View className='member-divider' />
+            <View className='member-service-item' onClick={openInvoicePage}>
+              <View className='member-service-item__icon'>
+                <Image className='member-service-item__image' src={INVOICE_ICON} mode='aspectFit' />
+              </View>
+              <View className='member-service-item__copy'>
+                <Text className='member-service-item__title'>开发票</Text>
+                <Text className='member-service-item__desc'>已完成订单可申请电子发票</Text>
+              </View>
+              <Image className='member-service-item__arrow' src={CHEVRON_RIGHT_ICON} mode='aspectFit' />
+            </View>
             <View className='member-divider' />
             <View className='member-service-item' onClick={() => void handleToggleReminder()}>
               <View className='member-service-item__icon'>
@@ -1138,7 +1184,7 @@ export default function MemberPage(): JSX.Element {
               <View
                 key={product.productCode}
                 className={`product-type-sheet__item ${product.available ? '' : 'product-type-sheet__item--disabled'}`}
-                onClick={() => openProductIntro(product.productCode)}
+                onClick={() => openProductIntro(product)}
               >
                 <View className='product-type-sheet__main'>
                   {product.avatarUrl ? (
@@ -1184,53 +1230,41 @@ export default function MemberPage(): JSX.Element {
           className={`saas-button plan-sheet__button ${introProduct?.available ? '' : 'saas-button--disabled'}`}
           onClick={continueFromProductIntro}
         >
-          {introProduct?.available ? '查看套餐' : introProduct?.tag ?? '暂不可用'}
+          {introProduct?.available ? (productIntroSource === 'planSheet' ? '返回套餐' : '选择套餐') : introProduct?.tag ?? '暂不可用'}
+        </Button>
+        <Button className='saas-button plan-sheet__button plan-sheet__detail-button' onClick={openProductDetailPage}>
+          查看详情
         </Button>
       </PopLayout>
 
       <PopLayout visible={aiAccountSheetVisible} onClose={() => setAiAccountSheetVisible(false)} panelClassName='ai-account-sheet'>
         <View className='plan-sheet__head'>
           <View>
-            <Text className='plan-sheet__label'>AI 账号注册</Text>
-            <Text className='plan-sheet__title'>注册交付账号</Text>
+            <Text className='plan-sheet__label'>AI 账号信息</Text>
+            <Text className='plan-sheet__title'>填写账号信息</Text>
           </View>
           <Text className='plan-sheet__close' onClick={() => setAiAccountSheetVisible(false)}>×</Text>
         </View>
         <Text className='plan-sheet__desc'>{aiAccountSheetDescription}</Text>
         <View className='ai-account-form'>
           <View className='ai-account-field'>
-            <Text className='ai-account-field__label'>AI账号</Text>
+            <Text className='ai-account-field__label'>账号邮箱</Text>
             <Input
               className='ai-account-field__input'
               value={aiAccountName}
-              placeholder='请输入账号前缀'
+              placeholder='请输入已注册好的邮箱'
               type='text'
               onInput={(event) => {
                 setAiAccountName(event.detail.value);
                 setAiAccountErrors((prev) => ({ ...prev, accountName: undefined, submit: undefined }));
               }}
             />
-            <Text className='ai-account-field__suffix'>{aiAccountEmailDomainAvailable ? aiAccountEmailSuffix : '--'}</Text>
             {aiAccountErrors.accountName ? <Text className='ai-account-field__error'>{aiAccountErrors.accountName}</Text> : null}
-          </View>
-          <View className='ai-account-field'>
-            <Text className='ai-account-field__label'>账号密码</Text>
-            <Input
-              className='ai-account-field__input'
-              value={aiAccountPassword}
-              placeholder={AI_ACCOUNT_PASSWORD_HINT}
-              password
-              onInput={(event) => {
-                setAiAccountPassword(event.detail.value);
-                setAiAccountErrors((prev) => ({ ...prev, password: undefined, submit: undefined }));
-              }}
-            />
-            {aiAccountErrors.password ? <Text className='ai-account-field__error'>{aiAccountErrors.password}</Text> : null}
           </View>
         </View>
         {aiAccountErrors.submit ? <Text className='ai-account-form__error'>{aiAccountErrors.submit}</Text> : null}
         <Button className='saas-button plan-sheet__button' loading={submitting} onClick={() => void handleSaveAiAccount()}>
-          立即注册
+          保存账号
         </Button>
       </PopLayout>
 
@@ -1238,13 +1272,13 @@ export default function MemberPage(): JSX.Element {
         <View className='ai-account-info__head'>
           <View>
             <Text className='plan-sheet__label'>AI 账号信息</Text>
-            <Text className='plan-sheet__title'>账号与密码</Text>
+            <Text className='plan-sheet__title'>账号邮箱</Text>
           </View>
           <Text className='plan-sheet__close' onClick={closeAiAccountInfo}>
             ×
           </Text>
         </View>
-        <Text className='plan-sheet__desc'>账号和密码分开复制，方便直接登录或转发到电脑端使用。</Text>
+        <Text className='plan-sheet__desc'>这里展示你保存的已注册账号邮箱，方便复制给运营处理。</Text>
         <View className='ai-account-info__list'>
           <View className='ai-account-info__item'>
             <View className='ai-account-info__row'>
@@ -1264,26 +1298,6 @@ export default function MemberPage(): JSX.Element {
               </Button>
             </View>
           </View>
-          <View className='ai-account-info__item'>
-            <View className='ai-account-info__row'>
-              <View>
-                <Text className='ai-account-info__label'>密码</Text>
-                <Text className='ai-account-info__value ai-account-info__value--secret'>
-                  {aiAccountInfo?.password ? maskSecret(aiAccountInfo.password) : '--'}
-                </Text>
-              </View>
-              <Button
-                className='ai-account-info__copy'
-                disabled={!aiAccountInfo?.password}
-                onClick={() => {
-                  if (!aiAccountInfo?.password) return;
-                  void copyAiAccountValue(aiAccountInfo.password, '密码');
-                }}
-              >
-                复制密码
-              </Button>
-            </View>
-          </View>
         </View>
       </PopLayout>
 
@@ -1292,9 +1306,9 @@ export default function MemberPage(): JSX.Element {
               <View>
                 <Text className='plan-sheet__label'>会员方案</Text>
                 <Text className='plan-sheet__title'>{activeProduct?.label ?? '商品信息'}</Text>
-              </View>
-              <Text className='plan-sheet__close' onClick={closePlanSheet}>×</Text>
             </View>
+            <Text className='plan-sheet__close' onClick={closePlanSheet}>×</Text>
+          </View>
             <Text className='plan-sheet__desc'>{activeProduct?.description ?? '暂未获取到商品信息，请刷新后重试。'}</Text>
             <View className='plan-sheet__plans'>
               {activePlans.length === 0 ? (
@@ -1315,7 +1329,7 @@ export default function MemberPage(): JSX.Element {
                     className={`plan-option ${selected ? 'plan-option--selected' : ''}`}
                     onClick={() => setSelectedPlanCode(plan.planCode)}
                   >
-                    <View>
+                    <View className='plan-option__copy'>
                       <Text className='plan-option__name'>{plan.displayName}</Text>
                       <Text className='plan-option__duration'>{plan.durationLabel}</Text>
                     </View>

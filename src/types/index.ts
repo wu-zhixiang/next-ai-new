@@ -1,5 +1,6 @@
 export type MembershipStatus = 'opening' | 'active' | 'expired' | 'cancelled' | 'none';
 export type ExpireTag = 'normal' | 'within_30d' | 'within_7d' | 'within_3d' | 'expired';
+export type InvoiceStatus = 'submitted' | 'processing' | 'issued' | 'failed' | 'rejected';
 
 export interface ApiResponse<T> {
   code: number;
@@ -47,6 +48,7 @@ export interface ProductTypeView {
   label: string;
   tag: string;
   avatarUrl?: string;
+  detailPageUrl?: string;
   available: boolean;
   description: string;
   introHighlights: Array<{
@@ -58,6 +60,7 @@ export interface ProductTypeView {
     label: string;
     tag: string;
     avatarUrl?: string;
+    detailPageUrl?: string;
     description: string;
     introHighlights?: Array<{
       title: string;
@@ -95,4 +98,51 @@ export interface AiNewsDetailView extends AiNewsView {
   videoSourceUrl?: string;
   videoDuration?: number;
   videoSize?: number;
+}
+
+export interface InvoiceOrderView {
+  orderNo: string;
+  productCode: string;
+  productName: string;
+  planCode: string;
+  planName: string;
+  amount: number;
+  paidAt?: number;
+  fulfilledAt?: number;
+}
+
+export interface InvoiceProfileView {
+  titleType: 'personal' | 'company';
+  title: string;
+  taxNo?: string;
+  email: string;
+}
+
+export interface InvoiceRequestView {
+  invoiceNo: string;
+  scene?: 'WITH_WECHATPAY' | 'WITHOUT_WECHATPAY';
+  fapiaoApplyId?: string;
+  fapiaoId?: string;
+  wechatTransactionId?: string;
+  orderNos: string[];
+  orders: InvoiceOrderView[];
+  amount: number;
+  titleType: 'personal' | 'company';
+  title: string;
+  taxNo?: string;
+  email: string;
+  status: InvoiceStatus;
+  operatorNote?: string;
+  rejectReason?: string;
+  failReason?: string;
+  wechatFapiaoStatus?: string;
+  cardOpenid?: string;
+  invoiceCode?: string;
+  invoiceNumber?: string;
+  invoiceNoFromWechat?: string;
+  invoiceFileUrl?: string;
+  invoiceFileId?: string;
+  issuedAt?: number;
+  createdAt: number;
+  updatedAt: number;
 }

@@ -9,6 +9,7 @@ function toProductTypeView(record: ProductTypeRecord): ProductTypeView {
     label: record.label,
     tag: record.tag,
     avatarUrl: record.avatarUrl,
+    detailPageUrl: record.detailPageUrl,
     available: record.available,
     description: record.description,
     introHighlights: record.introHighlights ?? [],

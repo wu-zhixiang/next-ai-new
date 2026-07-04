@@ -18,6 +18,9 @@ exports.getPlanByPid = getPlanByPid;
 exports.getOrderByNo = getOrderByNo;
 exports.getLatestPendingOrderByUserId = getLatestPendingOrderByUserId;
 exports.listOrdersByUserId = listOrdersByUserId;
+exports.listInvoiceRequestsByUserId = listInvoiceRequestsByUserId;
+exports.getInvoiceRequestByNo = getInvoiceRequestByNo;
+exports.getInvoiceRequestByFapiaoApplyId = getInvoiceRequestByFapiaoApplyId;
 exports.listPendingOrdersByUserId = listPendingOrdersByUserId;
 exports.listInviteRelationsByInviterId = listInviteRelationsByInviterId;
 exports.getLatestEmailVerificationCode = getLatestEmailVerificationCode;
@@ -115,6 +118,20 @@ async function getLatestPendingOrderByUserId(userId, productCode) {
 async function listOrdersByUserId(userId) {
     const result = await collection('orders').where({ userId }).get();
     return result.data.sort((left, right) => right.createdAt - left.createdAt);
+}
+async function listInvoiceRequestsByUserId(userId) {
+    const result = await collection('invoiceRequests').where({ userId }).get();
+    return result.data.sort((left, right) => right.createdAt - left.createdAt);
+}
+async function getInvoiceRequestByNo(invoiceNo) {
+    var _a;
+    const result = await collection('invoiceRequests').where({ invoiceNo }).limit(1).get();
+    return (_a = result.data[0]) !== null && _a !== void 0 ? _a : null;
+}
+async function getInvoiceRequestByFapiaoApplyId(fapiaoApplyId) {
+    var _a;
+    const result = await collection('invoiceRequests').where({ fapiaoApplyId }).limit(1).get();
+    return (_a = result.data[0]) !== null && _a !== void 0 ? _a : null;
 }
 async function listPendingOrdersByUserId(userId) {
     const result = await collection('orders').where({ userId, payStatus: 'pending' }).get();

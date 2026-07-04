@@ -19,6 +19,9 @@ const crypto_1 = __importDefault(require("crypto"));
 const https_1 = __importDefault(require("https"));
 const constants_1 = require("./constants");
 const utils_1 = require("./utils");
+function buildWechatPayAttach(order) {
+    return JSON.stringify({ orderNo: order.orderNo });
+}
 function normalizeWechatPaymentParams(result) {
     var _a, _b;
     const candidate = ((_a = result.payment) !== null && _a !== void 0 ? _a : result.payInfo);
@@ -215,12 +218,7 @@ async function createWechatPayV2Order(order, openid) {
         notify_url: config.notifyUrl,
         trade_type: 'JSAPI',
         openid,
-        attach: JSON.stringify({
-            orderNo: order.orderNo,
-            productCode: order.productCode,
-            planCode: order.planCode,
-            userId: order.userId,
-        }),
+        attach: buildWechatPayAttach(order),
     };
     const sign = signWechatPayV2(requestParams, config.apiKey);
     const httpResponse = await postWechatPayXml('https://api.mch.weixin.qq.com/pay/unifiedorder', buildWechatPayXml({
@@ -322,12 +320,7 @@ async function createWechatVirtualPaymentOrder(order, jsCode) {
         productId: getVirtualPaymentProductId(order),
         goodsPrice: (0, utils_1.toWechatPaymentAmount)(order.amount),
         outTradeNo: order.orderNo,
-        attach: JSON.stringify({
-            orderNo: order.orderNo,
-            productCode: order.productCode,
-            planCode: order.planCode,
-            userId: order.userId,
-        }),
+        attach: buildWechatPayAttach(order),
     };
     const signDataString = JSON.stringify(signData);
     return {
@@ -366,12 +359,7 @@ async function createWechatPayOrder(order) {
         envId: config.envId,
         functionName: config.notifyFunctionName,
         spbillCreateIp: config.spbillCreateIp,
-        attach: JSON.stringify({
-            orderNo: order.orderNo,
-            productCode: order.productCode,
-            planCode: order.planCode,
-            userId: order.userId,
-        }),
+        attach: buildWechatPayAttach(order),
     });
     console.log(JSON.stringify({
         tag: 'cloudPay.unifiedOrder',

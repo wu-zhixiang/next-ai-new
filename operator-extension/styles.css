@@ -133,8 +133,7 @@ h1 {
 }
 
 .tabs {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display: flex;
   gap: 8px;
   margin-top: 14px;
   padding: 4px;
@@ -143,6 +142,7 @@ h1 {
 }
 
 .tab-button {
+  flex: 1 1 0;
   height: 34px;
   border: 0;
   border-radius: 9px;
@@ -173,18 +173,46 @@ h1 {
 }
 
 .summary {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 12px;
   margin-top: 16px;
-  padding: 12px 14px;
+  padding: 14px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 14px;
   background: rgba(255, 255, 255, 0.72);
   color: var(--muted);
   font-size: 13px;
 }
 
+.summary > div {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
 .summary span:first-child {
   color: var(--primary-strong);
-  font-size: 22px;
+  font-size: 24px;
+  line-height: 1;
+  font-weight: 800;
+}
+
+.summary-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.summary-action {
+  min-height: 34px;
+  padding: 7px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+  font-size: 13px;
   font-weight: 800;
 }
 
@@ -195,7 +223,8 @@ h1 {
 }
 
 .news-panel,
-.register-panel {
+.register-panel,
+.invoices-panel {
   margin-top: 16px;
 }
 
@@ -248,6 +277,28 @@ h1 {
   min-height: 92px;
   resize: vertical;
   line-height: 1.5;
+}
+
+.invoice-card__status {
+  color: var(--primary-strong);
+}
+
+.invoice-card__orders,
+.invoice-card__note {
+  width: 100%;
+  min-height: 78px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 9px 10px;
+  background: #fbfdfc;
+  color: var(--ink);
+  line-height: 1.5;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.invoice-card.is-processing {
+  border-color: rgba(69, 122, 96, 0.42);
 }
 
 .tags-dropdown {

@@ -4,6 +4,7 @@ import type {
   AppStoreEmailVerificationCodeRecord,
   DeliveryRecord,
   EmailVerificationCodeRecord,
+  InvoiceRequestRecord,
   InviteRelationRecord,
   MemberPlanRecord,
   MembershipRecord,
@@ -120,6 +121,23 @@ export async function getLatestPendingOrderByUserId(
 export async function listOrdersByUserId(userId: string): Promise<Array<OrderRecord & { _id: string }>> {
   const result = await collection('orders').where({ userId }).get();
   return (result.data as Array<OrderRecord & { _id: string }>).sort((left, right) => right.createdAt - left.createdAt);
+}
+
+export async function listInvoiceRequestsByUserId(userId: string): Promise<Array<InvoiceRequestRecord & { _id: string }>> {
+  const result = await collection('invoiceRequests').where({ userId }).get();
+  return (result.data as Array<InvoiceRequestRecord & { _id: string }>).sort((left, right) => right.createdAt - left.createdAt);
+}
+
+export async function getInvoiceRequestByNo(invoiceNo: string): Promise<(InvoiceRequestRecord & { _id: string }) | null> {
+  const result = await collection('invoiceRequests').where({ invoiceNo }).limit(1).get();
+  return (result.data[0] as (InvoiceRequestRecord & { _id: string }) | undefined) ?? null;
+}
+
+export async function getInvoiceRequestByFapiaoApplyId(
+  fapiaoApplyId: string,
+): Promise<(InvoiceRequestRecord & { _id: string }) | null> {
+  const result = await collection('invoiceRequests').where({ fapiaoApplyId }).limit(1).get();
+  return (result.data[0] as (InvoiceRequestRecord & { _id: string }) | undefined) ?? null;
 }
 
 export async function listPendingOrdersByUserId(userId: string): Promise<Array<OrderRecord & { _id: string }>> {

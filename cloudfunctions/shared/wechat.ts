@@ -165,6 +165,10 @@ export interface WechatPayV2Notify {
   sign?: string;
 }
 
+function buildWechatPayAttach(order: OrderRecord): string {
+  return JSON.stringify({ orderNo: order.orderNo });
+}
+
 function normalizeWechatPaymentParams(result: UnifiedOrderResult): WechatPaymentParams | null {
   const candidate = (result.payment ?? result.payInfo) as RawWechatPaymentParams | undefined;
   if (!candidate) {
@@ -393,12 +397,7 @@ export async function createWechatPayV2Order(
     notify_url: config.notifyUrl,
     trade_type: 'JSAPI',
     openid,
-    attach: JSON.stringify({
-      orderNo: order.orderNo,
-      productCode: order.productCode,
-      planCode: order.planCode,
-      userId: order.userId,
-    }),
+    attach: buildWechatPayAttach(order),
   };
   const sign = signWechatPayV2(requestParams, config.apiKey);
   const httpResponse = await postWechatPayXml('https://api.mch.weixin.qq.com/pay/unifiedorder', buildWechatPayXml({
@@ -530,12 +529,7 @@ export async function createWechatVirtualPaymentOrder(
     productId: getVirtualPaymentProductId(order),
     goodsPrice: toWechatPaymentAmount(order.amount),
     outTradeNo: order.orderNo,
-    attach: JSON.stringify({
-      orderNo: order.orderNo,
-      productCode: order.productCode,
-      planCode: order.planCode,
-      userId: order.userId,
-    }),
+    attach: buildWechatPayAttach(order),
   };
   const signDataString = JSON.stringify(signData);
 
@@ -579,12 +573,7 @@ export async function createWechatPayOrder(order: OrderRecord): Promise<WechatPa
     envId: config.envId,
     functionName: config.notifyFunctionName,
     spbillCreateIp: config.spbillCreateIp,
-    attach: JSON.stringify({
-      orderNo: order.orderNo,
-      productCode: order.productCode,
-      planCode: order.planCode,
-      userId: order.userId,
-    }),
+    attach: buildWechatPayAttach(order),
   });
 
   console.log(

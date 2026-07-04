@@ -30,7 +30,8 @@
       <nav class="tabs" aria-label="运营功能">
         <button id="ordersTabBtn" class="tab-button tab-button--active" type="button">订单</button>
         <button id="newsTabBtn" class="tab-button" type="button">资讯</button>
-        <button id="registerTabBtn" class="tab-button" type="button">注册</button>
+        <button id="registerTabBtn" class="tab-button hidden" type="button">注册</button>
+        <button id="invoicesTabBtn" class="tab-button" type="button">开发票</button>
       </nav>
 
       <section id="ordersPanel">
@@ -193,6 +194,27 @@
         </div>
       </section>
 
+      <section id="invoicesPanel" class="invoices-panel hidden">
+        <section id="invoiceSummary" class="summary hidden">
+          <div>
+            <span id="invoiceCount">0</span>
+            <span>个开票申请</span>
+          </div>
+          <div class="summary-actions">
+            <button id="exportInvoicesBtn" class="secondary-button summary-action" type="button">批量导出</button>
+            <button id="markInvoicesProcessingBtn" class="secondary-button summary-action" type="button">处理中</button>
+            <button id="issueInvoicesBtn" class="primary-button summary-action" type="button">已开票</button>
+          </div>
+        </section>
+
+        <section id="invoiceEmptyState" class="empty hidden">
+          <p>暂无待开发票申请</p>
+          <span>用户提交申请后会出现在这里。</span>
+        </section>
+
+        <section id="invoiceList" class="task-list"></section>
+      </section>
+
       <section id="confirmDialog" class="confirm-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
         <div class="confirm-dialog__panel">
           <p class="eyebrow">确认操作</p>
@@ -243,7 +265,7 @@
           </div>
         </div>
 
-        <div class="credential">
+        <div class="credential hidden">
           <label>密码</label>
           <div class="copy-row">
             <input class="task-card__password" readonly type="password" />
@@ -251,7 +273,7 @@
           </div>
         </div>
 
-        <div class="credential">
+        <div class="credential hidden">
           <label>邮箱验证码</label>
           <div class="copy-row">
             <input class="task-card__code" readonly placeholder="点击获取最近验证码" />
@@ -259,7 +281,7 @@
           </div>
         </div>
 
-        <div class="credential credential--apple">
+        <div class="credential credential--apple hidden">
           <label>Apple Store 账号</label>
           <div class="copy-row">
             <input class="task-card__apple-email" placeholder="可点击获取，也可手动输入 Apple 邮箱" />
@@ -267,7 +289,7 @@
           </div>
         </div>
 
-        <div class="credential">
+        <div class="credential hidden">
           <label>Apple Store 密码</label>
           <div class="copy-row">
             <input class="task-card__apple-password" type="password" placeholder="获取后自动填入，也可手动输入" />
@@ -280,7 +302,69 @@
         <div class="actions">
           <button class="open-site secondary-button" type="button">打开官网</button>
           <button class="mark-processing secondary-button" type="button">处理中</button>
+          <button class="delete-order secondary-button" type="button">删除订单</button>
           <button class="mark-done primary-button" type="button">已开通</button>
+        </div>
+      </article>
+    </template>
+
+    <template id="invoiceTemplate">
+      <article class="task-card invoice-card">
+        <div class="task-card__head">
+          <div>
+            <p class="task-card__product invoice-card__status"></p>
+            <h2 class="task-card__plan invoice-card__title"></h2>
+          </div>
+          <span class="task-card__amount invoice-card__amount"></span>
+        </div>
+
+        <dl class="meta-grid">
+          <div>
+            <dt>申请号</dt>
+            <dd class="invoice-card__no"></dd>
+          </div>
+          <div>
+            <dt>申请时间</dt>
+            <dd class="invoice-card__created-at"></dd>
+          </div>
+          <div>
+            <dt>用户</dt>
+            <dd class="invoice-card__user"></dd>
+          </div>
+          <div>
+            <dt>订单数</dt>
+            <dd class="invoice-card__order-count"></dd>
+          </div>
+        </dl>
+
+        <div class="credential">
+          <label>接收邮箱</label>
+          <div class="copy-row">
+            <input class="invoice-card__email" readonly />
+            <button class="copy-invoice-email" type="button">复制</button>
+          </div>
+        </div>
+
+        <div class="credential">
+          <label>纳税人识别号</label>
+          <div class="copy-row">
+            <input class="invoice-card__tax-no" readonly />
+            <button class="copy-invoice-tax" type="button">复制</button>
+          </div>
+        </div>
+
+        <div class="credential">
+          <label>订单号</label>
+          <textarea class="invoice-card__orders" readonly></textarea>
+        </div>
+
+        <div class="credential">
+          <label>备注 / 驳回原因</label>
+          <textarea class="task-card__note invoice-card__note" placeholder="备注或驳回原因"></textarea>
+        </div>
+
+        <div class="actions invoice-card__actions">
+          <button class="secondary-button reject-invoice" type="button">驳回</button>
         </div>
       </article>
     </template>

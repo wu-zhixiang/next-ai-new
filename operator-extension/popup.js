@@ -15,6 +15,9 @@ const FALLBACK_PRODUCT_TYPES = [
   { productCode: 'claude_pro', productName: 'Claude', label: 'Claude', available: true }
 ];
 const MAX_COVER_DATA_URL_LENGTH = 2 * 1024 * 1024;
+const INVOICE_TAX_ITEM_NAME = '服务费';
+const INVOICE_TAX_CODE = '3040203000000000000';
+const INVOICE_TAX_RATE = '0.03';
 const NEWS_TAG_TREE = [
   {
     group: 'AI巨头',
@@ -47,9 +50,11 @@ const els = {
   ordersTabBtn: document.querySelector('#ordersTabBtn'),
   newsTabBtn: document.querySelector('#newsTabBtn'),
   registerTabBtn: document.querySelector('#registerTabBtn'),
+  invoicesTabBtn: document.querySelector('#invoicesTabBtn'),
   ordersPanel: document.querySelector('#ordersPanel'),
   newsPanel: document.querySelector('#newsPanel'),
   registerPanel: document.querySelector('#registerPanel'),
+  invoicesPanel: document.querySelector('#invoicesPanel'),
   fillCurrentTabBtn: document.querySelector('#fillCurrentTabBtn'),
   clearNewsFormBtn: document.querySelector('#clearNewsFormBtn'),
   submitNewsBtn: document.querySelector('#submitNewsBtn'),
@@ -87,9 +92,17 @@ const els = {
   copyAppleVerificationCodeBtn: document.querySelector('#copyAppleVerificationCodeBtn'),
   taskList: document.querySelector('#taskList'),
   taskTemplate: document.querySelector('#taskTemplate'),
+  invoiceList: document.querySelector('#invoiceList'),
+  invoiceTemplate: document.querySelector('#invoiceTemplate'),
   emptyState: document.querySelector('#emptyState'),
+  invoiceEmptyState: document.querySelector('#invoiceEmptyState'),
   summary: document.querySelector('#summary'),
   taskCount: document.querySelector('#taskCount'),
+  invoiceSummary: document.querySelector('#invoiceSummary'),
+  invoiceCount: document.querySelector('#invoiceCount'),
+  exportInvoicesBtn: document.querySelector('#exportInvoicesBtn'),
+  markInvoicesProcessingBtn: document.querySelector('#markInvoicesProcessingBtn'),
+  issueInvoicesBtn: document.querySelector('#issueInvoicesBtn'),
   confirmDialog: document.querySelector('#confirmDialog'),
   confirmOrderNo: document.querySelector('#confirmOrderNo'),
   cancelFulfillBtn: document.querySelector('#cancelFulfillBtn'),
@@ -109,6 +122,8 @@ let lastAppleVerificationEmail = '';
 let lastAppleVerificationExpired = false;
 let appStoreCountries = [...FALLBACK_APPSTORE_COUNTRIES];
 let productTypes = [...FALLBACK_PRODUCT_TYPES];
+let currentPanel = 'orders';
+let currentInvoices = [];
 
 document.addEventListener('DOMContentLoaded', async () => {
   settings = await getSettings();
@@ -127,8 +142,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 function bindActions() {
   els.openOptionsBtn.addEventListener('click', () => chrome.runtime.openOptionsPage());
-  els.refreshBtn.addEventListener('click', loadTasks);
-  els.loadBtn.addEventListener('click', loadTasks);
+  els.refreshBtn.addEventListener('click', loadCurrentPanel);
+  els.loadBtn.addEventListener('click', loadCurrentPanel);
   els.openChatgptBtn.addEventListener('click', () => openTab(settings.chatgptUrl || DEFAULT_SETTINGS.chatgptUrl));
   els.ordersTabBtn.addEventListener('click', () => switchPanel('orders'));
   els.newsTabBtn.addEventListener('click', () => switchPanel('news'));
@@ -140,6 +155,10 @@ function bindActions() {
       await loadAppleAccountOptions();
     }
     switchPanel('register');
+  });
+  els.invoicesTabBtn.addEventListener('click', async () => {
+    switchPanel('invoices');
+    await loadInvoices();
   });
   els.fillCurrentTabBtn.addEventListener('click', fillNewsFromCurrentTab);
   els.clearNewsFormBtn.addEventListener('click', clearNewsForm);
@@ -162,6 +181,9 @@ function bindActions() {
   els.copyAppleAccountPasswordBtn.addEventListener('click', () => copyText(els.appleAccountPassword.value, 'Apple 密码已复制'));
   els.fetchAppleVerificationCodeBtn.addEventListener('click', () => void fetchAppleVerificationCode());
   els.copyAppleVerificationCodeBtn.addEventListener('click', () => copyText(els.appleAccountVerificationCode.value, '验证码已复制'));
+  els.exportInvoicesBtn.addEventListener('click', exportCurrentInvoices);
+  els.markInvoicesProcessingBtn.addEventListener('click', () => updateInvoicesBatch('processing'));
+  els.issueInvoicesBtn.addEventListener('click', () => updateInvoicesBatch('issued'));
   els.appleAccountEmail.addEventListener('input', () => resetAppleVerificationState());
   els.cancelFulfillBtn.addEventListener('click', closeFulfillConfirm);
   els.confirmDialog.addEventListener('click', (event) => {
@@ -236,12 +258,24 @@ function handleOutsideClick(event) {
 function switchPanel(panel) {
   const isNews = panel === 'news';
   const isRegister = panel === 'register';
-  els.ordersPanel.classList.toggle('hidden', isNews || isRegister);
+  const isInvoices = panel === 'invoices';
+  currentPanel = panel;
+  els.ordersPanel.classList.toggle('hidden', isNews || isRegister || isInvoices);
   els.newsPanel.classList.toggle('hidden', !isNews);
   els.registerPanel.classList.toggle('hidden', !isRegister);
-  els.ordersTabBtn.classList.toggle('tab-button--active', !isNews && !isRegister);
+  els.invoicesPanel.classList.toggle('hidden', !isInvoices);
+  els.ordersTabBtn.classList.toggle('tab-button--active', !isNews && !isRegister && !isInvoices);
   els.newsTabBtn.classList.toggle('tab-button--active', isNews);
   els.registerTabBtn.classList.toggle('tab-button--active', isRegister);
+  els.invoicesTabBtn.classList.toggle('tab-button--active', isInvoices);
+}
+
+async function loadCurrentPanel() {
+  if (currentPanel === 'invoices') {
+    await loadInvoices();
+    return;
+  }
+  await loadTasks();
 }
 
 function getSettings() {
@@ -292,6 +326,542 @@ async function loadTasks() {
   }
 }
 
+async function loadInvoices() {
+  settings = await getSettings();
+  updateSetupNotice();
+  if (!isConfigured()) return;
+
+  setLoading(true);
+  try {
+    const [submittedData, processingData] = await Promise.all([
+      apiRequest('/operator/invoices?status=submitted', { method: 'GET' }),
+      apiRequest('/operator/invoices?status=processing', { method: 'GET' })
+    ]);
+    const invoices = [
+      ...(Array.isArray(submittedData.invoices) ? submittedData.invoices : []),
+      ...(Array.isArray(processingData.invoices) ? processingData.invoices : [])
+    ].sort((left, right) => Number(right.createdAt || 0) - Number(left.createdAt || 0));
+    renderInvoices(invoices);
+  } catch (error) {
+    showError(error);
+  } finally {
+    setLoading(false);
+  }
+}
+
+function escapeXml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function columnName(index) {
+  let name = '';
+  let current = index;
+  while (current > 0) {
+    current -= 1;
+    name = String.fromCharCode(65 + (current % 26)) + name;
+    current = Math.floor(current / 26);
+  }
+  return name;
+}
+
+function buildXlsxCell(rowIndex, columnIndex, value) {
+  if (value === undefined || value === null || value === '') {
+    return '';
+  }
+  const ref = `${columnName(columnIndex)}${rowIndex}`;
+  return `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${escapeXml(value)}</t></is></c>`;
+}
+
+function buildXlsxRow(rowIndex, cells) {
+  const content = Object.entries(cells)
+    .map(([columnIndex, value]) => buildXlsxCell(rowIndex, Number(columnIndex), value))
+    .join('');
+  return `<row r="${rowIndex}">${content}</row>`;
+}
+
+function createInvoiceSerial(index) {
+  const date = new Date();
+  return `FP${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}${String(index + 1).padStart(4, '0')}`;
+}
+
+function createInvoiceExportRows(invoices) {
+  return invoices.map((invoice, index) => ({
+    serial: createInvoiceSerial(index),
+    invoice,
+  }));
+}
+
+function buildWorksheetXml(rows, lastColumnName) {
+  const rowCount = Math.max(4, rows.length);
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <dimension ref="A1:${lastColumnName}${rowCount}"/>
+  <sheetViews><sheetView workbookViewId="0"/></sheetViews>
+  <sheetFormatPr defaultRowHeight="15"/>
+  <sheetData>${rows.join('')}</sheetData>
+</worksheet>`;
+}
+
+function buildInvoiceBasicInfoSheet(exportRows) {
+  const rows = [
+    buildXlsxRow(1, {
+      1: '填表说明：每个发票流水号对应一张发票；购买方邮箱用于税局系统开票后分别发送给对应用户。',
+    }),
+    buildXlsxRow(2, {
+      1: '必填\n(限20字符)',
+      2: '必填\n(限10字符)',
+      4: '必填(是/否)\n(限2字符)',
+      5: '非必填(是/否)\n(限2字符)',
+      6: '必填\n(限100字符)',
+      7: '专票必填\n(限20字符)',
+      23: '非必填\n(限230字符)',
+      31: '非必填\n(限72字符)',
+    }),
+    buildXlsxRow(3, {
+      1: '发票流水号',
+      2: '发票类型',
+      3: '特定业务类型',
+      4: '是否含税',
+      5: '受票方自然人标识',
+      6: '购买方名称',
+      7: '购买方纳税人识别号',
+      8: '购买方证件类型',
+      9: '购买方证件号码',
+      10: '购买方国籍（或地区）',
+      11: '购买方地址',
+      12: '购买方所在地区（报废产品收购必填）',
+      13: '购买方所在地区（报废产品收购必填）',
+      14: '购买方所在地区（报废产品收购必填）',
+      15: '购买方所在地区（报废产品收购必填）',
+      16: '购买方详细地址（报废产品收购必填）',
+      17: '购买方电话',
+      18: '购买方开户银行',
+      19: '购买方银行账号',
+      20: '是否展示购买方地址电话银行账号',
+      21: '是否开具涉税专业服务发票品目',
+      22: '涉税专业服务协议编号',
+      23: '备注',
+      24: '报废产品销售类型',
+      25: '每千克煤炭发热量',
+      26: '干基全硫',
+      27: '干燥无灰基挥发分',
+      28: '销售方开户行',
+      29: '销售方银行账号',
+      30: '是否展示销售方地址电话银行账号',
+      31: '购买方邮箱',
+      32: '购买方经办人姓名',
+      33: '购买方经办人证件类型',
+      34: '购买方经办人证件号码',
+      35: '经办人国籍(地区)',
+      36: '经办人自然人纳税人识别号',
+      37: '放弃享受减按1%征收率原因',
+      38: '收款人',
+      39: '复核人',
+    }),
+  ];
+
+  exportRows.forEach(({ serial, invoice }, index) => {
+    rows.push(buildXlsxRow(index + 4, {
+      1: serial,
+      2: '普通发票',
+      4: '是',
+      5: invoice.titleType === 'personal' ? '是' : '否',
+      6: invoice.title || '个人',
+      7: invoice.titleType === 'company' ? invoice.taxNo || '' : '',
+      23: Array.isArray(invoice.orderNos) ? `订单号：${invoice.orderNos.join('、')}` : '',
+      31: invoice.email || '',
+    }));
+  });
+
+  return buildWorksheetXml(rows, 'AM');
+}
+
+function buildInvoiceDetailInfoSheet(exportRows, options) {
+  const rows = [
+    buildXlsxRow(1, {
+      1: '填表说明：系统根据发票流水号将明细和发票基本信息关联；当前每张发票生成一条服务费明细。',
+    }),
+    buildXlsxRow(2, {
+      1: '必填\n（限20字符)',
+      2: '必填\n（限100字符)',
+      3: '必填\n（限20字符)',
+      8: '必填\n（限16字符)\n保留两位小数',
+      9: '必填\n（限8字符)',
+    }),
+    buildXlsxRow(3, {
+      1: '发票流水号',
+      2: '项目名称',
+      3: '商品和服务税收编码',
+      4: '规格型号',
+      5: '单位',
+      6: '数量',
+      7: '单价',
+      8: '金额',
+      9: '税率',
+      10: '折扣金额',
+      11: '是否使用优惠政策',
+      12: '优惠政策类型',
+      13: '即征即退类型',
+      14: '煤炭种类',
+    }),
+  ];
+
+  exportRows.forEach(({ serial, invoice }, index) => {
+    rows.push(buildXlsxRow(index + 4, {
+      1: serial,
+      2: options.itemName,
+      3: options.taxCode,
+      8: Number(invoice.amount || 0).toFixed(2),
+      9: options.taxRate,
+    }));
+  });
+
+  return buildWorksheetXml(rows, 'N');
+}
+
+function buildEmptyInvoiceBusinessSheet() {
+  return buildWorksheetXml([
+    buildXlsxRow(1, { 1: '特定业务信息，本业务无需填写。' }),
+    buildXlsxRow(3, { 1: '发票流水号' }),
+  ], 'AS');
+}
+
+function buildEmptyInvoiceExtraSheet() {
+  return buildWorksheetXml([
+    buildXlsxRow(1, { 1: '附加要素信息，本业务无需填写。' }),
+    buildXlsxRow(3, { 1: '发票流水号', 2: '附加要素名称', 3: '附加要素内容' }),
+  ], 'C');
+}
+
+function dosDateTime(date = new Date()) {
+  const time = (date.getHours() << 11) | (date.getMinutes() << 5) | Math.floor(date.getSeconds() / 2);
+  const day = ((date.getFullYear() - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate();
+  return { time, day };
+}
+
+let crcTable = null;
+
+function getCrcTable() {
+  if (crcTable) return crcTable;
+  crcTable = new Uint32Array(256);
+  for (let i = 0; i < 256; i += 1) {
+    let c = i;
+    for (let k = 0; k < 8; k += 1) {
+      c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    }
+    crcTable[i] = c >>> 0;
+  }
+  return crcTable;
+}
+
+function crc32(bytes) {
+  const table = getCrcTable();
+  let crc = 0xFFFFFFFF;
+  for (const byte of bytes) {
+    crc = table[(crc ^ byte) & 0xFF] ^ (crc >>> 8);
+  }
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+
+function pushUint16(target, value) {
+  target.push(value & 0xFF, (value >>> 8) & 0xFF);
+}
+
+function pushUint32(target, value) {
+  target.push(value & 0xFF, (value >>> 8) & 0xFF, (value >>> 16) & 0xFF, (value >>> 24) & 0xFF);
+}
+
+function concatUint8(parts) {
+  const size = parts.reduce((sum, part) => sum + part.length, 0);
+  const output = new Uint8Array(size);
+  let offset = 0;
+  parts.forEach((part) => {
+    output.set(part, offset);
+    offset += part.length;
+  });
+  return output;
+}
+
+function createZip(files) {
+  const encoder = new TextEncoder();
+  const localParts = [];
+  const centralParts = [];
+  let offset = 0;
+  const { time, day } = dosDateTime();
+
+  files.forEach((file) => {
+    const nameBytes = encoder.encode(file.name);
+    const dataBytes = typeof file.content === 'string' ? encoder.encode(file.content) : file.content;
+    const crc = crc32(dataBytes);
+    const localHeader = [];
+    pushUint32(localHeader, 0x04034B50);
+    pushUint16(localHeader, 20);
+    pushUint16(localHeader, 0);
+    pushUint16(localHeader, 0);
+    pushUint16(localHeader, time);
+    pushUint16(localHeader, day);
+    pushUint32(localHeader, crc);
+    pushUint32(localHeader, dataBytes.length);
+    pushUint32(localHeader, dataBytes.length);
+    pushUint16(localHeader, nameBytes.length);
+    pushUint16(localHeader, 0);
+    localParts.push(new Uint8Array(localHeader), nameBytes, dataBytes);
+
+    const centralHeader = [];
+    pushUint32(centralHeader, 0x02014B50);
+    pushUint16(centralHeader, 20);
+    pushUint16(centralHeader, 20);
+    pushUint16(centralHeader, 0);
+    pushUint16(centralHeader, 0);
+    pushUint16(centralHeader, time);
+    pushUint16(centralHeader, day);
+    pushUint32(centralHeader, crc);
+    pushUint32(centralHeader, dataBytes.length);
+    pushUint32(centralHeader, dataBytes.length);
+    pushUint16(centralHeader, nameBytes.length);
+    pushUint16(centralHeader, 0);
+    pushUint16(centralHeader, 0);
+    pushUint16(centralHeader, 0);
+    pushUint16(centralHeader, 0);
+    pushUint32(centralHeader, 0);
+    pushUint32(centralHeader, offset);
+    centralParts.push(new Uint8Array(centralHeader), nameBytes);
+
+    offset += localHeader.length + nameBytes.length + dataBytes.length;
+  });
+
+  const centralDirectory = concatUint8(centralParts);
+  const end = [];
+  pushUint32(end, 0x06054B50);
+  pushUint16(end, 0);
+  pushUint16(end, 0);
+  pushUint16(end, files.length);
+  pushUint16(end, files.length);
+  pushUint32(end, centralDirectory.length);
+  pushUint32(end, offset);
+  pushUint16(end, 0);
+
+  return concatUint8([...localParts, centralDirectory, new Uint8Array(end)]);
+}
+
+function createInvoiceTaxImportWorkbook(invoices, options) {
+  const exportRows = createInvoiceExportRows(invoices);
+  const basicSheetXml = buildInvoiceBasicInfoSheet(exportRows);
+  const detailSheetXml = buildInvoiceDetailInfoSheet(exportRows, options);
+  const businessSheetXml = buildEmptyInvoiceBusinessSheet();
+  const extraSheetXml = buildEmptyInvoiceExtraSheet();
+  const versionXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <dimension ref="A1:A4"/>
+  <sheetData>
+    <row r="4">${buildXlsxCell(4, 1, 'pt:20260401')}</row>
+  </sheetData>
+</worksheet>`;
+  const files = [
+    {
+      name: '[Content_Types].xml',
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+  <Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+  <Override PartName="/xl/worksheets/sheet3.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+  <Override PartName="/xl/worksheets/sheet4.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+  <Override PartName="/xl/worksheets/sheet5.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+  <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+</Types>`,
+    },
+    {
+      name: '_rels/.rels',
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>`,
+    },
+    {
+      name: 'xl/workbook.xml',
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets>
+    <sheet name="1-发票基本信息" sheetId="1" r:id="rId1"/>
+    <sheet name="2-发票明细信息" sheetId="2" r:id="rId2"/>
+    <sheet name="3-特定业务信息" sheetId="3" r:id="rId3"/>
+    <sheet name="4-附加要素信息" sheetId="4" r:id="rId4"/>
+    <sheet name="excelVersion" sheetId="5" r:id="rId5"/>
+  </sheets>
+</workbook>`,
+    },
+    {
+      name: 'xl/_rels/workbook.xml.rels',
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/>
+  <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet3.xml"/>
+  <Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet4.xml"/>
+  <Relationship Id="rId5" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet5.xml"/>
+  <Relationship Id="rId6" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>`,
+    },
+    {
+      name: 'xl/styles.xml',
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>
+  <fills count="1"><fill><patternFill patternType="none"/></fill></fills>
+  <borders count="1"><border/></borders>
+  <cellStyleXfs count="1"><xf/></cellStyleXfs>
+  <cellXfs count="1"><xf xfId="0"/></cellXfs>
+</styleSheet>`,
+    },
+    { name: 'xl/worksheets/sheet1.xml', content: basicSheetXml },
+    { name: 'xl/worksheets/sheet2.xml', content: detailSheetXml },
+    { name: 'xl/worksheets/sheet3.xml', content: businessSheetXml },
+    { name: 'xl/worksheets/sheet4.xml', content: extraSheetXml },
+    { name: 'xl/worksheets/sheet5.xml', content: versionXml },
+  ];
+  return createZip(files);
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function exportCurrentInvoices() {
+  if (!currentInvoices.length) {
+    showToast('暂无可导出的发票申请');
+    return;
+  }
+  exportInvoices(currentInvoices, '批量开票模板已导出');
+}
+
+function exportInvoices(invoices, successMessage) {
+  const workbook = createInvoiceTaxImportWorkbook(invoices, {
+    itemName: INVOICE_TAX_ITEM_NAME,
+    taxRate: INVOICE_TAX_RATE,
+    taxCode: INVOICE_TAX_CODE,
+  });
+  const blob = new Blob([workbook], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+  const date = new Date();
+  const filename = `批量开票导入模板-${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}.xlsx`;
+  downloadBlob(blob, filename);
+  showToast(successMessage);
+}
+
+function renderInvoices(invoices) {
+  currentInvoices = invoices;
+  els.invoiceList.innerHTML = '';
+  els.invoiceCount.textContent = String(invoices.length);
+  els.invoiceSummary.classList.toggle('hidden', invoices.length === 0);
+  els.invoiceEmptyState.classList.toggle('hidden', invoices.length > 0);
+  updateInvoiceToolbar();
+
+  invoices.forEach((invoice) => {
+    const node = els.invoiceTemplate.content.firstElementChild.cloneNode(true);
+    node.dataset.invoiceNo = invoice.invoiceNo || '';
+    const isProcessing = invoice.status === 'processing';
+    const statusLabel = isProcessing ? '正在处理' : '待开票';
+    node.querySelector('.invoice-card__status').textContent = `${invoice.titleType === 'company' ? '企业普票' : '个人普票'} · ${statusLabel}`;
+    node.querySelector('.invoice-card__title').textContent = invoice.title || '发票申请';
+    node.querySelector('.invoice-card__amount').textContent = formatMoney(invoice.amount);
+    node.querySelector('.invoice-card__no').textContent = invoice.invoiceNo || '-';
+    node.querySelector('.invoice-card__created-at').textContent = formatTime(invoice.createdAt);
+    node.querySelector('.invoice-card__user').textContent = invoice.mobile || invoice.nickname || invoice.userId || '-';
+    node.querySelector('.invoice-card__order-count').textContent = `${Array.isArray(invoice.orderNos) ? invoice.orderNos.length : 0} 个`;
+    node.querySelector('.invoice-card__email').value = invoice.email || '';
+    node.querySelector('.invoice-card__tax-no').value = invoice.taxNo || '';
+    node.querySelector('.invoice-card__orders').value = Array.isArray(invoice.orderNos) ? invoice.orderNos.join('\n') : '';
+    node.querySelector('.invoice-card__note').value = invoice.operatorNote || '';
+
+    if (isProcessing) node.classList.add('is-processing');
+
+    node.querySelector('.copy-invoice-email').addEventListener('click', () => copyText(invoice.email || '', '邮箱已复制'));
+    node.querySelector('.copy-invoice-tax').addEventListener('click', () => copyText(invoice.taxNo || '', '税号已复制'));
+    node.querySelector('.reject-invoice').addEventListener('click', () => rejectInvoice(invoice.invoiceNo, node));
+    els.invoiceList.appendChild(node);
+  });
+}
+
+function updateInvoiceToolbar() {
+  const hasInvoices = currentInvoices.length > 0;
+  const hasSubmittedInvoices = currentInvoices.some((invoice) => invoice.status === 'submitted');
+  els.exportInvoicesBtn.disabled = !hasInvoices;
+  els.markInvoicesProcessingBtn.disabled = !hasSubmittedInvoices;
+  els.issueInvoicesBtn.disabled = !hasInvoices;
+}
+
+async function updateInvoicesBatch(status) {
+  const targets = status === 'processing'
+    ? currentInvoices.filter((invoice) => invoice.status === 'submitted')
+    : currentInvoices;
+  if (!targets.length) {
+    showToast(status === 'processing' ? '暂无待标记的发票申请' : '暂无可处理的发票申请');
+    return;
+  }
+  const confirmed = window.confirm(status === 'issued'
+    ? `确认将 ${targets.length} 个发票申请标记为已开票？`
+    : `确认将 ${targets.length} 个发票申请标记为正在处理？`);
+  if (!confirmed) return;
+
+  try {
+    await Promise.all(targets.map((invoice) => apiRequest(`/operator/invoices/${encodeURIComponent(invoice.invoiceNo)}`, {
+      method: 'POST',
+      body: JSON.stringify({ status, operatorNote: '' }),
+    })));
+    showToast(status === 'issued' ? '已批量标记开票完成' : '已批量标记正在处理');
+    await loadInvoices();
+  } catch (error) {
+    showError(error);
+  }
+}
+
+async function rejectInvoice(invoiceNo, node) {
+  if (!invoiceNo) return;
+  const rejectReason = node.querySelector('.invoice-card__note').value.trim();
+  if (!rejectReason) {
+    showToast('请先填写驳回原因');
+    return;
+  }
+  const confirmed = window.confirm('确认驳回该开票申请？驳回后订单会回到用户可开票列表。');
+  if (!confirmed) return;
+
+  try {
+    await apiRequest(`/operator/invoices/${encodeURIComponent(invoiceNo)}`, {
+      method: 'POST',
+      body: JSON.stringify({
+        status: 'rejected',
+        operatorNote: rejectReason,
+        rejectReason,
+      }),
+    });
+    node.remove();
+    currentInvoices = currentInvoices.filter((invoice) => invoice.invoiceNo !== invoiceNo);
+    els.invoiceCount.textContent = String(currentInvoices.length);
+    els.invoiceSummary.classList.toggle('hidden', currentInvoices.length === 0);
+    els.invoiceEmptyState.classList.toggle('hidden', currentInvoices.length > 0);
+    updateInvoiceToolbar();
+    showToast('已驳回，订单可重新申请开票');
+  } catch (error) {
+    showError(error);
+  }
+}
+
 function renderTasks(tasks) {
   els.taskList.innerHTML = '';
   els.taskCount.textContent = String(tasks.length);
@@ -309,18 +879,10 @@ function renderTasks(tasks) {
     node.querySelector('.task-card__order').textContent = task.orderNo || '-';
     node.querySelector('.task-card__paid-at').textContent = formatTime(task.paidAt);
     node.querySelector('.task-card__email').value = task.email || '';
-    node.querySelector('.task-card__password').value = task.password || '';
-    applyAppleStoreAccountToTask(node, task.appleStoreAccount, task.reusedAppleStoreAccount);
-
     node.querySelector('.copy-email').addEventListener('click', () => copyText(task.email || '', '账号已复制'));
-    node.querySelector('.copy-password').addEventListener('click', () => copyText(task.password || '', '密码已复制'));
-    node.querySelector('.fetch-code').addEventListener('click', (event) => fetchVerificationCode(task.orderNo, node, event.currentTarget));
-    node.querySelector('.fetch-apple-account').addEventListener('click', (event) => fetchAppleStoreAccount(task.orderNo, node, event.currentTarget));
-    node.querySelector('.task-card__apple-email').addEventListener('input', () => markManualAppleStoreAccount(node));
-    node.querySelector('.task-card__apple-password').addEventListener('input', () => markManualAppleStoreAccount(node));
-    node.querySelector('.copy-apple-password').addEventListener('click', () => copyText(node.querySelector('.task-card__apple-password').value, 'Apple 密码已复制'));
     node.querySelector('.open-site').addEventListener('click', () => openTab(settings.chatgptUrl || DEFAULT_SETTINGS.chatgptUrl));
     node.querySelector('.mark-processing').addEventListener('click', () => updateTask(task.orderNo, 'processing', node));
+    node.querySelector('.delete-order').addEventListener('click', () => deleteOrder(task.orderNo, node));
     node.querySelector('.mark-done').addEventListener('click', () => openFulfillConfirm(task.orderNo, node));
 
     els.taskList.appendChild(node);
@@ -395,12 +957,6 @@ async function fetchAppleStoreAccount(orderNo, node, button) {
 
 function openFulfillConfirm(orderNo, node) {
   if (!orderNo) return;
-  const appleStoreEmail = node.querySelector('.task-card__apple-email').value.trim();
-  const appleStorePassword = node.querySelector('.task-card__apple-password').value.trim();
-  if (!node.dataset.appleStoreAccountId && (!appleStoreEmail || !appleStorePassword)) {
-    showToast('请先获取或输入 Apple Store 账号和密码');
-    return;
-  }
   pendingFulfill = { orderNo, node };
   els.confirmOrderNo.textContent = orderNo;
   els.confirmDialog.classList.remove('hidden');
@@ -425,20 +981,12 @@ async function confirmFulfillTask() {
 async function updateTask(orderNo, status, node) {
   if (!orderNo) return;
   const note = node.querySelector('.task-card__note').value.trim();
-  const appleStoreAccountId = node.dataset.appleStoreAccountId || '';
-  const appleStoreEmail = node.querySelector('.task-card__apple-email').value.trim();
-  const appleStorePassword = node.querySelector('.task-card__apple-password').value.trim();
   try {
     await apiRequest(`/operator/tasks/${encodeURIComponent(orderNo)}`, {
       method: 'POST',
       body: JSON.stringify({
         status,
         note,
-        appleStoreAccountId,
-        appleStoreEmail,
-        appleStorePassword,
-        appleStoreCountryCode: node.dataset.appleStoreCountryCode || '',
-        appleStoreCountryName: node.dataset.appleStoreCountryName || '',
         mobile: (settings.appstoreMobile || DEFAULT_SETTINGS.appstoreMobile).trim()
       })
     });
@@ -454,6 +1002,23 @@ async function updateTask(orderNo, status, node) {
   } catch (error) {
     showError(error);
     throw error;
+  }
+}
+
+async function deleteOrder(orderNo, node) {
+  if (!orderNo) return;
+  const confirmed = window.confirm(`确认删除订单 ${orderNo}？此操作只删除订单记录，不会删除用户信息。`);
+  if (!confirmed) return;
+  try {
+    await apiRequest(`/operator/tasks/${encodeURIComponent(orderNo)}`, { method: 'DELETE' });
+    node.remove();
+    const count = Math.max(0, Number(els.taskCount.textContent || '0') - 1);
+    els.taskCount.textContent = String(count);
+    els.summary.classList.toggle('hidden', count === 0);
+    els.emptyState.classList.toggle('hidden', count > 0);
+    showToast('订单已删除');
+  } catch (error) {
+    showError(error);
   }
 }
 
