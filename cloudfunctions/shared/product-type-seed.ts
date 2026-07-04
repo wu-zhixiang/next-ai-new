@@ -19,7 +19,7 @@ export const PRODUCT_TYPE_SEED: ProductTypeRecord[] = [
     introHighlights: [
       { title: 'ChatGPT 与 Codex', description: 'Chatgpt 标准版和 Chatgpt 专业版支持 ChatGPT 与 Codex，Codex 套餐聚焦代码任务。' },
       { title: '图片能力', description: 'Chatgpt 标准版和 Chatgpt 专业版支持生图、图片理解、图片改图和图生图。' },
-      { title: '会员服务', description: '开通后进入人工处理流程，完成后展示会员有效期。' },
+      { title: '可用模型', description: 'ChatGPT 商业版官方可用模型包括 GPT-5.5 Instant、GPT-5.5 Thinking、GPT-5.5 Pro、GPT-5 Thinking Mini 及部分 Legacy models，具体可用范围和额度以 OpenAI 官方实际开放为准。' },
     ],
     complianceDisplay: {
       productName: 'AI效率会员',
