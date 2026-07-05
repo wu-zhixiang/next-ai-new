@@ -7,6 +7,16 @@ const product_type_seed_1 = require("./shared/product-type-seed");
 const ai_account_email_domain_1 = require("./shared/ai-account-email-domain");
 const utils_1 = require("./shared/utils");
 async function main(event = {}) {
+    if (event.action === 'products') {
+        const seededProductTypes = await (0, product_type_seed_1.seedProductTypes)();
+        const seededPlans = await (0, plan_seed_1.seedMemberPlans)();
+        return (0, utils_1.ok)({
+            success: true,
+            action: event.action,
+            seededProductTypes,
+            seededPlans,
+        });
+    }
     if (event.action === 'member-plans') {
         const seededPlans = await (0, plan_seed_1.seedMemberPlans)();
         return (0, utils_1.ok)({

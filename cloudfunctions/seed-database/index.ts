@@ -10,10 +10,21 @@ import { ok } from '../shared/utils';
 
 interface Event {
   dryRun?: boolean;
-  action?: 'full' | 'member-plans' | 'compliance-display';
+  action?: 'full' | 'products' | 'member-plans' | 'compliance-display';
 }
 
 export async function main(event: Event = {}) {
+  if (event.action === 'products') {
+    const seededProductTypes = await seedProductTypes();
+    const seededPlans = await seedMemberPlans();
+    return ok({
+      success: true,
+      action: event.action,
+      seededProductTypes,
+      seededPlans,
+    });
+  }
+
   if (event.action === 'member-plans') {
     const seededPlans = await seedMemberPlans();
     return ok({

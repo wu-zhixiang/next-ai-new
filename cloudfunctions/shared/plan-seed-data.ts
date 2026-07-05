@@ -18,7 +18,7 @@ const PLAN_SEED_SOURCE: Array<Omit<MemberPlanRecord, 'pid' | 'createdAt' | 'upda
     price: 199,
     durationDays: 30,
     autoRenewEnabled: false,
-    status: 'on',
+    status: 'off',
     sort: 4,
     description: '支持 ChatGPT、Codex、生图、图片理解、图片改图和图生图，适合产品、运营、UI、客服、普通开发和管理层。',
     complianceDisplay: {
@@ -36,7 +36,7 @@ const PLAN_SEED_SOURCE: Array<Omit<MemberPlanRecord, 'pid' | 'createdAt' | 'upda
     price: 899,
     durationDays: 30,
     autoRenewEnabled: false,
-    status: 'on',
+    status: 'off',
     sort: 5,
     description: '支持 ChatGPT、Codex、生图、图片理解、图片改图和图生图，适合高强度用户。',
     complianceDisplay: {
@@ -54,7 +54,7 @@ const PLAN_SEED_SOURCE: Array<Omit<MemberPlanRecord, 'pid' | 'createdAt' | 'upda
     price: 40,
     durationDays: 30,
     autoRenewEnabled: false,
-    status: 'on',
+    status: 'off',
     sort: 1,
     description: '支持 Codex，也支持 ChatGPT 轻度使用；适合临时开发、体验用户、低频开发者，生图消耗额度点。',
     complianceDisplay: {
@@ -72,7 +72,7 @@ const PLAN_SEED_SOURCE: Array<Omit<MemberPlanRecord, 'pid' | 'createdAt' | 'upda
     price: 160,
     durationDays: 30,
     autoRenewEnabled: false,
-    status: 'on',
+    status: 'off',
     sort: 2,
     description: '支持 Codex，也支持 ChatGPT 轻度使用；适合普通开发、中度 Codex 用户，生图消耗额度点。',
     complianceDisplay: {
@@ -90,7 +90,7 @@ const PLAN_SEED_SOURCE: Array<Omit<MemberPlanRecord, 'pid' | 'createdAt' | 'upda
     price: 799,
     durationDays: 30,
     autoRenewEnabled: false,
-    status: 'on',
+    status: 'off',
     sort: 3,
     description: '支持 Codex，也支持 ChatGPT 轻度使用；适合重度开发、核心研发、架构师和复杂代码任务。',
     complianceDisplay: {
@@ -109,7 +109,7 @@ const PLAN_SEED_SOURCE: Array<Omit<MemberPlanRecord, 'pid' | 'createdAt' | 'upda
     price: 40,
     durationDays: 30,
     autoRenewEnabled: false,
-    status: 'on',
+    status: 'off',
     sort: 6,
     description: '额度点补充包，适合临时补充、小任务和轻量使用。',
     complianceDisplay: {
@@ -127,7 +127,7 @@ const PLAN_SEED_SOURCE: Array<Omit<MemberPlanRecord, 'pid' | 'createdAt' | 'upda
     price: 80,
     durationDays: 30,
     autoRenewEnabled: false,
-    status: 'on',
+    status: 'off',
     sort: 7,
     description: '额度点补充包，适合普通开发补充、月中加量和中等强度使用。',
     complianceDisplay: {
@@ -145,7 +145,7 @@ const PLAN_SEED_SOURCE: Array<Omit<MemberPlanRecord, 'pid' | 'createdAt' | 'upda
     price: 160,
     durationDays: 30,
     autoRenewEnabled: false,
-    status: 'on',
+    status: 'off',
     sort: 8,
     description: '额度点补充包，适合重度开发、核心项目和长期高频使用。',
     complianceDisplay: {
