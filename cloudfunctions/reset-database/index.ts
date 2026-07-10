@@ -37,6 +37,10 @@ const DEFAULT_CLEAR_COLLECTIONS: CollectionKey[] = [
   'pointsLedger',
   'emailVerificationCodes',
   'aiNews',
+  'aiToolRuns',
+  'aiToolAssets',
+  'aiToolUsageDaily',
+  'aiToolTemplates',
   'reminderLogs',
   'auditLogs',
 ];

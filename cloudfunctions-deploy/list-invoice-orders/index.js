@@ -4,16 +4,16 @@ exports.main = main;
 const db_1 = require("./shared/db");
 const utils_1 = require("./shared/utils");
 const context_1 = require("./_lib/context");
-function isInvoiceableOrder(order) {
+const ACTIVE_INVOICE_STATUS = new Set(['submitted', 'processing', 'issued']);
+function isInvoiceableOrder(order, invoicedOrderNos) {
     var _a, _b;
     const fulfillmentStatus = (_a = order.fulfillmentStatus) !== null && _a !== void 0 ? _a : (order.payStatus === 'paid' ? 'fulfilled' : 'pending');
     const invoiceStatus = (_b = order.invoiceStatus) !== null && _b !== void 0 ? _b : 'none';
     return (order.payStatus === 'paid'
         && fulfillmentStatus === 'fulfilled'
         && Boolean(order.transactionId)
-        && invoiceStatus !== 'submitted'
-        && invoiceStatus !== 'processing'
-        && invoiceStatus !== 'issued');
+        && !ACTIVE_INVOICE_STATUS.has(invoiceStatus)
+        && !invoicedOrderNos.has(order.orderNo));
 }
 function serializeOrder(order) {
     return {
@@ -68,8 +68,11 @@ async function main() {
         (0, db_1.listOrdersByUserId)(user._id),
         (0, db_1.listInvoiceRequestsByUserId)(user._id).catch(() => []),
     ]);
+    const invoicedOrderNos = new Set(invoiceRequests
+        .filter((request) => ACTIVE_INVOICE_STATUS.has(request.status))
+        .flatMap((request) => request.orderNos));
     return (0, utils_1.ok)({
-        availableOrders: orders.filter(isInvoiceableOrder).map(serializeOrder),
+        availableOrders: orders.filter((order) => isInvoiceableOrder(order, invoicedOrderNos)).map(serializeOrder),
         invoiceRequests: invoiceRequests.map(serializeInvoiceRequest),
         invoiceProfile: {
             titleType: (_a = user.invoiceTitleType) !== null && _a !== void 0 ? _a : 'personal',

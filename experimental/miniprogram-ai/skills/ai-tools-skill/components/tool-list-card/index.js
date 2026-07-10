@@ -9,8 +9,10 @@ Component({
     openTool(event) {
       const toolId = event.currentTarget.dataset.toolId
       if (!toolId) return
+      const introToolIds = ['imageGenerate', 'imageRepair']
+      const page = introToolIds.includes(toolId) ? 'tool-intro' : 'tool-detail'
       wx.navigateTo({
-        url: `/pages/tool-detail/index?tool=${encodeURIComponent(toolId)}`,
+        url: `/pages/${page}/index?tool=${encodeURIComponent(toolId)}`,
       })
     },
   },

@@ -14,6 +14,7 @@ const functionNames = [
   'email-code-webhook',
   'fulfill-membership',
   'fapiao-notify',
+  'get-ai-tool-run',
   'get-member-home',
   'get-ai-account',
   'get-ai-news-detail',
@@ -34,6 +35,7 @@ const functionNames = [
   'pay-order',
   'reset-database',
   'retry-order',
+  'run-ai-tool',
   'save-ai-account',
   'save-subscribe-auth',
   'setup-fapiao-config',
@@ -69,6 +71,9 @@ execFileSync(
     path.join(sourceRoot, 'shared', 'wx-server-sdk.d.ts'),
     path.join(sourceRoot, '_lib', 'context.ts'),
     path.join(sourceRoot, 'shared', 'constants.ts'),
+    path.join(sourceRoot, 'shared', 'ai-tool-core.ts'),
+    path.join(sourceRoot, 'shared', 'ai-tool-generation.ts'),
+    path.join(sourceRoot, 'shared', 'ai-tool-service.ts'),
     path.join(sourceRoot, 'shared', 'client-config.ts'),
     path.join(sourceRoot, 'shared', 'ai-account.ts'),
     path.join(sourceRoot, 'shared', 'ai-account-email-domain-core.ts'),
@@ -137,6 +142,15 @@ const functionsThatNeedAppStoreProductScope = new Set([
 const functionsThatNeedXVideo = new Set([
   'operator-api',
 ]);
+const functionsThatNeedAiToolShared = new Set([
+  'get-ai-tool-run',
+  'run-ai-tool',
+  'summarize-ai-tool',
+]);
+const functionsThatNeedCloudbaseNodeSdk = new Set([
+  'run-ai-tool',
+  'summarize-ai-tool',
+]);
 
 for (const name of functionNames) {
   const targetRoot = path.join(deployRoot, name);
@@ -172,6 +186,11 @@ for (const name of functionNames) {
   if (!functionsThatNeedXVideo.has(name)) {
     fs.rmSync(path.join(targetSharedRoot, 'x-video.js'), { force: true });
   }
+  if (!functionsThatNeedAiToolShared.has(name)) {
+    fs.rmSync(path.join(targetSharedRoot, 'ai-tool-core.js'), { force: true });
+    fs.rmSync(path.join(targetSharedRoot, 'ai-tool-generation.js'), { force: true });
+    fs.rmSync(path.join(targetSharedRoot, 'ai-tool-service.js'), { force: true });
+  }
   fs.cpSync(libCompileRoot, path.join(targetRoot, '_lib'), { recursive: true });
   const configFile = path.join(sourceRoot, name, 'config.json');
   if (fs.existsSync(configFile)) {
@@ -191,6 +210,7 @@ for (const name of functionNames) {
         version: '1.0.0',
         main: 'index.js',
         dependencies: {
+          ...(functionsThatNeedCloudbaseNodeSdk.has(name) ? { '@cloudbase/node-sdk': '3.18.4' } : {}),
           'wx-server-sdk': '^3.0.1',
         },
       },

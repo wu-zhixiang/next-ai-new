@@ -17,6 +17,10 @@ const DEFAULT_CLEAR_COLLECTIONS = [
     'pointsLedger',
     'emailVerificationCodes',
     'aiNews',
+    'aiToolRuns',
+    'aiToolAssets',
+    'aiToolUsageDaily',
+    'aiToolTemplates',
     'reminderLogs',
     'auditLogs',
 ];

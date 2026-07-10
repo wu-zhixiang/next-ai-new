@@ -19,7 +19,25 @@ module.exports = async function listTools(params = {}) {
       description: '头像、海报、配图生成，实验能力暂未开放。',
       enabled: false,
     },
+    {
+      toolId: 'imageRepair',
+      name: '老照片修复',
+      description: '老照片褪色、划痕、模糊修复，实验能力暂未开放。',
+      enabled: false,
+    },
   ].filter((item) => category === 'all' || item.enabled || category === 'image')
 
-  return { items }
+  return {
+    items,
+    isError: false,
+    content: [{
+      type: 'text',
+      text: '已列出 AIO 当前可用 AI 工具，请点击小程序卡片进入工具列表。',
+    }],
+    structuredContent: { items },
+    handoff: {
+      query: '',
+      payload: { items },
+    },
+  }
 }

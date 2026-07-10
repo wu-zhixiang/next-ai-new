@@ -1,3 +1,11 @@
+import type {
+  AiToolId,
+  AiToolOutputType,
+  AiToolRunStatus,
+  AiToolSource,
+  AiToolUsageView,
+} from './ai-tool-core';
+
 export type MembershipStatus = 'opening' | 'active' | 'expired' | 'cancelled' | 'none';
 export type ExpireTag = 'normal' | 'within_30d' | 'within_7d' | 'within_3d' | 'expired';
 export type PayStatus = 'pending' | 'paid' | 'failed' | 'closed' | 'refunded';
@@ -325,6 +333,64 @@ export interface AiNewsRecord {
   score: number;
   status: 'draft' | 'published' | 'archived';
   publishedAt: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface AiToolRunRecord {
+  _id?: string;
+  userId: string;
+  openid: string;
+  toolId: AiToolId;
+  outputType?: Exclude<AiToolOutputType, 'image'>;
+  source: AiToolSource;
+  status: AiToolRunStatus;
+  inputDigest: string;
+  assetIds: string[];
+  title?: string;
+  summary?: string;
+  points?: string[];
+  outputText?: string;
+  outputImages?: Array<{ fileId: string; width?: number; height?: number }>;
+  usage?: AiToolUsageView;
+  modelProvider?: string;
+  modelName?: string;
+  errorCode?: string;
+  errorMessage?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface AiToolAssetRecord {
+  _id?: string;
+  userId: string;
+  fileId: string;
+  fileName: string;
+  fileType: string;
+  fileKind: 'text' | 'document' | 'image';
+  size: number;
+  extractedText?: string;
+  createdAt: number;
+}
+
+export interface AiToolUsageDailyRecord {
+  _id?: string;
+  userId: string;
+  date: string;
+  freeUsed: number;
+  adUnlocked: number;
+  memberUsed: number;
+  updatedAt: number;
+}
+
+export interface AiToolTemplateRecord {
+  _id?: string;
+  toolId: AiToolId;
+  title: string;
+  prompt: string;
+  outputType: Exclude<AiToolOutputType, 'image'>;
+  sort: number;
+  enabled: boolean;
   createdAt: number;
   updatedAt: number;
 }

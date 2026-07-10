@@ -22,6 +22,26 @@ interface SummaryResult {
     outputText: string;
 }
 
+interface RunAiToolResult {
+    runId: string;
+    status: 'succeeded' | 'failed' | 'processing';
+    toolId: string;
+    title: string;
+    summary?: string;
+    points?: string[];
+    outputText?: string;
+    usage: {
+        charged: boolean;
+        freeUsed: boolean;
+        rewardAdUsed: boolean;
+        memberUsed: boolean;
+        dailyFreeLimit: number;
+        dailyFreeRemaining: number;
+        model?: string;
+    };
+    createdAt: number;
+}
+
 interface ReferenceAsset {
     kind: 'file';
     name: string;
@@ -175,6 +195,39 @@ function buildResultMarkdown(result: SummaryResult): string {
     ].join('\n');
 }
 
+function toSummaryResult(runResult: RunAiToolResult): SummaryResult {
+    return {
+        title: runResult.title,
+        summary: runResult.summary || '',
+        points: runResult.points || [],
+        outputText: runResult.outputText || '',
+    };
+}
+
+function isImageTool(toolId: string): boolean {
+    return toolId === 'imageGenerate' || toolId === 'imageRepair';
+}
+
+function getToolInputPlaceholder(toolId: string): string {
+    if (toolId === 'imageGenerate') {
+        return '描述你想生成的画面，例如主体、场景、风格、比例和用途';
+    }
+    if (toolId === 'imageRepair') {
+        return '可补充修复要求，例如去除划痕、增强清晰度、自然上色';
+    }
+    return '粘贴文章、帖子、会议记录或一段长文本';
+}
+
+function getGenerateButtonText(params: {
+    enabled: boolean;
+    submitting: boolean;
+    imageTool: boolean;
+}): string {
+    if (!params.enabled) return '接入中';
+    if (params.submitting) return '生成中';
+    return params.imageTool ? '开始处理' : '生成结果';
+}
+
 export default function ToolDetailPage(): JSX.Element {
     useResetPageScroll();
 
@@ -190,10 +243,11 @@ export default function ToolDetailPage(): JSX.Element {
     const [adUnlocked, setAdUnlocked] = useState(false);
 
     const activeTool = useMemo(() => getToolById(toolId), [toolId]);
+    const imageTool = isImageTool(activeTool.id);
     const visibleOutputOptions = activeTool.id === 'copywriting' ? COPYWRITING_OUTPUT_OPTIONS : OUTPUT_OPTIONS;
     const memberActive = isMember(membershipStatus);
     const hasGenerationInput = stripLegacyPromptPrefixes(content).length > 0 || Boolean(referenceAsset);
-    const generateDisabled = submitting || !hasGenerationInput;
+    const generateDisabled = submitting || !activeTool.enabled || !hasGenerationInput;
 
     useLoad((options) => {
         enableShareMenu();
@@ -202,6 +256,9 @@ export default function ToolDetailPage(): JSX.Element {
         setOutputType(nextTool.outputType);
         void loadMemberStatus();
         loadDailyUsage();
+        if (typeof options.runId === 'string' && options.runId) {
+            void loadRunResult(options.runId);
+        }
     });
 
     useShareAppMessage(() => ({
@@ -237,6 +294,22 @@ export default function ToolDetailPage(): JSX.Element {
     function loadDailyUsage(): void {
         const record = Taro.getStorageSync(DAILY_USAGE_KEY) as { date?: string; used?: boolean };
         setTodayUsed(Boolean(record?.date === getTodayKey() && record.used));
+    }
+
+    async function loadRunResult(runId: string): Promise<void> {
+        setSubmitting(true);
+        try {
+            const runResult = await callCloudFunction<RunAiToolResult>('get-ai-tool-run', { runId });
+            setToolId(getToolById(runResult.toolId).id);
+            setResult(toSummaryResult(runResult));
+        } catch (error) {
+            void Taro.showToast({
+                title: error instanceof Error ? error.message : '结果读取失败',
+                icon: 'none',
+            });
+        } finally {
+            setSubmitting(false);
+        }
     }
 
     function markDailyUsed(): void {
@@ -413,6 +486,15 @@ export default function ToolDetailPage(): JSX.Element {
     }
 
     async function handleGenerate(): Promise<void> {
+        if (!activeTool.enabled) {
+            await Taro.showModal({
+                title: activeTool.name,
+                content: `${activeTool.desc}工作流正在接入中，暂时还不能生成结果。`,
+                showCancel: false,
+                confirmText: '知道了',
+            });
+            return;
+        }
         const text = stripLegacyPromptPrefixes(content);
         if (!referenceAsset && text.length === 0) {
             void Taro.showToast({ title: '请输入内容或添加素材', icon: 'none' });
@@ -424,18 +506,23 @@ export default function ToolDetailPage(): JSX.Element {
 
         setSubmitting(true);
         try {
-            const summary = await callCloudFunction<SummaryResult>('summarize-ai-tool', {
-                content: text,
+            const runResult = await callCloudFunction<RunAiToolResult>('run-ai-tool', {
+                toolId: activeTool.id,
+                text,
                 outputType,
                 fileText: referenceAsset?.fileText || '',
                 fileBase64: referenceAsset?.fileBase64 || '',
                 imageDataUrl: referenceAsset?.imageDataUrl || '',
                 fileName: referenceAsset?.name || '',
                 fileType: referenceAsset?.fileType || '',
+                adUnlocked,
+                source: 'miniapp',
             });
-            setResult(summary);
-            if (!memberActive) {
+            setResult(toSummaryResult(runResult));
+            if (runResult.usage.freeUsed) {
                 markDailyUsed();
+            } else if (runResult.usage.rewardAdUsed) {
+                setAdUnlocked(false);
             }
         } catch (error) {
             void Taro.showToast({
@@ -501,7 +588,9 @@ export default function ToolDetailPage(): JSX.Element {
                     </View>
 
                     <View className='tool-workbench tool-workbench--detail'>
-                        <Text className='tool-ai-notice'>AI生成内容，仅供参考。</Text>
+                        <Text className='tool-ai-notice'>
+                            {activeTool.enabled ? 'AI生成内容，仅供参考。' : `${activeTool.name}工作流接入中，当前页面用于预览流程。`}
+                        </Text>
 
                         {/* <View className='tool-preset-row'>
               {PROMPT_PRESETS.map((preset) => (
@@ -511,17 +600,19 @@ export default function ToolDetailPage(): JSX.Element {
               ))}
             </View> */}
 
-                        <View className='tool-output-tabs'>
-                            {visibleOutputOptions.map((item) => (
-                                <Text
-                                    key={item.value}
-                                    className={`tool-output-tab ${outputType === item.value ? 'tool-output-tab--active' : ''}`}
-                                    onClick={() => changeOutputType(item.value)}
-                                >
-                                    {item.label}
-                                </Text>
-                            ))}
-                        </View>
+                        {!imageTool ? (
+                            <View className='tool-output-tabs'>
+                                {visibleOutputOptions.map((item) => (
+                                    <Text
+                                        key={item.value}
+                                        className={`tool-output-tab ${outputType === item.value ? 'tool-output-tab--active' : ''}`}
+                                        onClick={() => changeOutputType(item.value)}
+                                    >
+                                        {item.label}
+                                    </Text>
+                                ))}
+                            </View>
+                        ) : null}
 
                         {inputMode === 'idle' && !referenceAsset && !content ? (
                             <View className='tool-source-actions'>
@@ -529,15 +620,19 @@ export default function ToolDetailPage(): JSX.Element {
                                     <View className='tool-source-card__icon'>
                                         <Image className='tool-source-card__icon-image' src={TOOL_ADD_FILE_ICON} mode='aspectFit' />
                                     </View>
-                                    <Text className='tool-source-card__title'>添加文件</Text>
-                                    <Text className='tool-source-card__desc'>支持 txt、md、doc、docx、xls、xlsx、pptx、pdf、jpg、png 等常用文件</Text>
+                                    <Text className='tool-source-card__title'>{activeTool.id === 'imageRepair' ? '上传旧照片' : '添加文件'}</Text>
+                                    <Text className='tool-source-card__desc'>
+                                        {imageTool ? '支持 jpg、png、webp 图片，建议先压缩到 900KB 内' : '支持 txt、md、doc、docx、xls、xlsx、pptx、pdf、jpg、png 等常用文件'}
+                                    </Text>
                                 </View>
                                 <View className='tool-source-card' onClick={showPasteInput}>
                                     <View className='tool-source-card__icon'>
                                         <Image className='tool-source-card__icon-image' src={TOOL_PASTE_ICON} mode='aspectFit' />
                                     </View>
-                                    <Text className='tool-source-card__title'>粘贴内容</Text>
-                                    <Text className='tool-source-card__desc'>直接粘贴文章、帖子、会议记录或长文本</Text>
+                                    <Text className='tool-source-card__title'>{imageTool ? '填写要求' : '粘贴内容'}</Text>
+                                    <Text className='tool-source-card__desc'>
+                                        {imageTool ? '补充画面描述、修复重点或希望保留的照片质感' : '直接粘贴文章、帖子、会议记录或长文本'}
+                                    </Text>
                                 </View>
                             </View>
                         ) : null}
@@ -547,7 +642,7 @@ export default function ToolDetailPage(): JSX.Element {
                                 className='tool-input'
                                 maxlength={6000}
                                 value={content}
-                                placeholder='粘贴文章、帖子、会议记录或一段长文本'
+                                placeholder={getToolInputPlaceholder(activeTool.id)}
                                 onInput={(event) => setContent(event.detail.value)}
                             />
                         ) : null}
@@ -580,7 +675,11 @@ export default function ToolDetailPage(): JSX.Element {
                                     disabled={generateDisabled}
                                     onClick={() => void handleGenerate()}
                                 >
-                                    {submitting ? '生成中' : '生成结果'}
+                                    {getGenerateButtonText({
+                                        enabled: activeTool.enabled,
+                                        submitting,
+                                        imageTool,
+                                    })}
                                 </Button>
                                 <Text className='tool-clear-button' onClick={clearContent}>清空</Text>
                             </View>

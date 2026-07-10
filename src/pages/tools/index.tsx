@@ -3,7 +3,7 @@ import Taro, { useDidShow } from '@tarojs/taro';
 import { AppTransparentHeader } from '@/components/AppTransparentHeader';
 import { showTabBarSafely } from '@/utils/tabbar';
 import { useResetPageScroll } from '@/hooks/useResetPageScroll';
-import { VISIBLE_TOOLS, type ToolDefinition } from './definitions';
+import { VISIBLE_TOOLS, getToolEntryUrl, hasToolIntro, type ToolDefinition } from './definitions';
 
 function showComingSoon(tool: ToolDefinition): void {
   void Taro.showModal({
@@ -22,12 +22,12 @@ export default function ToolsPage(): JSX.Element {
   });
 
   function openTool(tool: ToolDefinition): void {
-    if (!tool.enabled) {
+    if (!tool.enabled && !hasToolIntro(tool)) {
       showComingSoon(tool);
       return;
     }
     void Taro.navigateTo({
-      url: `/pages/tool-detail/index?tool=${encodeURIComponent(tool.id)}`,
+      url: getToolEntryUrl(tool),
     });
   }
 
@@ -40,7 +40,7 @@ export default function ToolsPage(): JSX.Element {
             <View>
               <Text className='saas-chip'>AI工具箱</Text>
               <Text className='tools-hero__title'>内容整理与创作</Text>
-              <Text className='tools-hero__desc'>先开放摘要总结。后续接入 AI 生图、图片修复等能力。</Text>
+              <Text className='tools-hero__desc'>先开放摘要总结。后续接入 AI 生图、老照片修复等能力。</Text>
             </View>
             <View className='tools-hero__meter'>
               <Text className='tools-hero__meter-value'>1次</Text>
@@ -56,7 +56,7 @@ export default function ToolsPage(): JSX.Element {
             <View className='tools-grid'>
               {VISIBLE_TOOLS.map((tool) => (
                 <View
-                  className={`tool-card ${tool.enabled ? 'tool-card--enabled' : 'tool-card--disabled'}`}
+                  className={`tool-card ${tool.enabled ? 'tool-card--enabled' : hasToolIntro(tool) ? 'tool-card--intro' : 'tool-card--disabled'}`}
                   key={tool.id}
                   onClick={() => openTool(tool)}
                 >

@@ -9,7 +9,7 @@ import type { AiNewsView, ProductTypeView } from '@/types';
 import { useResetPageScroll } from '@/hooks/useResetPageScroll';
 import { showTabBarSafely } from '@/utils/tabbar';
 import { setPromotedProductCode } from '@/utils/productNavigation';
-import { VISIBLE_TOOLS, type ToolDefinition } from '@/pages/tools/definitions';
+import { VISIBLE_TOOLS, getToolEntryUrl, type ToolDefinition } from '@/pages/tools/definitions';
 import { loadClientAppConfig } from '@/utils/appConfig';
 import { toCompliantProductType } from '@/utils/productCompliance';
 import { getCachedUserInfo, saveCachedUserInfo } from '@/utils/auth';
@@ -134,7 +134,7 @@ export default function HomePage(): JSX.Element {
 
   function openTool(tool: ToolDefinition): void {
     void Taro.navigateTo({
-      url: `/pages/tool-detail/index?tool=${encodeURIComponent(tool.id)}`,
+      url: getToolEntryUrl(tool),
     });
   }
 
