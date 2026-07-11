@@ -6,6 +6,7 @@ export type ProductStatus = 'on' | 'off';
 export type AiToolCategory = 'text' | 'image' | 'video' | 'workflow';
 export type AiToolOutputType = 'summary' | 'bullets' | 'xiaohongshu' | 'moments';
 export type AiToolCaseMode = 'compare' | 'preview';
+export type AdminFileUsage = 'icon' | 'image' | 'document' | 'other';
 
 export interface ProductIntroHighlight {
   readonly title: string;
@@ -40,6 +41,23 @@ export interface PointsConfigRecord {
   readonly pointsPerYuan: number;
   readonly inviteBaseRewardPoints: number;
   readonly inviteMilestones: readonly InviteMilestoneConfig[];
+  readonly updatedAt: string;
+}
+
+export interface AdminFileRecord {
+  readonly id: string;
+  readonly fileId: string;
+  readonly url: string;
+  readonly tempUrl: string;
+  readonly publicUrl: string;
+  readonly cloudPath: string;
+  readonly name: string;
+  readonly displayName: string;
+  readonly usage: AdminFileUsage;
+  readonly note: string;
+  readonly size: number;
+  readonly mimeType: string;
+  readonly createdAt: string;
   readonly updatedAt: string;
 }
 
@@ -141,6 +159,7 @@ export interface ProductTypeRecord {
   readonly available: boolean;
   readonly description: string;
   readonly introHighlights: readonly ProductIntroHighlight[];
+  readonly complianceEnabled: boolean;
   readonly complianceDisplay?: ProductComplianceDisplay;
   readonly sort: number;
   readonly status: ProductStatus;
@@ -196,6 +215,7 @@ export type ProductTypeInput = Pick<
   | 'available'
   | 'description'
   | 'introHighlights'
+  | 'complianceEnabled'
   | 'complianceDisplay'
   | 'sort'
   | 'status'
@@ -241,6 +261,10 @@ export type PointsConfigInput = Pick<
   'pointsPerYuan' | 'inviteBaseRewardPoints' | 'inviteMilestones'
 >;
 
+export type AdminFileInput = Pick<AdminFileRecord, 'displayName' | 'usage' | 'note'>;
+
 export interface UploadToolImageResult {
   readonly fileId: string;
 }
+
+export type UploadFileResult = AdminFileRecord;

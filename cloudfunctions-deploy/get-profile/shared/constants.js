@@ -24,6 +24,7 @@ exports.COLLECTIONS = {
     aiToolSingleEntitlements: 'ai_tool_single_entitlements',
     aiToolTemplates: 'ai_tool_templates',
     aiTools: 'ai_tools',
+    adminFiles: 'admin_files',
     invoiceRequests: 'invoice_requests',
     deliveries: 'deliveries',
     reminderLogs: 'reminder_logs',

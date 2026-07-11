@@ -3,6 +3,7 @@ import { AuthProvider } from './auth/AuthProvider';
 import { ProtectedRoute } from './auth/ProtectedRoute';
 import { AdminLayout } from './layouts/AdminLayout';
 import { DashboardPage } from './features/dashboard/DashboardPage';
+import { FileUploadPage } from './features/files/FileUploadPage';
 import { LoginPage } from './features/login/LoginPage';
 import { NewsPage } from './features/news/NewsPage';
 import { NotFoundPage } from './features/not-found/NotFoundPage';
@@ -35,6 +36,7 @@ export function App(): JSX.Element {
               <Route path="/plans/new" element={<MemberPlanEditPage />} />
               <Route path="/plans/:planId/edit" element={<MemberPlanEditPage />} />
               <Route path="/points-config" element={<PointsConfigPage />} />
+              <Route path="/files" element={<FileUploadPage />} />
               <Route path="/news" element={<NewsPage />} />
               <Route path="/tools" element={<ToolsPage />} />
               <Route path="/tools/new" element={<ToolEditPage />} />

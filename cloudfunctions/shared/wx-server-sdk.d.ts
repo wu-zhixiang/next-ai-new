@@ -33,6 +33,21 @@ declare module 'wx-server-sdk' {
       UNIONID?: string;
     };
     uploadFile(options: { cloudPath: string; fileContent: Buffer }): Promise<{ fileID: string }>;
+    deleteFile(options: { fileList: string[] }): Promise<{
+      fileList: Array<{
+        fileID?: string;
+        status?: number;
+        errMsg?: string;
+      }>;
+    }>;
+    getTempFileURL(options: { fileList: Array<string | { fileID: string; maxAge: number }> }): Promise<{
+      fileList: Array<{
+        fileID?: string;
+        tempFileURL?: string;
+        status?: number;
+        errMsg?: string;
+      }>;
+    }>;
     database(): {
       command: unknown;
       createCollection(name: string): Promise<unknown>;

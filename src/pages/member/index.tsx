@@ -259,16 +259,12 @@ export default function MemberPage(): JSX.Element {
     if (
       !promotedProductCode
       || !promotedProduct
-      || (productComplianceMode && !promotedProduct.complianceDisplay)
     ) {
       return;
     }
     const displayProduct = productComplianceMode === true
       ? toCompliantProductType(promotedProduct)
       : promotedProduct;
-    if (!displayProduct) {
-      return;
-    }
     setIntroProduct(displayProduct);
     setProductTypeSheetVisible(false);
     setProductIntroVisible(true);
@@ -386,7 +382,6 @@ export default function MemberPage(): JSX.Element {
     () => (productComplianceMode === true
       ? backendProductTypes
           .map(toCompliantProductType)
-          .filter((item): item is ProductTypeView => Boolean(item))
       : backendProductTypes).filter((item) => item.productCode !== 'claude_pro'),
     [backendProductTypes, productComplianceMode],
   );
@@ -397,7 +392,6 @@ export default function MemberPage(): JSX.Element {
     const nextMap: Record<string, ProductPlanOption[]> = {};
     backendPlans.forEach((rawPlan) => {
       const plan = productComplianceMode === true ? toCompliantPlan(rawPlan) : rawPlan;
-      if (!plan) return;
       const current = nextMap[plan.productCode] ?? [];
       current.push(buildPlanOption(plan, current.length));
       nextMap[plan.productCode] = current;

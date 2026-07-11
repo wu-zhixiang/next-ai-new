@@ -38,6 +38,13 @@ function formatRelativeTime(value: number): string {
   return `${Math.floor(diff / day)}天前`;
 }
 
+function splitProductTags(value: string): string[] {
+  return value
+    .split('、')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 export default function HomePage(): JSX.Element {
   const pageScroll = useResetPageScroll();
   const router = useRouter();
@@ -101,7 +108,6 @@ export default function HomePage(): JSX.Element {
         config.enableProductComplianceMode
           ? productResult.productTypes
               .map(toCompliantProductType)
-              .filter((item): item is ProductTypeView => Boolean(item))
           : productResult.productTypes,
       );
       setNews(newsResult.items.slice(0, 5));
@@ -181,7 +187,13 @@ export default function HomePage(): JSX.Element {
                   <SwiperItem key={product.productCode}>
                     <View className='home-banner' onClick={() => openMemberCenter(product.productCode)}>
                       <View className='home-banner__copy'>
-                        <Text className='home-banner__tag'>{product.tag}</Text>
+                        <View className='home-banner__tags'>
+                          {splitProductTags(product.tag).map((tag, tagIndex) => (
+                            <Text className='home-banner__tag' key={`${tag}-${tagIndex}`}>
+                              {tag}
+                            </Text>
+                          ))}
+                        </View>
                         <Text className='home-banner__title'>{product.label || product.productName}</Text>
                         <Text className='home-banner__desc'>{product.description}</Text>
                         <View className='home-banner__action'>

@@ -24,6 +24,8 @@ import {
 import type {
   AiNewsRecord,
   AiToolRunRecord,
+  AdminFileRecord,
+  AdminFileUsage,
   PointsConfigRecord,
   MemberPlanRecord,
   MembershipRecord,
@@ -32,7 +34,7 @@ import type {
   UserRecord as CloudUserRecord,
 } from '../shared/types';
 
-type ResourceName = 'users' | 'orders' | 'news' | 'tools' | 'product-types' | 'plans';
+type ResourceName = 'users' | 'orders' | 'news' | 'tools' | 'product-types' | 'plans' | 'files';
 type AdminUserStatus = 'active' | 'disabled';
 type AdminOrderStatus = 'pending' | 'paid' | 'fulfilled' | 'refunded' | 'closed';
 type AdminNewsStatus = 'draft' | 'published' | 'archived';
@@ -134,6 +136,7 @@ interface AdminProductTypeView {
   readonly available: boolean;
   readonly description: string;
   readonly introHighlights: NonNullable<ProductTypeRecord['introHighlights']>;
+  readonly complianceEnabled: boolean;
   readonly complianceDisplay?: ProductTypeRecord['complianceDisplay'];
   readonly sort: number;
   readonly status: AdminConfigStatus;
@@ -169,6 +172,23 @@ interface AdminPointsConfigView {
   readonly updatedAt: string;
 }
 
+interface AdminFileView {
+  readonly id: string;
+  readonly fileId: string;
+  readonly url: string;
+  readonly tempUrl: string;
+  readonly publicUrl: string;
+  readonly cloudPath: string;
+  readonly name: string;
+  readonly displayName: string;
+  readonly usage: AdminFileUsage;
+  readonly note: string;
+  readonly size: number;
+  readonly mimeType: string;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
 interface DashboardPayload {
   readonly metrics: readonly {
     readonly id: string;
@@ -185,12 +205,21 @@ interface ToolImageFile {
   readonly bytes: Buffer;
 }
 
+interface AdminUploadFile {
+  readonly name: string;
+  readonly extension: string;
+  readonly mimeType: string;
+  readonly bytes: Buffer;
+}
+
 const DEFAULT_ALLOWED_ORIGINS = [
   'http://localhost:5174',
   'http://127.0.0.1:5174',
 ];
 const ADMIN_VISIBLE_DEFAULT_TOOL_ID_SET = new Set<string>(ADMIN_VISIBLE_DEFAULT_TOOL_IDS);
 const MAX_TOOL_IMAGE_BYTES = 3 * 1024 * 1024;
+const MAX_ADMIN_UPLOAD_FILE_BYTES = 10 * 1024 * 1024;
+const ADMIN_UPLOAD_TEMP_URL_MAX_AGE = 365 * 24 * 60 * 60;
 
 function getAllowedOrigins(): readonly string[] {
   const configured = process.env.ADMIN_ALLOWED_ORIGINS;
@@ -417,7 +446,7 @@ function matchRoute(path: string): { resource?: ResourceName; id?: string } {
   if (normalized === '/dashboard') {
     return {};
   }
-  const matched = normalized.match(/^\/(users|orders|news|tools|product-types|plans)(?:\/([^/]+))?$/);
+  const matched = normalized.match(/^\/(users|orders|news|tools|product-types|plans|files)(?:\/([^/]+))?$/);
   if (!matched?.[1]) {
     return {};
   }
@@ -602,6 +631,77 @@ function createCustomToolId(name: string): string {
   return slug ? `custom_${slug}` : `custom_${Date.now()}`;
 }
 
+function getExtensionFromMimeType(mimeType: string): string {
+  const normalized = mimeType.toLowerCase();
+  const map: Record<string, string> = {
+    'application/json': 'json',
+    'application/pdf': 'pdf',
+    'application/vnd.ms-excel': 'xls',
+    'application/vnd.ms-powerpoint': 'ppt',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+    'image/gif': 'gif',
+    'image/jpeg': 'jpg',
+    'image/png': 'png',
+    'image/svg+xml': 'svg',
+    'image/webp': 'webp',
+    'text/csv': 'csv',
+    'text/html': 'html',
+    'text/markdown': 'md',
+    'text/plain': 'txt',
+  };
+  return map[normalized] ?? 'bin';
+}
+
+function getExtensionFromFileName(fileName: string): string {
+  const extension = fileName.split('?')[0]?.split('#')[0]?.match(/\.([a-z0-9]{1,16})$/i)?.[1];
+  return extension ? extension.toLowerCase() : '';
+}
+
+function sanitizeUploadFileName(value: unknown, fallbackExtension: string): string {
+  const rawName = sanitizeText(value, 160);
+  const fallbackName = `upload.${fallbackExtension || 'bin'}`;
+  return rawName || fallbackName;
+}
+
+function sanitizeCloudPathSegment(value: string): string {
+  const normalized = value
+    .replace(/\.[a-z0-9]{1,16}$/i, '')
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+  return normalized || 'file';
+}
+
+function parseAdminUploadDataUrl(body: Record<string, unknown>): AdminUploadFile {
+  const dataUrl = body.dataUrl;
+  if (typeof dataUrl !== 'string') {
+    throw withStatus(new Error('缺少上传文件'), 422);
+  }
+  const matched = dataUrl.match(/^data:([^;,]*);base64,([A-Za-z0-9+/=]+)$/);
+  if (!matched || !matched[2]) {
+    throw withStatus(new Error('上传文件格式不正确'), 422);
+  }
+  const mimeType = (matched[1] || 'application/octet-stream').toLowerCase();
+  const extensionFromMime = getExtensionFromMimeType(mimeType);
+  const name = sanitizeUploadFileName(body.fileName, extensionFromMime);
+  const extension = getExtensionFromFileName(name) || extensionFromMime;
+  const bytes = Buffer.from(matched[2], 'base64');
+  if (bytes.length === 0) {
+    throw withStatus(new Error('上传文件为空'), 422);
+  }
+  if (bytes.length > MAX_ADMIN_UPLOAD_FILE_BYTES) {
+    throw withStatus(new Error('文件不能超过 10MB'), 422);
+  }
+  return {
+    name,
+    extension,
+    mimeType,
+    bytes,
+  };
+}
+
 function parseToolImageDataUrl(value: unknown): ToolImageFile {
   if (typeof value !== 'string') {
     throw withStatus(new Error('缺少图片文件'), 422);
@@ -619,6 +719,192 @@ function parseToolImageDataUrl(value: unknown): ToolImageFile {
     throw withStatus(new Error('图片不能超过 3MB'), 422);
   }
   return { extension, bytes };
+}
+
+function toPublicFileUrl(tempUrl: string): string {
+  return tempUrl.split('?')[0] ?? '';
+}
+
+function normalizeAdminFileUsage(value: unknown): AdminFileUsage {
+  if (value === 'icon' || value === 'image' || value === 'document' || value === 'other') {
+    return value;
+  }
+  return 'icon';
+}
+
+function normalizeAdminFileDisplayName(value: unknown, fallback: string): string {
+  return sanitizeText(value, 120) || fallback;
+}
+
+function normalizeAdminFileNote(value: unknown): string {
+  return sanitizeText(value, 240);
+}
+
+async function getFileUrls(fileId: string): Promise<{ readonly tempUrl: string; readonly publicUrl: string }> {
+  try {
+    const result = await app.getTempFileURL({
+      fileList: [{ fileID: fileId, maxAge: ADMIN_UPLOAD_TEMP_URL_MAX_AGE }],
+    });
+    const tempUrl = result.fileList[0]?.tempFileURL ?? '';
+    return {
+      tempUrl,
+      publicUrl: toPublicFileUrl(tempUrl),
+    };
+  } catch {
+    return { tempUrl: '', publicUrl: '' };
+  }
+}
+
+async function getFileUrlsMap(fileIds: readonly string[]): Promise<ReadonlyMap<string, { readonly tempUrl: string; readonly publicUrl: string }>> {
+  const uniqueFileIds = Array.from(new Set(fileIds.filter(Boolean)));
+  if (uniqueFileIds.length === 0) {
+    return new Map();
+  }
+  try {
+    const result = await app.getTempFileURL({
+      fileList: uniqueFileIds.map((fileID) => ({ fileID, maxAge: ADMIN_UPLOAD_TEMP_URL_MAX_AGE })),
+    });
+    const urls = new Map<string, { readonly tempUrl: string; readonly publicUrl: string }>();
+    for (const item of result.fileList) {
+      const fileId = item.fileID ?? '';
+      const tempUrl = item.tempFileURL ?? '';
+      if (fileId) {
+        urls.set(fileId, {
+          tempUrl,
+          publicUrl: toPublicFileUrl(tempUrl),
+        });
+      }
+    }
+    return urls;
+  } catch {
+    return new Map();
+  }
+}
+
+function toAdminFileView(
+  record: AdminFileRecord & { _id: string },
+  urls: { readonly tempUrl: string; readonly publicUrl: string },
+): AdminFileView {
+  return {
+    id: record._id,
+    fileId: record.fileId,
+    url: urls.tempUrl,
+    tempUrl: urls.tempUrl,
+    publicUrl: urls.publicUrl,
+    cloudPath: record.cloudPath,
+    name: record.name,
+    displayName: record.displayName || record.name,
+    usage: normalizeAdminFileUsage(record.usage),
+    note: record.note ?? '',
+    size: Number(record.size ?? 0),
+    mimeType: record.mimeType || 'application/octet-stream',
+    createdAt: toIsoTime(record.createdAt),
+    updatedAt: toIsoTime(record.updatedAt),
+  };
+}
+
+async function listAdminFiles(event: Event): Promise<HttpResponse> {
+  await ensureCollection('adminFiles');
+  const records = await readCollection<AdminFileRecord>('adminFiles');
+  const sortedRecords = records
+    .sort((left, right) => (right.updatedAt ?? right.createdAt ?? 0) - (left.updatedAt ?? left.createdAt ?? 0))
+    .slice(0, 500);
+  const urls = await getFileUrlsMap(sortedRecords.map((record) => record.fileId));
+  const data = sortedRecords.map((record) => toAdminFileView(record, urls.get(record.fileId) ?? { tempUrl: '', publicUrl: '' }));
+  return ok(event, data);
+}
+
+async function uploadAdminFile(event: Event): Promise<HttpResponse> {
+  await ensureCollection('adminFiles');
+  const body = parseBody(event);
+  const file = parseAdminUploadDataUrl(body);
+  const now = Date.now();
+  const random = Math.floor(Math.random() * 100000).toString().padStart(5, '0');
+  const baseName = sanitizeCloudPathSegment(file.name);
+  const cloudPath = `cloud-admin/uploads/${now}-${random}-${baseName}.${file.extension}`;
+  const result = await app.uploadFile({
+    cloudPath,
+    fileContent: file.bytes,
+  });
+  const record: AdminFileRecord = {
+    fileId: result.fileID,
+    cloudPath,
+    name: file.name,
+    displayName: normalizeAdminFileDisplayName(body.displayName, file.name),
+    usage: normalizeAdminFileUsage(body.usage),
+    note: normalizeAdminFileNote(body.note),
+    size: file.bytes.length,
+    mimeType: file.mimeType,
+    createdAt: now,
+    updatedAt: now,
+  };
+  const created = await adminCollection('adminFiles').add({ data: record });
+  const fileUrls = await getFileUrls(result.fileID);
+  return ok(event, toAdminFileView({ ...record, _id: created._id }, fileUrls));
+}
+
+async function updateAdminFile(event: Event, fileRecordId: string): Promise<HttpResponse> {
+  await ensureCollection('adminFiles');
+  const existing = await adminCollection('adminFiles').doc(fileRecordId).get()
+    .then((result) => result.data as (AdminFileRecord & { _id?: string }) | undefined)
+    .catch(() => undefined);
+  if (!existing) {
+    return fail(event, 404, '文件记录不存在');
+  }
+  const body = parseBody(event);
+  const updatedAt = Date.now();
+  const patch = {
+    displayName: normalizeAdminFileDisplayName(body.displayName, existing.displayName || existing.name),
+    usage: normalizeAdminFileUsage(body.usage ?? existing.usage),
+    note: normalizeAdminFileNote(body.note),
+    updatedAt,
+  };
+  await adminCollection('adminFiles').doc(fileRecordId).update({ data: patch });
+  const fileUrls = await getFileUrls(existing.fileId);
+  return ok(event, toAdminFileView({ ...existing, ...patch, _id: fileRecordId }, fileUrls));
+}
+
+function isMissingCloudFileMessage(value: string): boolean {
+  const normalized = value.toLowerCase();
+  return normalized.includes('not exist') || normalized.includes('not found') || normalized.includes('不存在');
+}
+
+async function deleteCloudFile(fileId: string): Promise<void> {
+  if (!fileId) {
+    return;
+  }
+  try {
+    const result = await app.deleteFile({ fileList: [fileId] });
+    const target = result.fileList[0];
+    const status = target?.status ?? 0;
+    const errMsg = target?.errMsg ?? '';
+    if (status !== 0 && !isMissingCloudFileMessage(errMsg)) {
+      throw new Error(errMsg || 'deleteFile failed');
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (isMissingCloudFileMessage(message)) {
+      return;
+    }
+    throw withStatus(new Error('删除云存储文件失败'), 500);
+  }
+}
+
+async function deleteAdminFile(event: Event, fileRecordId: string): Promise<HttpResponse> {
+  const body = parseBody(event);
+  if (body.confirm !== 'DELETE') {
+    return fail(event, 400, '删除操作缺少二次确认');
+  }
+  await ensureCollection('adminFiles');
+  const existing = await adminCollection('adminFiles').doc(fileRecordId).get()
+    .then((result) => result.data as (AdminFileRecord & { _id?: string }) | undefined)
+    .catch(() => undefined);
+  if (!existing) {
+    return fail(event, 404, '文件记录不存在');
+  }
+  await deleteCloudFile(existing.fileId);
+  await adminCollection('adminFiles').doc(fileRecordId).remove();
+  return ok(event, { deleted: true });
 }
 
 async function uploadToolAsset(event: Event): Promise<HttpResponse> {
@@ -668,6 +954,7 @@ function toToolView(record: AdminToolRecord & { _id: string }, runCounts: Readon
 }
 
 function toProductTypeView(record: ProductTypeRecord & { _id: string }): AdminProductTypeView {
+  const complianceEnabled = record.complianceEnabled ?? Boolean(record.complianceDisplay);
   return {
     id: record._id,
     productCode: record.productCode,
@@ -679,7 +966,8 @@ function toProductTypeView(record: ProductTypeRecord & { _id: string }): AdminPr
     available: Boolean(record.available),
     description: record.description,
     introHighlights: record.introHighlights ?? [],
-    ...(record.complianceDisplay ? { complianceDisplay: record.complianceDisplay } : {}),
+    complianceEnabled,
+    ...(complianceEnabled && record.complianceDisplay ? { complianceDisplay: record.complianceDisplay } : {}),
     sort: normalizeSort(record.sort, 999),
     status: normalizeConfigStatus(record.status),
     createdAt: toIsoTime(record.createdAt),
@@ -745,6 +1033,7 @@ function normalizeProductTypeInput(
   }
   const requestedCode = sanitizeText(body.productCode, 60);
   const productCode = (existing?.productCode ?? fallbackProductCode ?? requestedCode) || createConfigCode(productName, 'product');
+  const complianceEnabled = sanitizeBoolean(body.complianceEnabled, existing?.complianceEnabled ?? Boolean(existing?.complianceDisplay));
   return {
     productCode,
     productName,
@@ -755,7 +1044,8 @@ function normalizeProductTypeInput(
     available: sanitizeBoolean(body.available, existing?.available ?? false),
     description: sanitizeText(body.description, 240),
     introHighlights: normalizeIntroHighlights(body.introHighlights),
-    complianceDisplay: normalizeProductComplianceDisplay(body.complianceDisplay),
+    complianceEnabled,
+    complianceDisplay: complianceEnabled ? normalizeProductComplianceDisplay(body.complianceDisplay) : undefined,
     sort: normalizeSort(body.sort, existing?.sort ?? 999),
     status: normalizeConfigStatus(body.status),
     createdAt: existing?.createdAt ?? now,
@@ -1241,6 +1531,7 @@ async function route(event: Event): Promise<HttpResponse> {
     if (resource === 'news') return listNews(event);
     if (resource === 'tools') return listTools(event);
     if (resource === 'product-types') return listProductTypes(event);
+    if (resource === 'files') return listAdminFiles(event);
     return listMemberPlans(event);
   }
 
@@ -1249,6 +1540,7 @@ async function route(event: Event): Promise<HttpResponse> {
     if (resource === 'tools') return createTool(event);
     if (resource === 'product-types') return createProductType(event);
     if (resource === 'plans') return createMemberPlan(event);
+    if (resource === 'files') return uploadAdminFile(event);
     return fail(event, 405, '用户和订单不支持后台新增');
   }
 
@@ -1258,6 +1550,7 @@ async function route(event: Event): Promise<HttpResponse> {
     if (resource === 'news') return updateNews(event, id);
     if (resource === 'tools') return updateTool(event, id);
     if (resource === 'product-types') return updateProductType(event, id);
+    if (resource === 'files') return updateAdminFile(event, id);
     return updateMemberPlan(event, id);
   }
 
@@ -1267,6 +1560,7 @@ async function route(event: Event): Promise<HttpResponse> {
     if (resource === 'news') return deleteDocument(event, 'aiNews', id);
     if (resource === 'tools') return deleteTool(event, id);
     if (resource === 'product-types') return deleteProductType(event, id);
+    if (resource === 'files') return deleteAdminFile(event, id);
     return deleteMemberPlan(event, id);
   }
 

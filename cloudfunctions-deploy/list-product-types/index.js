@@ -4,7 +4,8 @@ exports.main = main;
 const db_1 = require("./shared/db");
 const utils_1 = require("./shared/utils");
 function toProductTypeView(record) {
-    var _a;
+    var _a, _b;
+    const complianceEnabled = (_a = record.complianceEnabled) !== null && _a !== void 0 ? _a : Boolean(record.complianceDisplay);
     return {
         productCode: record.productCode,
         productName: record.productName,
@@ -14,8 +15,9 @@ function toProductTypeView(record) {
         detailPageUrl: record.detailPageUrl,
         available: record.available,
         description: record.description,
-        introHighlights: (_a = record.introHighlights) !== null && _a !== void 0 ? _a : [],
-        complianceDisplay: record.complianceDisplay,
+        introHighlights: (_b = record.introHighlights) !== null && _b !== void 0 ? _b : [],
+        complianceEnabled,
+        complianceDisplay: complianceEnabled ? record.complianceDisplay : undefined,
     };
 }
 async function main() {

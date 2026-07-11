@@ -195,7 +195,6 @@ for (const name of functionNames) {
     fs.rmSync(path.join(targetSharedRoot, 'x-video.js'), { force: true });
   }
   if (!functionsThatNeedAiToolShared.has(name)) {
-    fs.rmSync(path.join(targetSharedRoot, 'ai-tool-core.js'), { force: true });
     fs.rmSync(path.join(targetSharedRoot, 'ai-tool-generation.js'), { force: true });
     fs.rmSync(path.join(targetSharedRoot, 'ai-tool-service.js'), { force: true });
   }

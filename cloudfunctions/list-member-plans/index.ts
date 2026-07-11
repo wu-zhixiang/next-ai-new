@@ -14,6 +14,7 @@ export async function main(event: Event = {}) {
     .get();
   const plans = (result.data as MemberPlanRecord[]).map((item) => {
     const plan = item as MemberPlanRecord;
+    const complianceEnabled = plan.complianceEnabled ?? Boolean(plan.complianceDisplay);
     return {
       pid: plan.pid,
       productCode: plan.productCode,
@@ -24,8 +25,8 @@ export async function main(event: Event = {}) {
       totalAiPoints: plan.totalAiPoints ?? 0,
       durationDays: plan.durationDays,
       description: plan.description,
-      complianceEnabled: plan.complianceEnabled ?? Boolean(plan.complianceDisplay),
-      complianceDisplay: plan.complianceDisplay,
+      complianceEnabled,
+      complianceDisplay: complianceEnabled ? plan.complianceDisplay : undefined,
     };
   });
 

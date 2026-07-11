@@ -15,6 +15,7 @@ import { setPromotedProductCode } from '@/utils/productNavigation';
 
 const TOOL_ADD_FILE_ICON = require('../../assets/icons/tool-add-file.svg') as string;
 const TOOL_PASTE_ICON = require('../../assets/icons/tool-paste.svg') as string;
+const PHOTO_REPAIR_UPLOAD_ICON = 'cloud://cloud1-d3gbrpive8611514c.636c-cloud1-d3gbrpive8611514c-1348953433/cloud-admin/uploads/1783759515882-58219-upload_icon_content_only.webp';
 
 interface MemberHomeResult {
     membership: MembershipView;
@@ -85,6 +86,7 @@ interface ReferenceAsset {
     fileText?: string;
     fileBase64?: string;
     imageDataUrl?: string;
+    imagePreviewUrl?: string;
     fileType?: string;
     fileKind: 'text' | 'document' | 'image';
 }
@@ -122,7 +124,7 @@ const PROMPT_PRESETS: Array<{ label: string; outputType: OutputType }> = [
 
 const DAILY_USAGE_KEY = 'ai_tool_daily_usage';
 const MAX_REFERENCE_FILE_SIZE = 5 * 1024 * 1024;
-const MAX_REFERENCE_IMAGE_SIZE = 900 * 1024;
+const MAX_REFERENCE_IMAGE_SIZE = 10 * 1024 * 1024;
 const MAX_REFERENCE_FILE_TEXT_LENGTH = 6000;
 const TEXT_FILE_EXTENSIONS = ['txt', 'md', 'markdown', 'csv', 'json', 'html', 'htm', 'xml', 'log'];
 const DOCUMENT_FILE_EXTENSIONS = ['doc', 'docx', 'xls', 'xlsx', 'pptx', 'pdf'];
@@ -322,14 +324,24 @@ export default function ToolDetailPage(): JSX.Element {
 
     const activeTool = useMemo(() => getToolByIdFromList(tools, toolId), [tools, toolId]);
     const imageTool = isImageTool(activeTool.id);
+    const photoRepairTool = activeTool.id === 'imageRepair';
+    const allowRequirementInput = !photoRepairTool;
+    const textContent = stripLegacyPromptPrefixes(content);
     const visibleOutputOptions = activeTool.id === 'copywriting' ? COPYWRITING_OUTPUT_OPTIONS : OUTPUT_OPTIONS;
     const memberActive = isMember(membershipStatus);
-    const hasGenerationInput = stripLegacyPromptPrefixes(content).length > 0 || Boolean(referenceAsset);
+    const hasGenerationInput = photoRepairTool
+        ? Boolean(referenceAsset)
+        : textContent.length > 0 || Boolean(referenceAsset);
     const generateDisabled = submitting || !hasGenerationInput;
     const generateButtonMuted = generateDisabled || !activeTool.enabled;
     const toolPointCost = quotaData?.pointCost ?? activeTool.pointCost ?? 0;
     const singlePurchaseAmount = quotaData?.singlePurchaseAmount ?? Number((toolPointCost / 10).toFixed(2));
     const displayedAiToolPointsBalance = quotaData?.aiToolPointsBalance ?? aiToolPointsBalance;
+    const showInitialSourceActions = inputMode === 'idle' && !referenceAsset && (photoRepairTool || !textContent);
+    const showRequirementInput = allowRequirementInput && (inputMode === 'paste' || Boolean(textContent));
+    const showActionRow = photoRepairTool
+        ? Boolean(referenceAsset)
+        : inputMode !== 'idle' || Boolean(referenceAsset) || Boolean(textContent);
     const availablePointPlans = useMemo(
         () => pointPlans.filter((plan) => getPlanAiPoints(plan) > 0),
         [pointPlans],
@@ -519,16 +531,23 @@ export default function ToolDetailPage(): JSX.Element {
                 void Taro.showToast({ title: '暂支持 txt/md/doc/docx/xls/xlsx/pptx/pdf/jpg/png 等常用文件', icon: 'none' });
                 return;
             }
+            if (photoRepairTool && !isImageFile(fileName)) {
+                void Taro.showToast({ title: '请上传 jpg、png、webp 图片', icon: 'none' });
+                return;
+            }
             const fileSize = typeof file.size === 'number'
                 ? file.size
                 : (await Taro.getFileInfo({ filePath }) as unknown as { size: number }).size;
-            if (isImageFile(fileName) && fileSize > MAX_REFERENCE_IMAGE_SIZE) {
-                void Taro.showToast({ title: '图片请控制在 900KB 内', icon: 'none' });
-                return;
-            }
-            if (!isImageFile(fileName) && fileSize > MAX_REFERENCE_FILE_SIZE) {
-                void Taro.showToast({ title: '文件过大，请控制在 5MB 内', icon: 'none' });
-                return;
+            if (isImageFile(fileName)) {
+                if (fileSize > MAX_REFERENCE_IMAGE_SIZE) {
+                    void Taro.showToast({ title: photoRepairTool ? '照片请控制在 10MB 内' : '图片请控制在 10MB 内', icon: 'none' });
+                    return;
+                }
+            } else {
+                if (fileSize > MAX_REFERENCE_FILE_SIZE) {
+                    void Taro.showToast({ title: '文件过大，请控制在 5MB 内', icon: 'none' });
+                    return;
+                }
             }
             const fileManager = Taro.getFileSystemManager();
             const fileTypeLabel = getFileTypeLabel(fileName);
@@ -560,6 +579,7 @@ export default function ToolDetailPage(): JSX.Element {
                         name: fileName,
                         fileBase64,
                         imageDataUrl,
+                        imagePreviewUrl: filePath,
                         fileType: fileTypeLabel,
                         fileKind: getFileKind(fileName),
                     });
@@ -583,7 +603,7 @@ export default function ToolDetailPage(): JSX.Element {
 
     function removeReferenceAsset(): void {
         setReferenceAsset(null);
-        if (!stripLegacyPromptPrefixes(content)) {
+        if (photoRepairTool || !stripLegacyPromptPrefixes(content)) {
             setInputMode('idle');
         }
         setResult(null);
@@ -616,7 +636,7 @@ export default function ToolDetailPage(): JSX.Element {
     }
 
     async function runCurrentGeneration(): Promise<void> {
-        const text = stripLegacyPromptPrefixes(content);
+        const text = photoRepairTool ? '' : stripLegacyPromptPrefixes(content);
         const runResult = await callCloudFunction<RunAiToolResult>('run-ai-tool', buildRunPayload(text));
         handleRunSuccess(runResult);
     }
@@ -661,9 +681,9 @@ export default function ToolDetailPage(): JSX.Element {
             });
             return;
         }
-        const text = stripLegacyPromptPrefixes(content);
+        const text = photoRepairTool ? '' : stripLegacyPromptPrefixes(content);
         if (!referenceAsset && text.length === 0) {
-            void Taro.showToast({ title: '请输入内容或添加素材', icon: 'none' });
+            void Taro.showToast({ title: photoRepairTool ? '请先上传照片' : '请输入内容或添加素材', icon: 'none' });
             return;
         }
         if (submitting) return;
@@ -777,7 +797,7 @@ export default function ToolDetailPage(): JSX.Element {
                                     ? <Image className='tool-card__icon-image' src={activeTool.iconImageFileId} mode='aspectFit' />
                                     : <Text>{activeTool.icon}</Text>}
                             </View>
-                            <View>
+                            <View className='tool-detail-hero__copy'>
                                 <Text className='tool-detail-hero__title'>{activeTool.name}</Text>
                                 <Text className='tool-detail-hero__desc'>{activeTool.desc}</Text>
                             </View>
@@ -817,30 +837,43 @@ export default function ToolDetailPage(): JSX.Element {
                             </View>
                         ) : null}
 
-                        {inputMode === 'idle' && !referenceAsset && !content ? (
-                            <View className='tool-source-actions'>
-                                <View className='tool-source-card' onClick={() => void chooseReferenceFile()}>
+                        {showInitialSourceActions ? (
+                            <View className={`tool-source-actions ${photoRepairTool ? 'tool-source-actions--single' : ''}`}>
+                                <View
+                                    className={`tool-source-card ${photoRepairTool ? 'tool-source-card--photo-repair' : ''}`}
+                                    onClick={() => void chooseReferenceFile()}
+                                >
                                     <View className='tool-source-card__icon'>
-                                        <Image className='tool-source-card__icon-image' src={TOOL_ADD_FILE_ICON} mode='aspectFit' />
+                                        <Image
+                                            className='tool-source-card__icon-image'
+                                            src={photoRepairTool ? PHOTO_REPAIR_UPLOAD_ICON : TOOL_ADD_FILE_ICON}
+                                            mode='aspectFit'
+                                        />
                                     </View>
                                     <Text className='tool-source-card__title'>{activeTool.id === 'imageRepair' ? '上传旧照片' : '添加文件'}</Text>
                                     <Text className='tool-source-card__desc'>
-                                        {imageTool ? '支持 jpg、png、webp 图片，建议先压缩到 900KB 内' : '支持 txt、md、doc、docx、xls、xlsx、pptx、pdf、jpg、png 等常用文件'}
+                                        {photoRepairTool
+                                            ? '支持 jpg、png、webp 图片，10MB 以内'
+                                            : imageTool
+                                                ? '支持 jpg、png、webp 图片，10MB 以内'
+                                                : '支持 txt、md、doc、docx、xls、xlsx、pptx、pdf、jpg、png 等常用文件'}
                                     </Text>
                                 </View>
-                                <View className='tool-source-card' onClick={showPasteInput}>
-                                    <View className='tool-source-card__icon'>
-                                        <Image className='tool-source-card__icon-image' src={TOOL_PASTE_ICON} mode='aspectFit' />
+                                {allowRequirementInput ? (
+                                    <View className='tool-source-card' onClick={showPasteInput}>
+                                        <View className='tool-source-card__icon'>
+                                            <Image className='tool-source-card__icon-image' src={TOOL_PASTE_ICON} mode='aspectFit' />
+                                        </View>
+                                        <Text className='tool-source-card__title'>{imageTool ? '填写要求' : '粘贴内容'}</Text>
+                                        <Text className='tool-source-card__desc'>
+                                            {imageTool ? '补充画面描述、修复重点或希望保留的照片质感' : '直接粘贴文章、帖子、会议记录或长文本'}
+                                        </Text>
                                     </View>
-                                    <Text className='tool-source-card__title'>{imageTool ? '填写要求' : '粘贴内容'}</Text>
-                                    <Text className='tool-source-card__desc'>
-                                        {imageTool ? '补充画面描述、修复重点或希望保留的照片质感' : '直接粘贴文章、帖子、会议记录或长文本'}
-                                    </Text>
-                                </View>
+                                ) : null}
                             </View>
                         ) : null}
 
-                        {inputMode === 'paste' || content ? (
+                        {showRequirementInput ? (
                             <Textarea
                                 className='tool-input'
                                 maxlength={6000}
@@ -851,25 +884,39 @@ export default function ToolDetailPage(): JSX.Element {
                         ) : null}
 
                         {referenceAsset ? (
-                            <View className='tool-reference-preview'>
-                                <View className='tool-reference-preview__file-icon'>
-                                    {referenceAsset.fileKind === 'text' ? '文' : referenceAsset.fileKind === 'image' ? '图' : '档'}
+                            photoRepairTool && referenceAsset.fileKind === 'image' && (referenceAsset.imagePreviewUrl || referenceAsset.imageDataUrl) ? (
+                                <View className='tool-reference-preview tool-reference-preview--photo-repair'>
+                                    <Image
+                                        className='tool-reference-preview__photo'
+                                        src={referenceAsset.imagePreviewUrl || referenceAsset.imageDataUrl || ''}
+                                        mode='widthFix'
+                                    />
+                                    <View className='tool-reference-preview__photo-meta'>
+                                        <Text className='tool-reference-preview__title'>{referenceAsset.name}</Text>
+                                        <Text className='tool-reference-preview__remove' onClick={removeReferenceAsset}>移除</Text>
+                                    </View>
                                 </View>
-                                <View className='tool-reference-preview__meta'>
-                                    <Text className='tool-reference-preview__title'>{referenceAsset.name}</Text>
-                                    <Text className='tool-reference-preview__desc'>
-                                        {referenceAsset.fileKind === 'text'
-                                            ? '将结合文件内容生成结果'
-                                            : referenceAsset.fileKind === 'image'
-                                                ? '将结合图片内容生成结果'
-                                            : `${referenceAsset.fileType || '文档'} 已加入，解析后生成结果`}
-                                    </Text>
+                            ) : (
+                                <View className='tool-reference-preview'>
+                                    <View className='tool-reference-preview__file-icon'>
+                                        {referenceAsset.fileKind === 'text' ? '文' : referenceAsset.fileKind === 'image' ? '图' : '档'}
+                                    </View>
+                                    <View className='tool-reference-preview__meta'>
+                                        <Text className='tool-reference-preview__title'>{referenceAsset.name}</Text>
+                                        <Text className='tool-reference-preview__desc'>
+                                            {referenceAsset.fileKind === 'text'
+                                                ? '将结合文件内容生成结果'
+                                                : referenceAsset.fileKind === 'image'
+                                                    ? '将结合图片内容生成结果'
+                                                    : `${referenceAsset.fileType || '文档'} 已加入，解析后生成结果`}
+                                        </Text>
+                                    </View>
+                                    <Text className='tool-reference-preview__remove' onClick={removeReferenceAsset}>移除</Text>
                                 </View>
-                                <Text className='tool-reference-preview__remove' onClick={removeReferenceAsset}>移除</Text>
-                            </View>
+                            )
                         ) : null}
 
-                        {(inputMode !== 'idle' || referenceAsset || content) ? (
+                        {showActionRow ? (
                             <View className='tool-action-row'>
                                 <Text className='tool-add-asset-button' onClick={() => void chooseReferenceFile()}>+</Text>
                                 <Button

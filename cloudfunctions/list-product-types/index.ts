@@ -3,6 +3,7 @@ import { ok } from '../shared/utils';
 import type { ProductTypeRecord, ProductTypeView } from '../shared/types';
 
 function toProductTypeView(record: ProductTypeRecord): ProductTypeView {
+  const complianceEnabled = record.complianceEnabled ?? Boolean(record.complianceDisplay);
   return {
     productCode: record.productCode,
     productName: record.productName,
@@ -13,7 +14,8 @@ function toProductTypeView(record: ProductTypeRecord): ProductTypeView {
     available: record.available,
     description: record.description,
     introHighlights: record.introHighlights ?? [],
-    complianceDisplay: record.complianceDisplay,
+    complianceEnabled,
+    complianceDisplay: complianceEnabled ? record.complianceDisplay : undefined,
   };
 }
 

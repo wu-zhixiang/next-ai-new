@@ -1,27 +1,28 @@
 import type { MembershipView, PlanView, ProductTypeView } from '@/types';
 
-export function toCompliantProductType(product: ProductTypeView): ProductTypeView | null {
+export function toCompliantProductType(product: ProductTypeView): ProductTypeView {
   const display = product.complianceDisplay;
-  if (!display) return null;
+  if (!display) return product;
   return {
     ...product,
-    productName: display.productName,
-    label: display.label,
-    tag: display.tag,
-    avatarUrl: display.avatarUrl,
-    description: display.description,
-    introHighlights: display.introHighlights ?? [],
+    productName: display.productName || product.productName,
+    label: display.label || product.label,
+    tag: display.tag || product.tag,
+    avatarUrl: display.avatarUrl || product.avatarUrl,
+    detailPageUrl: display.detailPageUrl || product.detailPageUrl,
+    description: display.description || product.description,
+    introHighlights: display.introHighlights ?? product.introHighlights,
   };
 }
 
-export function toCompliantPlan(plan: PlanView): PlanView | null {
+export function toCompliantPlan(plan: PlanView): PlanView {
   const display = plan.complianceDisplay;
-  if (!display) return null;
+  if (!display) return plan;
   return {
     ...plan,
-    productName: display.productName,
-    planName: display.planName,
-    description: display.description,
+    productName: display.productName || plan.productName,
+    planName: display.planName || plan.planName,
+    description: display.description || plan.description,
   };
 }
 
@@ -37,10 +38,14 @@ export function toCompliantMembership(
   ));
   return {
     ...membership,
-    productName: product?.complianceDisplay?.productName ?? 'AI会员',
+    productName: product?.complianceDisplay?.productName
+      || membership.productName
+      || product?.productName,
     planName: plan?.complianceDisplay?.planName
-      ?? product?.complianceDisplay?.label
-      ?? 'AI会员套餐',
+      || membership.planName
+      || plan?.planName
+      || product?.complianceDisplay?.label
+      || product?.label,
   };
 }
 
@@ -49,6 +54,7 @@ export function getCompliantOrderDisplay(
   planCode: string | undefined,
   productTypes: ProductTypeView[],
   plans: PlanView[],
+  fallback: { productName?: string; planName?: string } = {},
 ): { productName: string; planName: string } {
   const product = productTypes.find((item) => item.productCode === productCode);
   const plan = plans.find((item) => (
@@ -56,7 +62,13 @@ export function getCompliantOrderDisplay(
     && item.planCode === planCode
   ));
   return {
-    productName: product?.complianceDisplay?.productName ?? 'AI会员',
-    planName: plan?.complianceDisplay?.planName ?? 'AI会员套餐',
+    productName: product?.complianceDisplay?.productName
+      || fallback.productName
+      || product?.productName
+      || 'AI会员',
+    planName: plan?.complianceDisplay?.planName
+      || fallback.planName
+      || plan?.planName
+      || 'AI会员套餐',
   };
 }

@@ -105,6 +105,7 @@ export interface ProductTypeRecord {
     title: string;
     description: string;
   }>;
+  complianceEnabled?: boolean;
   complianceDisplay?: {
     productName: string;
     label: string;
@@ -160,6 +161,22 @@ export interface PointsConfigRecord {
   pointsPerYuan: number;
   inviteBaseRewardPoints: number;
   inviteMilestones: InviteMilestoneConfig[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type AdminFileUsage = 'icon' | 'image' | 'document' | 'other';
+
+export interface AdminFileRecord {
+  _id?: string;
+  fileId: string;
+  cloudPath: string;
+  name: string;
+  displayName: string;
+  usage: AdminFileUsage;
+  note?: string;
+  size: number;
+  mimeType: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -492,6 +509,7 @@ export interface ProductTypeView {
     title: string;
     description: string;
   }>;
+  complianceEnabled?: boolean;
   complianceDisplay?: ProductTypeRecord['complianceDisplay'];
 }
 

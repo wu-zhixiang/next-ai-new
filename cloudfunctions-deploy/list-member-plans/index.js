@@ -12,6 +12,7 @@ async function main(event = {}) {
     const plans = result.data.map((item) => {
         var _a, _b;
         const plan = item;
+        const complianceEnabled = (_a = plan.complianceEnabled) !== null && _a !== void 0 ? _a : Boolean(plan.complianceDisplay);
         return {
             pid: plan.pid,
             productCode: plan.productCode,
@@ -19,11 +20,11 @@ async function main(event = {}) {
             planCode: plan.planCode,
             planName: plan.planName,
             price: plan.price,
-            totalAiPoints: (_a = plan.totalAiPoints) !== null && _a !== void 0 ? _a : 0,
+            totalAiPoints: (_b = plan.totalAiPoints) !== null && _b !== void 0 ? _b : 0,
             durationDays: plan.durationDays,
             description: plan.description,
-            complianceEnabled: (_b = plan.complianceEnabled) !== null && _b !== void 0 ? _b : Boolean(plan.complianceDisplay),
-            complianceDisplay: plan.complianceDisplay,
+            complianceEnabled,
+            complianceDisplay: complianceEnabled ? plan.complianceDisplay : undefined,
         };
     });
     return (0, utils_1.ok)({ plans });

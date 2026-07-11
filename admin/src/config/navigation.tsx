@@ -2,6 +2,7 @@ import {
   BadgeDollarSign,
   Bot,
   Coins,
+  FileUp,
   LayoutDashboard,
   ListChecks,
   Newspaper,
@@ -46,6 +47,11 @@ export const navigationItems: readonly NavigationItem[] = [
     label: '积分配置',
     path: '/points-config',
     icon: Coins,
+  },
+  {
+    label: '文件管理',
+    path: '/files',
+    icon: FileUp,
   },
   {
     label: 'AI 新闻',

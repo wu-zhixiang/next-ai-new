@@ -4,6 +4,8 @@ import type {
   AiNewsRecord,
   AiToolInput,
   AiToolRecord,
+  AdminFileInput,
+  AdminFileRecord,
   DashboardData,
   MemberPlanInput,
   MemberPlanRecord,
@@ -13,6 +15,7 @@ import type {
   PointsConfigRecord,
   ProductTypeInput,
   ProductTypeRecord,
+  UploadFileResult,
   UploadToolImageResult,
   UserRecord,
   UserUpdateInput,
@@ -188,6 +191,37 @@ export class AdminApi {
     return this.http.request<UploadToolImageResult>('/tool-assets', {
       method: 'POST',
       body: JSON.stringify({ dataUrl }),
+    });
+  }
+
+  listFiles(): Promise<readonly AdminFileRecord[]> {
+    return this.http.request<readonly AdminFileRecord[]>('/files');
+  }
+
+  uploadFile(input: {
+    readonly fileName: string;
+    readonly dataUrl: string;
+    readonly displayName: string;
+    readonly usage: AdminFileInput['usage'];
+    readonly note: string;
+  }): Promise<UploadFileResult> {
+    return this.http.request<UploadFileResult>('/files', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  }
+
+  updateFile(id: string, input: AdminFileInput): Promise<AdminFileRecord> {
+    return this.http.request<AdminFileRecord>(`/files/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    });
+  }
+
+  deleteFile(id: string): Promise<{ readonly deleted: true }> {
+    return this.http.request<{ readonly deleted: true }>(`/files/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      body: JSON.stringify({ confirm: 'DELETE' }),
     });
   }
 }

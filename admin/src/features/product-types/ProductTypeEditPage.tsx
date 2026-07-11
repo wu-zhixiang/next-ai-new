@@ -1,5 +1,5 @@
-import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { ArrowLeft, Plus, Trash2, Upload } from 'lucide-react';
+import { useCallback, useEffect, useId, useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '../../components/Button';
 import { PageHeader } from '../../components/PageHeader';
@@ -17,6 +17,7 @@ interface ProductTypeFormState {
   readonly available: boolean;
   readonly description: string;
   readonly introHighlights: readonly ProductIntroHighlight[];
+  readonly complianceEnabled: boolean;
   readonly complianceDisplay: ProductComplianceDisplay;
   readonly sort: string;
   readonly status: ProductStatus;
@@ -43,6 +44,7 @@ function createEmptyForm(): ProductTypeFormState {
     available: false,
     description: '',
     introHighlights: [],
+    complianceEnabled: false,
     complianceDisplay: emptyComplianceDisplay,
     sort: '999',
     status: 'off',
@@ -71,6 +73,7 @@ function createFormFromProduct(product: ProductTypeRecord): ProductTypeFormState
     available: product.available,
     description: safeString(product.description),
     introHighlights: normalizeHighlights(product.introHighlights),
+    complianceEnabled: product.complianceEnabled ?? Boolean(product.complianceDisplay),
     complianceDisplay: {
       productName: safeString(product.complianceDisplay?.productName),
       label: safeString(product.complianceDisplay?.label),
@@ -114,7 +117,9 @@ function buildOptionalComplianceDisplay(value: ProductComplianceDisplay): Produc
 
 function buildProductInput(form: ProductTypeFormState): ProductTypeInput {
   const sort = Number.parseInt(form.sort, 10);
-  const complianceDisplay = buildOptionalComplianceDisplay(form.complianceDisplay);
+  const complianceDisplay = form.complianceEnabled
+    ? buildOptionalComplianceDisplay(form.complianceDisplay)
+    : undefined;
   return {
     productCode: form.productCode.trim(),
     productName: form.productName.trim(),
@@ -127,10 +132,72 @@ function buildProductInput(form: ProductTypeFormState): ProductTypeInput {
     introHighlights: form.introHighlights
       .map((item) => ({ title: item.title.trim(), description: item.description.trim() }))
       .filter((item) => item.title || item.description),
+    complianceEnabled: form.complianceEnabled,
     sort: Number.isFinite(sort) ? sort : 999,
     status: form.status,
     ...(complianceDisplay ? { complianceDisplay } : {}),
   };
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result);
+      } else {
+        reject(new Error('图片读取失败'));
+      }
+    };
+    reader.onerror = () => reject(new Error('图片读取失败'));
+    reader.readAsDataURL(file);
+  });
+}
+
+interface ImageUploadFieldProps {
+  readonly label: string;
+  readonly value: string;
+  readonly onChange: (value: string) => void;
+  readonly onUpload: (file: File) => Promise<string>;
+}
+
+function ImageUploadField({ label, onChange, onUpload, value }: ImageUploadFieldProps): JSX.Element {
+  const inputId = useId();
+  const [isUploading, setIsUploading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+
+  async function handleFileChange(event: ChangeEvent<HTMLInputElement>): Promise<void> {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) {
+      return;
+    }
+    setIsUploading(true);
+    setErrorMessage('');
+    try {
+      onChange(await onUpload(file));
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : '图片上传失败');
+    } finally {
+      setIsUploading(false);
+    }
+  }
+
+  return (
+    <div className="image-upload-field">
+      <div className="image-upload-field__head">
+        <span>{label}</span>
+        <label className="button button--secondary button--sm" htmlFor={inputId}>
+          <span className="button-icon"><Upload size={14} strokeWidth={2} /></span>
+          <span>{isUploading ? '上传中' : '上传图片'}</span>
+        </label>
+      </div>
+      <input id={inputId} type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => void handleFileChange(event)} />
+      <input value={value} onChange={(event) => onChange(event.target.value)} placeholder="cloud:// 或 https:// 图片地址" />
+      {value ? <div className="image-upload-field__value">{value}</div> : null}
+      {errorMessage ? <div className="field-error">{errorMessage}</div> : null}
+    </div>
+  );
 }
 
 export function ProductTypeEditPage(): JSX.Element {
@@ -170,6 +237,18 @@ export function ProductTypeEditPage(): JSX.Element {
   useEffect(() => {
     void loadProduct();
   }, [loadProduct]);
+
+  async function uploadImage(file: File): Promise<string> {
+    if (!/^image\/(?:png|jpe?g|webp)$/.test(file.type)) {
+      throw new Error('图片仅支持 PNG/JPG/WebP');
+    }
+    if (file.size > 3 * 1024 * 1024) {
+      throw new Error('图片不能超过 3MB');
+    }
+    const dataUrl = await readFileAsDataUrl(file);
+    const result = await api.uploadToolImage(dataUrl);
+    return result.fileId;
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -282,10 +361,12 @@ export function ProductTypeEditPage(): JSX.Element {
                   <span>标签</span>
                   <input value={form.tag} onChange={(event) => setForm({ ...form, tag: event.target.value })} placeholder="ChatGPT + Codex" />
                 </label>
-                <label className="field field--wide">
-                  <span>头像图片地址</span>
-                  <input value={form.avatarUrl} onChange={(event) => setForm({ ...form, avatarUrl: event.target.value })} placeholder="https:// 或 cloud:// 图片地址" />
-                </label>
+                <ImageUploadField
+                  label="头像图片地址"
+                  value={form.avatarUrl}
+                  onChange={(value) => setForm({ ...form, avatarUrl: value })}
+                  onUpload={uploadImage}
+                />
                 <label className="field field--wide">
                   <span>详情页路径</span>
                   <input value={form.detailPageUrl} onChange={(event) => setForm({ ...form, detailPageUrl: event.target.value })} placeholder="pages/news-detail/index?id=..." />
@@ -337,65 +418,75 @@ export function ProductTypeEditPage(): JSX.Element {
               <div className="form-section__header">
                 <h2>合规展示</h2>
               </div>
-              <div className="form-grid form-grid--two">
-                <label className="field">
-                  <span>合规商品名称</span>
-                  <input value={form.complianceDisplay.productName} onChange={(event) => updateComplianceDisplay({ productName: event.target.value })} />
-                </label>
-                <label className="field">
-                  <span>合规展示标题</span>
-                  <input value={form.complianceDisplay.label} onChange={(event) => updateComplianceDisplay({ label: event.target.value })} />
-                </label>
-                <label className="field">
-                  <span>合规标签</span>
-                  <input value={form.complianceDisplay.tag} onChange={(event) => updateComplianceDisplay({ tag: event.target.value })} />
-                </label>
-                <label className="field">
-                  <span>合规头像地址</span>
-                  <input value={form.complianceDisplay.avatarUrl ?? ''} onChange={(event) => updateComplianceDisplay({ avatarUrl: event.target.value })} />
-                </label>
-                <label className="field field--wide">
-                  <span>合规详情页路径</span>
-                  <input value={form.complianceDisplay.detailPageUrl ?? ''} onChange={(event) => updateComplianceDisplay({ detailPageUrl: event.target.value })} />
-                </label>
-                <label className="field field--wide">
-                  <span>合规说明</span>
-                  <textarea rows={3} value={form.complianceDisplay.description} onChange={(event) => updateComplianceDisplay({ description: event.target.value })} />
-                </label>
-              </div>
-              <div className="form-section__header">
-                <h2>合规高亮</h2>
-                <Button
-                  size="sm"
-                  icon={<Plus size={14} strokeWidth={2} />}
-                  onClick={() => updateComplianceDisplay({ introHighlights: [...(form.complianceDisplay.introHighlights ?? []), { title: '', description: '' }] })}
-                >
-                  添加
-                </Button>
-              </div>
-              <div className="repeat-list">
-                {(form.complianceDisplay.introHighlights ?? []).map((item, index) => (
-                  <div className="repeat-item" key={`compliance-highlight-${index}`}>
+              <label className="check-field">
+                <input checked={form.complianceEnabled} type="checkbox" onChange={(event) => setForm({ ...form, complianceEnabled: event.target.checked })} />
+                <span>启用合规展示</span>
+              </label>
+              {form.complianceEnabled ? (
+                <>
+                  <div className="form-grid form-grid--two">
                     <label className="field">
-                      <span>标题</span>
-                      <input value={item.title} onChange={(event) => updateComplianceHighlight(index, { title: event.target.value })} />
+                      <span>合规商品名称</span>
+                      <input value={form.complianceDisplay.productName} onChange={(event) => updateComplianceDisplay({ productName: event.target.value })} />
                     </label>
                     <label className="field">
-                      <span>描述</span>
-                      <textarea rows={3} value={item.description} onChange={(event) => updateComplianceHighlight(index, { description: event.target.value })} />
+                      <span>合规展示标题</span>
+                      <input value={form.complianceDisplay.label} onChange={(event) => updateComplianceDisplay({ label: event.target.value })} />
                     </label>
-                    <button
-                      className="icon-button icon-button--danger"
-                      type="button"
-                      onClick={() => updateComplianceDisplay({ introHighlights: (form.complianceDisplay.introHighlights ?? []).filter((_, currentIndex) => currentIndex !== index) })}
-                      aria-label="删除合规高亮"
-                      title="删除"
-                    >
-                      <Trash2 size={16} strokeWidth={2} />
-                    </button>
+                    <label className="field">
+                      <span>合规标签</span>
+                      <input value={form.complianceDisplay.tag} onChange={(event) => updateComplianceDisplay({ tag: event.target.value })} />
+                    </label>
+                    <ImageUploadField
+                      label="合规头像地址"
+                      value={form.complianceDisplay.avatarUrl ?? ''}
+                      onChange={(value) => updateComplianceDisplay({ avatarUrl: value })}
+                      onUpload={uploadImage}
+                    />
+                    <label className="field field--wide">
+                      <span>合规详情页路径</span>
+                      <input value={form.complianceDisplay.detailPageUrl ?? ''} onChange={(event) => updateComplianceDisplay({ detailPageUrl: event.target.value })} />
+                    </label>
+                    <label className="field field--wide">
+                      <span>合规说明</span>
+                      <textarea rows={3} value={form.complianceDisplay.description} onChange={(event) => updateComplianceDisplay({ description: event.target.value })} />
+                    </label>
                   </div>
-                ))}
-              </div>
+                  <div className="form-section__header">
+                    <h2>合规高亮</h2>
+                    <Button
+                      size="sm"
+                      icon={<Plus size={14} strokeWidth={2} />}
+                      onClick={() => updateComplianceDisplay({ introHighlights: [...(form.complianceDisplay.introHighlights ?? []), { title: '', description: '' }] })}
+                    >
+                      添加
+                    </Button>
+                  </div>
+                  <div className="repeat-list">
+                    {(form.complianceDisplay.introHighlights ?? []).map((item, index) => (
+                      <div className="repeat-item" key={`compliance-highlight-${index}`}>
+                        <label className="field">
+                          <span>标题</span>
+                          <input value={item.title} onChange={(event) => updateComplianceHighlight(index, { title: event.target.value })} />
+                        </label>
+                        <label className="field">
+                          <span>描述</span>
+                          <textarea rows={3} value={item.description} onChange={(event) => updateComplianceHighlight(index, { description: event.target.value })} />
+                        </label>
+                        <button
+                          className="icon-button icon-button--danger"
+                          type="button"
+                          onClick={() => updateComplianceDisplay({ introHighlights: (form.complianceDisplay.introHighlights ?? []).filter((_, currentIndex) => currentIndex !== index) })}
+                          aria-label="删除合规高亮"
+                          title="删除"
+                        >
+                          <Trash2 size={16} strokeWidth={2} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : null}
             </section>
 
             <div className="sticky-actions">

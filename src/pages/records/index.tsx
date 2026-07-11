@@ -104,6 +104,10 @@ export default function RecordsPage(): JSX.Element {
                 order.planCode,
                 productResult.productTypes,
                 planResult.plans,
+                {
+                  productName: order.productName,
+                  planName: order.planName,
+                },
               );
               return {
                 ...order,

@@ -57,6 +57,7 @@ export interface ProductTypeView {
     title: string;
     description: string;
   }>;
+  complianceEnabled?: boolean;
   complianceDisplay?: {
     productName: string;
     label: string;
