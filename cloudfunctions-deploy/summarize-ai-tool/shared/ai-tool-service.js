@@ -3,8 +3,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.executeAiTool = executeAiTool;
 exports.getAiToolRun = getAiToolRun;
 const node_crypto_1 = require("node:crypto");
-const constants_1 = require("./constants");
 const db_1 = require("./db");
+const ai_tool_entitlements_1 = require("./ai-tool-entitlements");
 const ai_tool_generation_1 = require("./ai-tool-generation");
 const ai_tool_core_1 = require("./ai-tool-core");
 let aiToolCollectionsReady = false;
@@ -14,18 +14,8 @@ async function ensureAiToolCollections() {
     }
     await Promise.all([
         (0, db_1.ensureCollection)('aiToolRuns'),
-        (0, db_1.ensureCollection)('aiToolUsageDaily'),
     ]);
     aiToolCollectionsReady = true;
-}
-function isActiveToolMembership(membership, now) {
-    if (!membership) {
-        return false;
-    }
-    if (membership.status === 'opening') {
-        return true;
-    }
-    return membership.status === 'active' && membership.endAt > now;
 }
 function createInputDigest(input) {
     return (0, node_crypto_1.createHash)('sha256')
@@ -39,37 +29,6 @@ function createInputDigest(input) {
         .update('\n')
         .update(input.imageDataUrl)
         .digest('hex');
-}
-async function getDailyUsage(userId, date) {
-    var _a;
-    const result = await (0, db_1.collection)('aiToolUsageDaily').where({ userId, date }).limit(1).get();
-    return (_a = result.data[0]) !== null && _a !== void 0 ? _a : null;
-}
-async function recordUsage(userId, date, usage, now) {
-    const freeIncrement = usage.freeUsed ? 1 : 0;
-    const adIncrement = usage.rewardAdUsed ? 1 : 0;
-    const memberIncrement = usage.memberUsed ? 1 : 0;
-    const existing = await getDailyUsage(userId, date);
-    if (!existing) {
-        const record = {
-            userId,
-            date,
-            freeUsed: freeIncrement,
-            adUnlocked: adIncrement,
-            memberUsed: memberIncrement,
-            updatedAt: now,
-        };
-        await (0, db_1.collection)('aiToolUsageDaily').add({ data: record });
-        return;
-    }
-    await (0, db_1.collection)('aiToolUsageDaily').doc(existing._id).update({
-        data: {
-            freeUsed: db_1._.inc(freeIncrement),
-            adUnlocked: db_1._.inc(adIncrement),
-            memberUsed: db_1._.inc(memberIncrement),
-            updatedAt: now,
-        },
-    });
 }
 function toRunResult(record) {
     var _a;
@@ -87,7 +46,7 @@ function toRunResult(record) {
             freeUsed: false,
             rewardAdUsed: false,
             memberUsed: false,
-            dailyFreeLimit: 1,
+            dailyFreeLimit: 0,
             dailyFreeRemaining: 0,
         },
         createdAt: record.createdAt,
@@ -141,7 +100,7 @@ async function markRunFailed(params) {
     });
 }
 async function executeAiTool(event, openid) {
-    var _a, _b;
+    var _a;
     const normalized = (0, ai_tool_core_1.normalizeRunAiToolInput)(event);
     if (normalized.ok === false) {
         return {
@@ -160,20 +119,12 @@ async function executeAiTool(event, openid) {
             message: '请先登录后再使用',
         };
     }
-    const [membership, usageRecord] = await Promise.all([
-        (0, db_1.getMembershipByUserId)(user._id, constants_1.DEFAULT_PRODUCT_CODE),
-        getDailyUsage(user._id, (0, ai_tool_core_1.getAiToolUsageDateKey)(now)),
-    ]);
-    const entitlement = (0, ai_tool_core_1.resolveAiToolEntitlement)({
-        isMember: isActiveToolMembership(membership, now),
-        freeUsedToday: (_a = usageRecord === null || usageRecord === void 0 ? void 0 : usageRecord.freeUsed) !== null && _a !== void 0 ? _a : 0,
-        rewardAdUnlocked: normalized.input.rewardAdUnlocked,
-    });
-    if (entitlement.allowed === false) {
+    const toolConfig = await (0, ai_tool_entitlements_1.getEffectiveAiToolConfig)(normalized.input.toolId);
+    if (!(toolConfig === null || toolConfig === void 0 ? void 0 : toolConfig.enabled)) {
         return {
             ok: false,
-            code: entitlement.code,
-            message: entitlement.message,
+            code: 'TOOL_DISABLED',
+            message: toolConfig ? '该工具正在接入中' : '该工具暂未开放',
         };
     }
     const runId = await createProcessingRun({
@@ -181,8 +132,34 @@ async function executeAiTool(event, openid) {
         input: normalized.input,
         now,
     });
+    const charge = await (0, ai_tool_entitlements_1.reserveAiToolUsage)({
+        user,
+        tool: toolConfig,
+        runId,
+        now,
+    });
+    if (charge.ok === false) {
+        await markRunFailed({
+            runId,
+            code: charge.code,
+            message: charge.message,
+            now: Date.now(),
+        });
+        return {
+            ok: false,
+            code: charge.code,
+            message: charge.message,
+            data: {
+                code: charge.code,
+                toolId: normalized.input.toolId,
+                pointCost: charge.pointCost,
+                aiToolPointsBalance: charge.balance,
+                singlePurchaseAmount: charge.singlePurchaseAmount,
+            },
+        };
+    }
     const generated = await (0, ai_tool_generation_1.generateAiToolText)(normalized.input);
-    const textResult = (_b = generated.result) !== null && _b !== void 0 ? _b : (normalized.input.imageDataUrl
+    const textResult = (_a = generated.result) !== null && _a !== void 0 ? _a : (normalized.input.imageDataUrl
         ? null
         : (0, ai_tool_generation_1.fallbackTextResult)((0, ai_tool_generation_1.buildAiToolContent)(normalized.input), normalized.input.outputType));
     const completedAt = Date.now();
@@ -190,6 +167,13 @@ async function executeAiTool(event, openid) {
         const message = generated.errorMessage.includes('CloudBase AI SDK unavailable')
             ? `AI 模型服务不可用：${generated.errorMessage}`
             : `参考素材解析失败：${generated.errorMessage || '请更换素材或补充文字描述'}`;
+        await (0, ai_tool_entitlements_1.releaseAiToolUsageReservation)({
+            user,
+            tool: toolConfig,
+            charge,
+            runId,
+            now: completedAt,
+        });
         await markRunFailed({
             runId,
             code: 'MODEL_FAILED',
@@ -205,10 +189,18 @@ async function executeAiTool(event, openid) {
         };
     }
     const usage = {
-        ...entitlement.usage,
+        charged: charge.mode !== 'trial',
+        freeUsed: charge.mode === 'trial',
+        rewardAdUsed: false,
+        memberUsed: false,
+        dailyFreeLimit: charge.trialLimit,
+        dailyFreeRemaining: charge.trialRemaining,
+        chargeMode: charge.mode,
+        pointCost: charge.pointCost,
+        aiToolPointsBalance: charge.balanceAfter,
+        singlePurchaseAmount: Number((charge.pointCost / 10).toFixed(2)),
         model: generated.modelName,
     };
-    await recordUsage(user._id, (0, ai_tool_core_1.getAiToolUsageDateKey)(completedAt), usage, completedAt);
     await markRunSucceeded({
         runId,
         textResult,

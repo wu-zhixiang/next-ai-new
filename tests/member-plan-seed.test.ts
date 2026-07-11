@@ -81,8 +81,20 @@ test('member plan seed includes the requested Chatgpt plans', () => {
     assert.equal(plan.virtualPaymentProductId, expected.virtualPaymentProductId);
     assert.equal(plan.price, expected.price);
     assert.equal(plan.durationDays, expected.durationDays);
-    assert.equal(plan.status, 'on');
+    assert.equal(plan.status, 'off');
   }
+});
+
+test('quota point plans include AI tool point totals', () => {
+  const quotaPlans = PLAN_SEED.filter((plan) => plan.productCode === 'quota_points');
+  assert.deepEqual(
+    quotaPlans.map((plan) => [plan.planCode, plan.totalAiPoints]),
+    [
+      ['quota_40', 400],
+      ['quota_80', 800],
+      ['quota_160', 1600],
+    ],
+  );
 });
 
 test('member plan seed hides Claude plans for now', () => {

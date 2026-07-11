@@ -23,17 +23,16 @@ test('run AI tool input defaults to article summary and strips legacy prompt tex
   assert.equal(result.input.source, 'miniapp');
 });
 
-test('run AI tool input rejects disabled image tools for the foundation slice', () => {
+test('run AI tool input leaves image tool enablement to runtime config', () => {
   const result = normalizeRunAiToolInput({
     toolId: 'imageGenerate',
     text: '生成一张头像',
   });
 
-  assert.deepEqual(result, {
-    ok: false,
-    code: 'TOOL_DISABLED',
-    message: '该工具暂未开放',
-  });
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.equal(result.input.toolId, 'imageGenerate');
+  assert.equal(result.input.text, '生成一张头像');
 });
 
 test('image repair tool is named old photo restoration in shared definitions', () => {

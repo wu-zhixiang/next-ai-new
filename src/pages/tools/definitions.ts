@@ -1,5 +1,6 @@
 export type OutputType = 'summary' | 'bullets' | 'xiaohongshu' | 'moments';
 export type ToolId = 'copywriting' | 'articleSummary' | 'imageGenerate' | 'imageRepair';
+export type ToolStatus = 'enabled' | 'disabled' | 'testing';
 
 export interface ToolIntroHighlight {
   title: string;
@@ -7,17 +8,29 @@ export interface ToolIntroHighlight {
 }
 
 export interface ToolIntroCase {
+  mode?: 'compare';
   title: string;
   before: string;
   after: string;
+  beforeImageFileId?: string;
+  afterImageFileId?: string;
 }
+
+export interface ToolIntroPreviewCase {
+  mode: 'preview';
+  title: string;
+  previewImageFileId: string;
+  previewDescription?: string;
+}
+
+export type ToolIntroCaseDefinition = ToolIntroCase | ToolIntroPreviewCase;
 
 export interface ToolIntroDefinition {
   eyebrow: string;
   title: string;
   subtitle: string;
   highlights: ToolIntroHighlight[];
-  cases: ToolIntroCase[];
+  cases: ToolIntroCaseDefinition[];
   tips?: string[];
 }
 
@@ -26,10 +39,35 @@ export interface ToolDefinition {
   name: string;
   desc: string;
   badge: string;
+  tags?: string[];
   icon: string;
+  iconImageFileId?: string;
+  status?: ToolStatus;
   enabled: boolean;
   visible?: boolean;
+  sortOrder?: number;
   outputType: OutputType;
+  pointCost?: number;
+  trialLimit?: number;
+  intro?: ToolIntroDefinition;
+}
+
+export interface RemoteToolDefinition {
+  id?: string;
+  toolId?: string;
+  name?: string;
+  desc?: string;
+  badge?: string;
+  tags?: string[];
+  icon?: string;
+  iconImageFileId?: string;
+  status?: ToolStatus;
+  enabled?: boolean;
+  visible?: boolean;
+  sortOrder?: number;
+  outputType?: OutputType;
+  pointCost?: number;
+  trialLimit?: number;
   intro?: ToolIntroDefinition;
 }
 
@@ -39,28 +77,43 @@ export const TOOLS: ToolDefinition[] = [
     name: '文案生成',
     desc: '小红书、朋友圈文案改写',
     badge: '已上线',
+    tags: ['已上线', '文案改写', '社媒发布'],
     icon: '写',
+    status: 'enabled',
     enabled: true,
     visible: false,
+    sortOrder: 40,
     outputType: 'xiaohongshu',
+    pointCost: 5,
+    trialLimit: 1,
   },
   {
     id: 'articleSummary',
     name: '摘要总结',
     desc: '长文、帖子、会议记录提炼结论',
     badge: '已上线',
+    tags: ['已上线', '免费试用', '内容提效'],
     icon: '总',
+    status: 'enabled',
     enabled: true,
+    sortOrder: 10,
     outputType: 'summary',
+    pointCost: 5,
+    trialLimit: 1,
   },
   {
     id: 'imageGenerate',
     name: 'AI生图',
     desc: '头像、海报、配图生成',
     badge: '接入中',
+    tags: ['接入中', '头像海报', '图片生成'],
     icon: '图',
+    status: 'testing',
     enabled: false,
+    sortOrder: 20,
     outputType: 'summary',
+    pointCost: 20,
+    trialLimit: 0,
     intro: {
       eyebrow: 'AI生图',
       title: '把一句想法变成可用图片',
@@ -83,9 +136,14 @@ export const TOOLS: ToolDefinition[] = [
     name: '老照片修复',
     desc: '老照片褪色、划痕、模糊修复',
     badge: '接入中',
+    tags: ['接入中', '老照片', '清晰增强'],
     icon: '修',
+    status: 'testing',
     enabled: false,
+    sortOrder: 30,
     outputType: 'summary',
+    pointCost: 25,
+    trialLimit: 1,
     intro: {
       eyebrow: '老照片修复',
       title: '让旧照片重新清晰',
@@ -107,8 +165,75 @@ export const TOOLS: ToolDefinition[] = [
 
 export const VISIBLE_TOOLS = TOOLS.filter((item) => item.visible !== false);
 
+export function getToolTags(tool: ToolDefinition): string[] {
+  return (tool.tags?.length ? tool.tags : [tool.badge]).filter(Boolean).slice(0, 8);
+}
+
+export function isToolStatus(value: unknown): value is ToolStatus {
+  return value === 'enabled' || value === 'disabled' || value === 'testing';
+}
+
+export function getToolStatus(tool: ToolDefinition): ToolStatus {
+  return tool.status ?? (tool.enabled ? 'enabled' : 'testing');
+}
+
+export function isToolDisabled(tool: ToolDefinition): boolean {
+  return getToolStatus(tool) === 'disabled';
+}
+
+export function sortToolDefinitions(tools: readonly ToolDefinition[]): ToolDefinition[] {
+  return [...tools].sort((left, right) => (left.sortOrder ?? 999) - (right.sortOrder ?? 999));
+}
+
+export function isToolId(value?: string): value is ToolId {
+  return value === 'copywriting'
+    || value === 'articleSummary'
+    || value === 'imageGenerate'
+    || value === 'imageRepair';
+}
+
 export function getToolById(id?: string): ToolDefinition {
   return TOOLS.find((item) => item.id === id) ?? VISIBLE_TOOLS[0] ?? TOOLS[0];
+}
+
+export function getToolByIdFromList(tools: readonly ToolDefinition[], id?: string): ToolDefinition {
+  return tools.find((item) => item.id === id) ?? tools.find((item) => item.visible !== false) ?? tools[0] ?? getToolById(id);
+}
+
+export function mergeRemoteToolDefinitions(remoteTools: readonly RemoteToolDefinition[]): ToolDefinition[] {
+  const remoteById = new Map<ToolId, RemoteToolDefinition>();
+  remoteTools.forEach((item) => {
+    const id = item.toolId ?? item.id;
+    if (isToolId(id)) {
+      remoteById.set(id, item);
+    }
+  });
+
+  return TOOLS.map((tool) => {
+    const remote = remoteById.get(tool.id);
+    if (!remote) {
+      return tool;
+    }
+    return {
+      ...tool,
+      name: remote.name || tool.name,
+      desc: remote.desc || tool.desc,
+      badge: remote.badge || tool.badge,
+      tags: remote.tags?.length ? remote.tags : tool.tags,
+      icon: remote.icon || tool.icon,
+      iconImageFileId: remote.iconImageFileId || tool.iconImageFileId,
+      status: isToolStatus(remote.status) ? remote.status : tool.status,
+      enabled: isToolStatus(remote.status)
+        ? remote.status === 'enabled'
+        : typeof remote.enabled === 'boolean' ? remote.enabled : tool.enabled,
+      visible: typeof remote.visible === 'boolean' ? remote.visible : tool.visible,
+      sortOrder: typeof remote.sortOrder === 'number' ? remote.sortOrder : tool.sortOrder,
+      outputType: remote.outputType ?? tool.outputType,
+      pointCost: typeof remote.pointCost === 'number' ? remote.pointCost : tool.pointCost,
+      trialLimit: typeof remote.trialLimit === 'number' ? remote.trialLimit : tool.trialLimit,
+      intro: remote.intro,
+    };
+  });
 }
 
 export function hasToolIntro(tool: ToolDefinition): boolean {

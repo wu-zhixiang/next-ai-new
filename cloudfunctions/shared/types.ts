@@ -12,6 +12,7 @@ export type PayStatus = 'pending' | 'paid' | 'failed' | 'closed' | 'refunded';
 export type FulfillmentStatus = 'pending' | 'opening' | 'fulfilled' | 'failed';
 export type PayChannel = 'wechat_pay' | 'wechat_virtual_pay';
 export type InvoiceStatus = 'none' | 'submitted' | 'processing' | 'issued' | 'failed' | 'rejected';
+export type OrderType = 'purchase' | 'renew' | 'tool_single';
 
 export interface UserRecord {
   _id?: string;
@@ -23,6 +24,7 @@ export interface UserRecord {
   inviteCode?: string;
   inviterUserId?: string;
   pointsBalance?: number;
+  aiToolPointsBalance?: number;
   aiAccountRegistered?: boolean;
   aiAccountEmail?: string;
   aiAccountPasswordEncrypted?: string;
@@ -73,8 +75,10 @@ export interface MemberPlanRecord {
   planName: string;
   virtualPaymentProductId?: string;
   price: number;
+  totalAiPoints?: number;
   durationDays: number;
   autoRenewEnabled: boolean;
+  complianceEnabled?: boolean;
   status: 'on' | 'off';
   sort: number;
   description?: string;
@@ -142,6 +146,24 @@ export interface AppStoreCountryRecord {
   updatedAt: number;
 }
 
+export interface InviteMilestoneConfig {
+  id: string;
+  inviteCount: number;
+  rewardPoints: number;
+  enabled: boolean;
+  description?: string;
+}
+
+export interface PointsConfigRecord {
+  _id?: string;
+  configId: 'default';
+  pointsPerYuan: number;
+  inviteBaseRewardPoints: number;
+  inviteMilestones: InviteMilestoneConfig[];
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface DeliveryRecord {
   _id?: string;
   userId: string;
@@ -167,12 +189,16 @@ export interface OrderRecord {
   planCode: string;
   planName: string;
   virtualPaymentProductId?: string;
-  orderType: 'purchase' | 'renew';
+  orderType: OrderType;
   amount: number;
   originalAmount?: number;
   pointsDeductionEnabled?: boolean;
   pointsDeducted?: number;
   pointsDeductAmount?: number;
+  totalAiPoints?: number;
+  toolId?: string;
+  toolName?: string;
+  toolPointCost?: number;
   durationDays: number;
   payStatus: PayStatus;
   fulfillmentStatus?: FulfillmentStatus;
@@ -191,6 +217,45 @@ export interface OrderRecord {
   operatorNote?: string;
   closedAt?: number;
   closeReason?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface AiToolUserUsageRecord {
+  _id?: string;
+  userId: string;
+  openid: string;
+  toolId: string;
+  trialUsed: number;
+  consumeCount: number;
+  updatedAt: number;
+  createdAt: number;
+}
+
+export interface AiToolPointsLedgerRecord {
+  _id?: string;
+  userId: string;
+  openid?: string;
+  toolId?: string;
+  orderNo?: string;
+  runId?: string;
+  type: 'plan_grant' | 'tool_consume' | 'single_purchase' | 'adjustment';
+  direction: 'in' | 'out';
+  points: number;
+  balanceAfter?: number;
+  description: string;
+  createdAt: number;
+}
+
+export interface AiToolSingleEntitlementRecord {
+  _id?: string;
+  userId: string;
+  openid: string;
+  toolId: string;
+  orderNo: string;
+  status: 'available' | 'used';
+  usedRunId?: string;
+  usedAt?: number;
   createdAt: number;
   updatedAt: number;
 }
@@ -255,6 +320,7 @@ export interface PointsLedgerRecord {
   _id?: string;
   userId: string;
   relatedUserId?: string;
+  milestoneKey?: string;
   orderNo?: string;
   type: 'invite_reward' | 'invite_milestone' | 'payment_deduct' | 'adjustment';
   direction: 'in' | 'out';

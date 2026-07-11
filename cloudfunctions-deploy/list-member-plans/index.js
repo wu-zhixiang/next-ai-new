@@ -10,6 +10,7 @@ async function main(event = {}) {
         .orderBy('sort', 'asc')
         .get();
     const plans = result.data.map((item) => {
+        var _a, _b;
         const plan = item;
         return {
             pid: plan.pid,
@@ -18,8 +19,10 @@ async function main(event = {}) {
             planCode: plan.planCode,
             planName: plan.planName,
             price: plan.price,
+            totalAiPoints: (_a = plan.totalAiPoints) !== null && _a !== void 0 ? _a : 0,
             durationDays: plan.durationDays,
             description: plan.description,
+            complianceEnabled: (_b = plan.complianceEnabled) !== null && _b !== void 0 ? _b : Boolean(plan.complianceDisplay),
             complianceDisplay: plan.complianceDisplay,
         };
     });

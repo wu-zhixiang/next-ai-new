@@ -6,7 +6,7 @@ const db_1 = require("./db");
 const member_reminders_1 = require("./member-reminders");
 const operator_notify_1 = require("./operator-notify");
 const utils_1 = require("./utils");
-const invite_reward_policy_1 = require("./invite-reward-policy");
+const ai_tool_entitlements_1 = require("./ai-tool-entitlements");
 async function deductPaymentPointsOnce(order, paidAt) {
     var _a;
     const points = Math.max(0, Math.floor((_a = order.pointsDeducted) !== null && _a !== void 0 ? _a : 0));
@@ -43,7 +43,7 @@ async function deductPaymentPointsOnce(order, paidAt) {
         direction: 'out',
         points,
         balanceAfter: user === null || user === void 0 ? void 0 : user.pointsBalance,
-        description: `订阅 ${order.planName} 抵扣T币`,
+        description: `订阅 ${order.planName} 抵扣积分`,
         createdAt: paidAt,
     };
     await (0, db_1.collection)('pointsLedger').add({ data: ledger });
@@ -53,84 +53,39 @@ async function deductPaymentPointsOnce(order, paidAt) {
         points,
     });
 }
-async function rewardInviterOnce(order, paidAt) {
-    const invitee = await (0, db_1.getUserById)(order.userId);
-    if (!(invitee === null || invitee === void 0 ? void 0 : invitee.inviterUserId)) {
-        console.info('invite.reward.skipped', {
-            reason: 'inviter_missing',
-            orderNo: order.orderNo,
-            userId: order.userId,
-        });
-        return;
-    }
-    const existing = await (0, db_1.collection)('pointsLedger')
-        .where({
-        type: 'invite_reward',
-        orderNo: order.orderNo,
-        userId: invitee.inviterUserId,
-    })
-        .limit(1)
-        .get();
-    if (existing.data[0]) {
-        console.info('invite.reward.skipped', {
-            reason: 'ledger_exists',
-            orderNo: order.orderNo,
-            inviterUserId: invitee.inviterUserId,
-        });
-        return;
-    }
-    const rewardPoints = (0, invite_reward_policy_1.calcInvitePurchaseReward)(order.amount);
-    if (rewardPoints <= 0) {
-        console.info('invite.reward.skipped', {
-            reason: 'paid_amount_not_over_50',
-            orderNo: order.orderNo,
-            inviterUserId: invitee.inviterUserId,
-            paidAmount: order.amount,
-        });
-        return;
-    }
-    await (0, db_1.collection)('users').doc(invitee.inviterUserId).update({
-        data: {
-            pointsBalance: db_1._.inc(rewardPoints),
-            updatedAt: paidAt,
-        },
-    });
-    const inviter = await (0, db_1.getUserById)(invitee.inviterUserId);
-    const ledger = {
-        userId: invitee.inviterUserId,
-        relatedUserId: order.userId,
-        orderNo: order.orderNo,
-        type: 'invite_reward',
-        direction: 'in',
-        points: rewardPoints,
-        balanceAfter: inviter === null || inviter === void 0 ? void 0 : inviter.pointsBalance,
-        description: `好友购买 ${order.planName} 奖励5 T币`,
-        createdAt: paidAt,
-    };
-    await (0, db_1.collection)('pointsLedger').add({ data: ledger });
-    console.info('invite.reward.created', {
-        orderNo: order.orderNo,
-        inviterUserId: invitee.inviterUserId,
-        inviteeUserId: order.userId,
-        points: rewardPoints,
-    });
-}
 async function markOrderPaidAndStartOpening(order, options = {}) {
-    var _a, _b, _c, _d, _e, _f, _g, _h;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m;
+    if (order.orderType === 'tool_single') {
+        const paidAt = (_b = (_a = options.paidAt) !== null && _a !== void 0 ? _a : order.paidAt) !== null && _b !== void 0 ? _b : Date.now();
+        if (order.payStatus !== 'paid') {
+            await (0, db_1.collection)('orders').doc(order._id).update({
+                data: {
+                    payStatus: 'paid',
+                    fulfillmentStatus: 'fulfilled',
+                    transactionId: (_d = (_c = options.transactionId) !== null && _c !== void 0 ? _c : order.transactionId) !== null && _d !== void 0 ? _d : '',
+                    paidAt,
+                    fulfilledAt: paidAt,
+                    updatedAt: paidAt,
+                },
+            });
+        }
+        await (0, ai_tool_entitlements_1.grantSingleToolEntitlementOnce)(order, paidAt);
+        return;
+    }
     if (order.payStatus !== 'paid') {
-        const paidAt = (_a = options.paidAt) !== null && _a !== void 0 ? _a : Date.now();
+        const paidAt = (_e = options.paidAt) !== null && _e !== void 0 ? _e : Date.now();
         await (0, db_1.collection)('orders').doc(order._id).update({
             data: {
                 payStatus: 'paid',
                 fulfillmentStatus: 'opening',
-                transactionId: (_c = (_b = options.transactionId) !== null && _b !== void 0 ? _b : order.transactionId) !== null && _c !== void 0 ? _c : '',
+                transactionId: (_g = (_f = options.transactionId) !== null && _f !== void 0 ? _f : order.transactionId) !== null && _g !== void 0 ? _g : '',
                 paidAt,
                 updatedAt: paidAt,
             },
         });
         const existingMembership = await (0, db_1.getMembershipByUserId)(order.userId, order.productCode);
-        const startAt = (_d = existingMembership === null || existingMembership === void 0 ? void 0 : existingMembership.startAt) !== null && _d !== void 0 ? _d : paidAt;
-        const endAt = (_e = existingMembership === null || existingMembership === void 0 ? void 0 : existingMembership.endAt) !== null && _e !== void 0 ? _e : paidAt;
+        const startAt = (_h = existingMembership === null || existingMembership === void 0 ? void 0 : existingMembership.startAt) !== null && _h !== void 0 ? _h : paidAt;
+        const endAt = (_j = existingMembership === null || existingMembership === void 0 ? void 0 : existingMembership.endAt) !== null && _j !== void 0 ? _j : paidAt;
         if (existingMembership) {
             await (0, db_1.collection)('memberships').doc(existingMembership._id).update({
                 data: {
@@ -164,14 +119,15 @@ async function markOrderPaidAndStartOpening(order, options = {}) {
             await (0, db_1.collection)('memberships').add({ data: membership });
         }
     }
-    const finalizedAt = (_g = (_f = options.paidAt) !== null && _f !== void 0 ? _f : order.paidAt) !== null && _g !== void 0 ? _g : Date.now();
+    const finalizedAt = (_l = (_k = options.paidAt) !== null && _k !== void 0 ? _k : order.paidAt) !== null && _l !== void 0 ? _l : Date.now();
     await deductPaymentPointsOnce(order, finalizedAt);
-    await rewardInviterOnce(order, finalizedAt);
+    await (0, ai_tool_entitlements_1.grantAiToolPlanPointsOnce)(order, finalizedAt);
+    await (0, ai_tool_entitlements_1.grantSingleToolEntitlementOnce)(order, finalizedAt);
     await (0, operator_notify_1.notifyOperatorPaidOrderOnce)({
         ...order,
         payStatus: 'paid',
         fulfillmentStatus: 'opening',
-        transactionId: (_h = options.transactionId) !== null && _h !== void 0 ? _h : order.transactionId,
+        transactionId: (_m = options.transactionId) !== null && _m !== void 0 ? _m : order.transactionId,
         paidAt: finalizedAt,
     });
 }

@@ -33,7 +33,7 @@ async function main(event) {
             orderNo: order.orderNo,
             paid: true,
             paymentType: 'points',
-            message: 'T币已全额抵扣，服务开通中',
+            message: '积分已全额抵扣，服务开通中',
         });
     }
     const user = await (0, db_1.getUserById)(order.userId);

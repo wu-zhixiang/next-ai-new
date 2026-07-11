@@ -33,8 +33,10 @@ export interface PlanView {
   planCode: string;
   planName: string;
   price: number;
+  totalAiPoints?: number;
   durationDays: number;
   description?: string;
+  complianceEnabled?: boolean;
   complianceDisplay?: {
     productName: string;
     planName: string;

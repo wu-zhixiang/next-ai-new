@@ -7,10 +7,12 @@ const sourceRoot = path.join(projectRoot, 'cloudfunctions');
 const compileRoot = path.join('/private/tmp', 'gpt-pay-cloudfunctions-compiled');
 const deployRoot = path.join(projectRoot, 'cloudfunctions-deploy');
 const functionNames = [
+  'admin-api',
   'bind-mobile',
   'cleanup-abandoned-orders',
   'clear-email-code',
   'create-order',
+  'create-tool-single-order',
   'email-code-webhook',
   'fulfill-membership',
   'fapiao-notify',
@@ -25,6 +27,7 @@ const functionNames = [
   'get-pay-result',
   'get-profile',
   'list-ai-news',
+  'list-ai-tools',
   'list-invoice-orders',
   'list-orders',
   'list-member-plans',
@@ -71,7 +74,9 @@ execFileSync(
     path.join(sourceRoot, 'shared', 'wx-server-sdk.d.ts'),
     path.join(sourceRoot, '_lib', 'context.ts'),
     path.join(sourceRoot, 'shared', 'constants.ts'),
+    path.join(sourceRoot, 'shared', 'ai-tool-config.ts'),
     path.join(sourceRoot, 'shared', 'ai-tool-core.ts'),
+    path.join(sourceRoot, 'shared', 'ai-tool-entitlements.ts'),
     path.join(sourceRoot, 'shared', 'ai-tool-generation.ts'),
     path.join(sourceRoot, 'shared', 'ai-tool-service.ts'),
     path.join(sourceRoot, 'shared', 'client-config.ts'),
@@ -116,6 +121,7 @@ const functionsThatNeedSeedShared = new Set([
 ]);
 const functionsThatNeedClientConfig = new Set([
   'create-order',
+  'create-tool-single-order',
   'get-app-config',
   'retry-order',
 ]);
@@ -143,7 +149,9 @@ const functionsThatNeedXVideo = new Set([
   'operator-api',
 ]);
 const functionsThatNeedAiToolShared = new Set([
+  'admin-api',
   'get-ai-tool-run',
+  'list-ai-tools',
   'run-ai-tool',
   'summarize-ai-tool',
 ]);

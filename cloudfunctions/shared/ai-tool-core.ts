@@ -59,6 +59,10 @@ export interface AiToolUsageView {
   memberUsed: boolean;
   dailyFreeLimit: number;
   dailyFreeRemaining: number;
+  chargeMode?: 'trial' | 'points' | 'single';
+  pointCost?: number;
+  aiToolPointsBalance?: number;
+  singlePurchaseAmount?: number;
   model?: string;
 }
 
@@ -78,6 +82,14 @@ export interface RunAiToolResult {
   }>;
   usage: AiToolUsageView;
   createdAt: number;
+}
+
+export interface AiToolQuotaExceededData {
+  code: 'QUOTA_EXCEEDED';
+  toolId: AiToolId;
+  pointCost: number;
+  aiToolPointsBalance: number;
+  singlePurchaseAmount: number;
 }
 
 export type NormalizedRunAiToolInputResult =
@@ -226,7 +238,7 @@ function normalizeSource(value?: string): AiToolSource {
 export function normalizeRunAiToolInput(event: RunAiToolInput = {}): NormalizedRunAiToolInputResult {
   const toolId = normalizeToolId(event.toolId);
   const definition = getAiToolDefinition(toolId);
-  if (!definition?.enabled) {
+  if (!definition) {
     return {
       ok: false,
       code: 'TOOL_DISABLED',

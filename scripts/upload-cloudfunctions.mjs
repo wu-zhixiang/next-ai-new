@@ -9,9 +9,11 @@ const privateKeyPath = '/Users/qitmac001343/.codex/private.wx1bbde9dcd7559d54.ke
 const deployRoot = path.join(projectPath, 'cloudfunctions-deploy');
 
 const functions = [
+  'admin-api',
   'bind-mobile',
   'clear-email-code',
   'create-order',
+  'create-tool-single-order',
   'email-code-webhook',
   'fapiao-notify',
   'get-ai-tool-run',
@@ -22,6 +24,7 @@ const functions = [
   'get-latest-email-code',
   'get-pay-result',
   'get-profile',
+  'list-ai-tools',
   'list-invoice-orders',
   'list-orders',
   'list-appstore-countries',

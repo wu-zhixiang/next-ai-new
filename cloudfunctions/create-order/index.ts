@@ -5,6 +5,7 @@ import { getWxContext } from '../_lib/context';
 import { DEFAULT_PRODUCT_CODE } from '../shared/constants';
 import { getClientAppConfig } from '../shared/client-config';
 import { paymentTypeToPayChannel } from '../shared/payment-config';
+import { calculatePointsDeduction, getPointsConfig } from '../shared/points-config';
 
 interface Event {
   pid: string;
@@ -47,10 +48,11 @@ export async function main(event: Event) {
     throw new Error('套餐不存在或已下架');
   }
 
-  const [existingMembership, purchasedBefore, appConfig] = await Promise.all([
+  const [existingMembership, purchasedBefore, appConfig, pointsConfig] = await Promise.all([
     getMembershipByUserId(user._id, plan.productCode),
     hasPurchasedProductBefore(user._id, plan.productCode),
     getClientAppConfig(),
+    getPointsConfig(),
   ]);
 
   const now = Date.now();
@@ -70,9 +72,12 @@ export async function main(event: Event) {
 
   const orderNo = createOrderNo();
   const availablePoints = Math.max(0, Math.floor(user.pointsBalance ?? 0));
-  const maxDeductiblePoints = Math.floor(plan.price);
-  const pointsDeducted = event.usePointsDeduction ? Math.min(availablePoints, maxDeductiblePoints) : 0;
-  const payableAmount = normalizeAmount(Math.max(0, plan.price - pointsDeducted));
+  const deduction = calculatePointsDeduction({
+    price: plan.price,
+    availablePoints,
+    usePointsDeduction: Boolean(event.usePointsDeduction),
+    pointsPerYuan: pointsConfig.pointsPerYuan,
+  });
   const order: OrderRecord = {
     orderNo,
     userId: user._id,
@@ -82,11 +87,12 @@ export async function main(event: Event) {
     planName: plan.planName,
     virtualPaymentProductId: plan.virtualPaymentProductId,
     orderType: purchasedBefore || existingMembership ? 'renew' : 'purchase',
-    amount: payableAmount,
+    amount: deduction.payableAmount,
     originalAmount: normalizeAmount(plan.price),
+    totalAiPoints: Math.max(0, Math.floor(plan.totalAiPoints ?? 0)),
     pointsDeductionEnabled: Boolean(event.usePointsDeduction),
-    pointsDeducted,
-    pointsDeductAmount: pointsDeducted,
+    pointsDeducted: deduction.pointsDeducted,
+    pointsDeductAmount: deduction.pointsDeductAmount,
     durationDays: plan.durationDays,
     payStatus: 'pending',
     fulfillmentStatus: 'pending',
@@ -101,10 +107,10 @@ export async function main(event: Event) {
     orderNo,
     productCode: plan.productCode,
     productName: plan.productName,
-    amount: payableAmount,
+    amount: deduction.payableAmount,
     originalAmount: normalizeAmount(plan.price),
-    pointsDeducted,
-    pointsDeductAmount: pointsDeducted,
+    pointsDeducted: deduction.pointsDeducted,
+    pointsDeductAmount: deduction.pointsDeductAmount,
     planName: plan.planName,
     durationDays: plan.durationDays,
   });

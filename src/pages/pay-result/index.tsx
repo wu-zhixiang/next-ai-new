@@ -14,6 +14,9 @@ interface PayResultData {
   orderNo: string;
   productName?: string;
   planName?: string;
+  orderType?: 'purchase' | 'renew' | 'tool_single';
+  toolName?: string;
+  toolPointCost?: number;
   amount?: number;
   originalAmount?: number;
   pointsDeducted?: number;
@@ -126,18 +129,49 @@ export default function PayResultPage(): JSX.Element {
           : data.payStatus === 'paid' && (data.fulfillmentStatus === 'fulfilled' || data.membership?.status === 'active')
             ? 'completed'
             : 'abandoned';
+  const isToolSingleOrder = data.orderType === 'tool_single';
   const isPaid = orderViewStatus === 'completed';
   const isOpening = orderViewStatus === 'opening';
   const isPendingPayable = orderViewStatus === 'pending';
   const isAbandoned = orderViewStatus === 'abandoned';
   const remainDays = data.membership?.remainDays ?? (isPaid ? 30 : 0);
   const expiryLabel = formatDateTime(data.membership?.endAt);
-  const statusText = isPaid ? '已完成' : isOpening ? '开通中' : isPendingPayable ? '待支付' : '已废弃请重新下单';
-  const heroTitle = isPaid ? '订单已完成' : isOpening ? '服务开通中' : isPendingPayable ? '订单待支付' : '订单已废弃';
-  const heroDesc = isPaid ? '会员服务已完成开通' : isOpening ? '已支付成功，人工正在处理会员开通' : isPendingPayable ? '请在 30 分钟内完成支付，超时需重新下单' : '该订单已超过支付有效期，请重新选择套餐下单';
+  const statusText = isToolSingleOrder && isPaid ? '权益已到账' : isPaid ? '已完成' : isOpening ? '开通中' : isPendingPayable ? '待支付' : '已废弃请重新下单';
+  const heroTitle = isToolSingleOrder && isPaid ? '单次权益已到账' : isPaid ? '订单已完成' : isOpening ? '服务开通中' : isPendingPayable ? '订单待支付' : '订单已废弃';
+  const heroDesc = isToolSingleOrder && isPaid
+    ? '支付成功后可返回工具页继续生成'
+    : isPaid
+      ? '会员服务已完成开通'
+      : isOpening
+        ? '已支付成功，人工正在处理会员开通'
+        : isPendingPayable
+          ? '请在 30 分钟内完成支付，超时需重新下单'
+          : '该订单已超过支付有效期，请重新选择套餐下单';
   const heroIconSrc = isPendingPayable || isOpening ? ORDER_CLOCK_ICON : isAbandoned ? ORDER_ABANDONED_ICON : '';
   const heroIconClass = isPaid ? 'pay-success__icon--success' : isPendingPayable || isOpening ? 'pay-success__icon--pending' : 'pay-success__icon--abandoned';
   const orderNo = data.orderNo || 'AI-REG-88291032';
+  const primaryTimeLabel = isPendingPayable ? '下单时间' : isOpening || isToolSingleOrder ? '支付时间' : '开通时间';
+  const primaryTimeValue = isToolSingleOrder && isPaid
+    ? formatDateTime(data.paidAt ?? data.createdAt)
+    : isPaid
+      ? formatDateTime(data.membership?.startAt)
+      : formatDateTime(data.paidAt ?? data.createdAt);
+  const secondaryLabel = isToolSingleOrder
+    ? (isPendingPayable ? '支付有效期' : isAbandoned ? '废弃时间' : '权益状态')
+    : isPendingPayable
+      ? '支付有效期'
+      : isAbandoned
+        ? '废弃时间'
+        : isOpening
+          ? '服务状态'
+          : '到期时间';
+  const secondaryValue = isToolSingleOrder
+    ? (isPendingPayable || isAbandoned ? formatDateTime(data.pendingExpireAt) : '单次权益已到账')
+    : isPendingPayable || isAbandoned
+      ? formatDateTime(data.pendingExpireAt)
+      : isOpening
+        ? '人工开通中'
+        : expiryLabel;
 
   return (
     <SaasPageFrame
@@ -189,21 +223,29 @@ export default function PayResultPage(): JSX.Element {
               <Text className='info-row__value'>{orderNo}</Text>
             </View>
             <View className='info-row'>
-              <Text className='info-row__label'>{isPendingPayable ? '下单时间' : isOpening ? '支付时间' : '开通时间'}</Text>
-              <Text className='info-row__value'>{isPaid ? formatDateTime(data.membership?.startAt) : formatDateTime(data.paidAt ?? data.createdAt)}</Text>
+              <Text className='info-row__label'>{primaryTimeLabel}</Text>
+              <Text className='info-row__value'>{primaryTimeValue}</Text>
             </View>
             <View className='info-row'>
-              <Text className='info-row__label'>{isPendingPayable ? '支付有效期' : isAbandoned ? '废弃时间' : isOpening ? '服务状态' : '到期时间'}</Text>
-              <Text className='info-row__value'>{isPendingPayable || isAbandoned ? formatDateTime(data.pendingExpireAt) : isOpening ? '人工开通中' : expiryLabel}</Text>
+              <Text className='info-row__label'>{secondaryLabel}</Text>
+              <Text className='info-row__value'>{secondaryValue}</Text>
             </View>
+            {isToolSingleOrder ? (
+              <View className='info-row'>
+                <Text className='info-row__label'>工具权益</Text>
+                <Text className='info-row__value'>
+                  {data.toolName ?? data.planName ?? 'AI工具'} · {data.toolPointCost ?? 0} 积分/次
+                </Text>
+              </View>
+            ) : null}
             <View className='info-row'>
               <Text className='info-row__label'>支付金额</Text>
               <Text className='info-row__value'>¥{(data.amount ?? 0).toFixed(2)}</Text>
             </View>
             {data.pointsDeducted ? (
               <View className='info-row'>
-                <Text className='info-row__label'>T币抵扣</Text>
-                <Text className='info-row__value'>-{data.pointsDeducted} T币</Text>
+                <Text className='info-row__label'>积分抵扣</Text>
+                <Text className='info-row__value'>-{data.pointsDeducted} 积分</Text>
               </View>
             ) : null}
             <View className='info-row'>

@@ -9,7 +9,11 @@
     "typecheck": "tsc --noEmit",
     "test:unit": "node --test tests/*.test.ts",
     "upload:cloudfunctions": "node scripts/upload-cloudfunctions.mjs",
-    "init:cloudenv": "node scripts/init-cloud-env.mjs"
+    "init:cloudenv": "node scripts/init-cloud-env.mjs",
+    "admin:dev": "npm --prefix admin run dev",
+    "admin:build": "npm --prefix admin run build",
+    "admin:preview": "npm --prefix admin run preview",
+    "admin:typecheck": "npm --prefix admin run typecheck"
   },
   "dependencies": {
     "@babel/runtime": "^7.24.4",

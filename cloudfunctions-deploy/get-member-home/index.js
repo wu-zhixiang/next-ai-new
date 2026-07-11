@@ -5,6 +5,7 @@ const constants_1 = require("./shared/constants");
 const db_1 = require("./shared/db");
 const utils_1 = require("./shared/utils");
 const context_1 = require("./_lib/context");
+const points_config_1 = require("./shared/points-config");
 const DAY_MS = 24 * 60 * 60 * 1000;
 function buildMembershipFromOrder(order) {
     var _a;
@@ -32,9 +33,10 @@ function buildMembershipFromOrder(order) {
     };
 }
 async function main() {
-    var _a, _b;
+    var _a, _b, _c;
     const { OPENID } = (0, context_1.getWxContext)();
     const user = await (0, db_1.getUserByOpenId)(OPENID);
+    const pointsConfig = await (0, points_config_1.getPointsConfig)();
     if (!user) {
         return (0, utils_1.ok)({
             userInfo: {},
@@ -44,6 +46,10 @@ async function main() {
                 hasDeliveryInfo: false,
             },
             subscribeMsgAuth: false,
+            pointsConfig: {
+                pointsPerYuan: pointsConfig.pointsPerYuan,
+                inviteBaseRewardPoints: pointsConfig.inviteBaseRewardPoints,
+            },
         });
     }
     const now = Date.now();
@@ -76,10 +82,15 @@ async function main() {
             avatarUrl: user.avatarUrl,
             inviteCode: user.inviteCode,
             pointsBalance: (_b = user.pointsBalance) !== null && _b !== void 0 ? _b : 0,
+            aiToolPointsBalance: (_c = user.aiToolPointsBalance) !== null && _c !== void 0 ? _c : 0,
             aiAccount: {
                 registered: aiAccountRegistered,
                 email: user.aiAccountEmail,
             },
+        },
+        pointsConfig: {
+            pointsPerYuan: pointsConfig.pointsPerYuan,
+            inviteBaseRewardPoints: pointsConfig.inviteBaseRewardPoints,
         },
         membership: (0, utils_1.normalizeMembership)(membership),
         activeServices,

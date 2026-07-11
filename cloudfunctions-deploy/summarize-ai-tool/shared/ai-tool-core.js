@@ -130,7 +130,7 @@ function normalizeRunAiToolInput(event = {}) {
     var _a;
     const toolId = normalizeToolId(event.toolId);
     const definition = getAiToolDefinition(toolId);
-    if (!(definition === null || definition === void 0 ? void 0 : definition.enabled)) {
+    if (!definition) {
         return {
             ok: false,
             code: 'TOOL_DISABLED',

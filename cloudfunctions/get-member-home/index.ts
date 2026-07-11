@@ -8,6 +8,7 @@ import {
 import { calcExpireTag, calcRemainDays, maskMobile, normalizeMembership, ok } from '../shared/utils';
 import { getWxContext } from '../_lib/context';
 import type { MembershipRecord, OrderRecord } from '../shared/types';
+import { getPointsConfig } from '../shared/points-config';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -39,6 +40,7 @@ function buildMembershipFromOrder(order: OrderRecord): MembershipRecord | null {
 export async function main() {
   const { OPENID } = getWxContext();
   const user = await getUserByOpenId(OPENID);
+  const pointsConfig = await getPointsConfig();
 
   if (!user) {
     return ok({
@@ -49,6 +51,10 @@ export async function main() {
         hasDeliveryInfo: false,
       },
       subscribeMsgAuth: false,
+      pointsConfig: {
+        pointsPerYuan: pointsConfig.pointsPerYuan,
+        inviteBaseRewardPoints: pointsConfig.inviteBaseRewardPoints,
+      },
     });
   }
 
@@ -89,10 +95,15 @@ export async function main() {
       avatarUrl: user.avatarUrl,
       inviteCode: user.inviteCode,
       pointsBalance: user.pointsBalance ?? 0,
+      aiToolPointsBalance: user.aiToolPointsBalance ?? 0,
       aiAccount: {
         registered: aiAccountRegistered,
         email: user.aiAccountEmail,
       },
+    },
+    pointsConfig: {
+      pointsPerYuan: pointsConfig.pointsPerYuan,
+      inviteBaseRewardPoints: pointsConfig.inviteBaseRewardPoints,
     },
     membership: normalizeMembership(membership),
     activeServices,

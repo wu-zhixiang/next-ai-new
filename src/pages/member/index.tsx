@@ -37,6 +37,10 @@ interface MemberHomeData {
       email?: string;
     };
   };
+  pointsConfig?: {
+    pointsPerYuan: number;
+    inviteBaseRewardPoints: number;
+  };
   membership: MembershipView;
   activeServices?: MembershipView[];
   deliverySummary: {
@@ -94,6 +98,7 @@ interface SaveAiAccountResult {
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MINUTE_MS = 60 * 1000;
 const EMAIL_CODE_VISIBLE_WINDOW_MS = 5 * MINUTE_MS;
+const DEFAULT_POINTS_PER_YUAN = 10;
 
 function formatRemainCountdown(endAt?: number, now = Date.now()): { value: string; label: string; remainMs: number } {
   if (!endAt) {
@@ -403,8 +408,9 @@ export default function MemberPage(): JSX.Element {
   const activeProductAvailable = Boolean(activeProduct?.available && activePlans.some((plan) => plan.price > 0));
   const selectedPlan = activePlans.find((plan) => plan.planCode === selectedPlanCode) ?? activePlans[0];
   const pointsBalance = Math.max(0, Math.floor(data.userInfo?.pointsBalance ?? cachedUserInfo?.pointsBalance ?? 0));
-  const maxPointsDeducted = selectedPlan ? Math.min(pointsBalance, Math.floor(selectedPlan.price)) : 0;
-  const pointsDeductAmount = maxPointsDeducted;
+  const pointsPerYuan = Math.max(1, Math.floor(data.pointsConfig?.pointsPerYuan ?? DEFAULT_POINTS_PER_YUAN));
+  const maxPointsDeducted = selectedPlan ? Math.min(pointsBalance, Math.floor(selectedPlan.price * pointsPerYuan)) : 0;
+  const pointsDeductAmount = Number((maxPointsDeducted / pointsPerYuan).toFixed(2));
   const finalPayAmount = selectedPlan ? Math.max(0, Number((selectedPlan.price - (usePointsDeduction ? pointsDeductAmount : 0)).toFixed(2))) : 0;
   const pointsDeductionAvailable = activeProductAvailable && maxPointsDeducted > 0;
   const aiAccountRegistered = Boolean(data.userInfo?.aiAccount?.registered || data.userInfo?.aiAccount?.email || cachedUserInfo?.aiAccountRegistered);
@@ -1362,11 +1368,11 @@ export default function MemberPage(): JSX.Element {
             ) : null}
             <View className={`plan-sheet__points ${usePointsDeduction ? 'plan-sheet__points--active' : ''} ${pointsDeductionAvailable ? '' : 'plan-sheet__points--disabled'}`}>
               <View>
-                <Text className='plan-sheet__points-title'>使用T币抵扣</Text>
+                <Text className='plan-sheet__points-title'>使用积分抵扣</Text>
                 <Text className='plan-sheet__points-desc'>
                   {pointsDeductionAvailable
-                    ? `可用 ${pointsBalance} T币，本次抵扣 ¥${pointsDeductAmount.toFixed(2)}`
-                    : `可用 ${pointsBalance} T币，1 T币可抵 ¥1`}
+                    ? `可用 ${pointsBalance} 积分，本次抵扣 ¥${pointsDeductAmount.toFixed(2)}`
+                    : `可用 ${pointsBalance} 积分，${pointsPerYuan} 积分可抵 ¥1`}
                 </Text>
                 {selectedPlan ? (
                   <Text className='plan-sheet__points-pay'>预计支付 ¥{finalPayAmount.toFixed(2)}</Text>
@@ -1376,7 +1382,7 @@ export default function MemberPage(): JSX.Element {
                 className={`ios-switch ${usePointsDeduction ? 'ios-switch--on' : ''}`}
                 onClick={() => {
                   if (!pointsDeductionAvailable) {
-                    Taro.showToast({ title: '暂无可抵扣T币', icon: 'none' });
+                    Taro.showToast({ title: '暂无可抵扣积分', icon: 'none' });
                     return;
                   }
                   setUsePointsDeduction((enabled) => !enabled);

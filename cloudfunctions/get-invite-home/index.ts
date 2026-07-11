@@ -1,5 +1,7 @@
 import { _, collection, getUserByOpenId, listInviteRelationsByInviterId } from '../shared/db';
 import type { PointsLedgerRecord, UserRecord } from '../shared/types';
+import { getPointsConfig } from '../shared/points-config';
+import { grantPendingInviteRewards } from '../shared/points-rewards';
 import { ok } from '../shared/utils';
 import { getWxContext } from '../_lib/context';
 
@@ -19,6 +21,9 @@ export async function main() {
     throw new Error('用户未登录');
   }
 
+  await grantPendingInviteRewards(user._id);
+  const refreshedUser = await getUserByOpenId(OPENID);
+  const currentUser = refreshedUser ?? user;
   const relations = await listInviteRelationsByInviterId(user._id);
   const inviteeIds = relations.map((relation) => relation.inviteeUserId);
   const usersById = new Map<string, UserRecord & { _id: string }>();
@@ -34,22 +39,15 @@ export async function main() {
     }
   }
 
-  const [ledgersResult, milestoneLedgersResult] = await Promise.all([
+  const [ledgersResult, pointsConfig] = await Promise.all([
     collection('pointsLedger')
-      .where({
-        userId: user._id,
-        type: 'invite_reward',
-      })
+      .where({ userId: user._id })
       .get(),
-    collection('pointsLedger')
-      .where({
-        userId: user._id,
-        type: 'invite_milestone',
-      })
-      .get(),
+    getPointsConfig(),
   ]);
-  const rewardLedgers = ledgersResult.data as PointsLedgerRecord[];
-  const milestoneLedgers = milestoneLedgersResult.data as PointsLedgerRecord[];
+  const ledgers = ledgersResult.data as PointsLedgerRecord[];
+  const rewardLedgers = ledgers.filter((ledger) => ledger.type === 'invite_reward');
+  const milestoneLedgers = ledgers.filter((ledger) => ledger.type === 'invite_milestone');
   const rewardByInvitee = new Map<string, number>();
   for (const ledger of rewardLedgers) {
     const relatedUserId = ledger.relatedUserId;
@@ -69,14 +67,18 @@ export async function main() {
     };
   });
 
-  const totalRewardPoints = [...rewardLedgers, ...milestoneLedgers]
-    .reduce((total, ledger) => total + ledger.points, 0);
+  const totalRewardPoints = [...rewardLedgers, ...milestoneLedgers].reduce((total, ledger) => total + ledger.points, 0);
 
   return ok({
-    inviteCode: user.inviteCode,
+    inviteCode: currentUser.inviteCode,
     inviteCount: invitees.length,
-    pointsBalance: user.pointsBalance ?? 0,
+    pointsBalance: currentUser.pointsBalance ?? 0,
     totalRewardPoints,
     invitees,
+    pointsConfig: {
+      pointsPerYuan: pointsConfig.pointsPerYuan,
+      inviteBaseRewardPoints: pointsConfig.inviteBaseRewardPoints,
+      inviteMilestones: pointsConfig.inviteMilestones.filter((milestone) => milestone.enabled),
+    },
   });
 }

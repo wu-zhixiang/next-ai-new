@@ -21,8 +21,10 @@ export async function main(event: Event = {}) {
       planCode: plan.planCode,
       planName: plan.planName,
       price: plan.price,
+      totalAiPoints: plan.totalAiPoints ?? 0,
       durationDays: plan.durationDays,
       description: plan.description,
+      complianceEnabled: plan.complianceEnabled ?? Boolean(plan.complianceDisplay),
       complianceDisplay: plan.complianceDisplay,
     };
   });

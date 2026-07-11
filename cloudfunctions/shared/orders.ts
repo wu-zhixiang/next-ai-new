@@ -3,7 +3,7 @@ import { sendMembershipOpenedReminder } from './member-reminders';
 import { notifyOperatorPaidOrderOnce } from './operator-notify';
 import type { MembershipRecord, OrderRecord, PointsLedgerRecord } from './types';
 import { calcMembershipRemainDays } from './utils';
-import { calcInvitePurchaseReward } from './invite-reward-policy';
+import { grantAiToolPlanPointsOnce, grantSingleToolEntitlementOnce } from './ai-tool-entitlements';
 
 async function deductPaymentPointsOnce(order: OrderRecord & { _id: string }, paidAt: number): Promise<void> {
   const points = Math.max(0, Math.floor(order.pointsDeducted ?? 0));
@@ -43,7 +43,7 @@ async function deductPaymentPointsOnce(order: OrderRecord & { _id: string }, pai
     direction: 'out',
     points,
     balanceAfter: user?.pointsBalance,
-    description: `订阅 ${order.planName} 抵扣T币`,
+    description: `订阅 ${order.planName} 抵扣积分`,
     createdAt: paidAt,
   };
   await collection('pointsLedger').add({ data: ledger });
@@ -54,72 +54,6 @@ async function deductPaymentPointsOnce(order: OrderRecord & { _id: string }, pai
   });
 }
 
-async function rewardInviterOnce(order: OrderRecord & { _id: string }, paidAt: number): Promise<void> {
-  const invitee = await getUserById(order.userId);
-  if (!invitee?.inviterUserId) {
-    console.info('invite.reward.skipped', {
-      reason: 'inviter_missing',
-      orderNo: order.orderNo,
-      userId: order.userId,
-    });
-    return;
-  }
-
-  const existing = await collection('pointsLedger')
-    .where({
-      type: 'invite_reward',
-      orderNo: order.orderNo,
-      userId: invitee.inviterUserId,
-    })
-    .limit(1)
-    .get();
-  if (existing.data[0]) {
-    console.info('invite.reward.skipped', {
-      reason: 'ledger_exists',
-      orderNo: order.orderNo,
-      inviterUserId: invitee.inviterUserId,
-    });
-    return;
-  }
-
-  const rewardPoints = calcInvitePurchaseReward(order.amount);
-  if (rewardPoints <= 0) {
-    console.info('invite.reward.skipped', {
-      reason: 'paid_amount_not_over_50',
-      orderNo: order.orderNo,
-      inviterUserId: invitee.inviterUserId,
-      paidAmount: order.amount,
-    });
-    return;
-  }
-  await collection('users').doc(invitee.inviterUserId).update({
-    data: {
-      pointsBalance: _.inc(rewardPoints),
-      updatedAt: paidAt,
-    },
-  });
-
-  const inviter = await getUserById(invitee.inviterUserId);
-  const ledger: PointsLedgerRecord = {
-    userId: invitee.inviterUserId,
-    relatedUserId: order.userId,
-    orderNo: order.orderNo,
-    type: 'invite_reward',
-    direction: 'in',
-    points: rewardPoints,
-    balanceAfter: inviter?.pointsBalance,
-    description: `好友购买 ${order.planName} 奖励5 T币`,
-    createdAt: paidAt,
-  };
-  await collection('pointsLedger').add({ data: ledger });
-  console.info('invite.reward.created', {
-    orderNo: order.orderNo,
-    inviterUserId: invitee.inviterUserId,
-    inviteeUserId: order.userId,
-    points: rewardPoints,
-  });
-}
-
 export async function markOrderPaidAndStartOpening(
   order: OrderRecord & { _id: string },
   options: {
@@ -127,6 +61,24 @@ export async function markOrderPaidAndStartOpening(
     paidAt?: number;
   } = {},
 ): Promise<void> {
+  if (order.orderType === 'tool_single') {
+    const paidAt = options.paidAt ?? order.paidAt ?? Date.now();
+    if (order.payStatus !== 'paid') {
+      await collection('orders').doc(order._id).update({
+        data: {
+          payStatus: 'paid',
+          fulfillmentStatus: 'fulfilled',
+          transactionId: options.transactionId ?? order.transactionId ?? '',
+          paidAt,
+          fulfilledAt: paidAt,
+          updatedAt: paidAt,
+        },
+      });
+    }
+    await grantSingleToolEntitlementOnce(order, paidAt);
+    return;
+  }
+
   if (order.payStatus !== 'paid') {
     const paidAt = options.paidAt ?? Date.now();
     await collection('orders').doc(order._id).update({
@@ -178,7 +130,8 @@ export async function markOrderPaidAndStartOpening(
 
   const finalizedAt = options.paidAt ?? order.paidAt ?? Date.now();
   await deductPaymentPointsOnce(order, finalizedAt);
-  await rewardInviterOnce(order, finalizedAt);
+  await grantAiToolPlanPointsOnce(order, finalizedAt);
+  await grantSingleToolEntitlementOnce(order, finalizedAt);
   await notifyOperatorPaidOrderOnce({
     ...order,
     payStatus: 'paid',

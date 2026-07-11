@@ -1,24 +1,37 @@
-import { useMemo, useState } from 'react';
-import { Button, Text, View } from '@tarojs/components';
+import { useEffect, useMemo, useState } from 'react';
+import { Button, Image, Text, View } from '@tarojs/components';
 import Taro, { useLoad, useShareAppMessage, useShareTimeline } from '@tarojs/taro';
 import { AppTransparentHeader } from '@/components/AppTransparentHeader';
 import { useResetPageScroll } from '@/hooks/useResetPageScroll';
-import { getToolById, getToolDetailUrl, hasToolIntro } from '@/pages/tools/definitions';
+import { TOOLS, getToolById, getToolByIdFromList, getToolDetailUrl, hasToolIntro, isToolDisabled } from '@/pages/tools/definitions';
+import { loadConfiguredTools } from '@/pages/tools/runtime';
 
 export default function ToolIntroPage(): JSX.Element {
   useResetPageScroll();
 
   const [toolId, setToolId] = useState('');
-  const activeTool = useMemo(() => getToolById(toolId), [toolId]);
+  const [tools, setTools] = useState(TOOLS);
+  const [configLoaded, setConfigLoaded] = useState(false);
+  const activeTool = useMemo(() => getToolByIdFromList(tools, toolId), [tools, toolId]);
   const intro = activeTool.intro;
 
   useLoad((options) => {
     const nextTool = getToolById(typeof options.tool === 'string' ? options.tool : '');
     setToolId(nextTool.id);
-    if (!hasToolIntro(nextTool)) {
-      void Taro.redirectTo({ url: getToolDetailUrl(nextTool.id) });
-    }
   });
+
+  useEffect(() => {
+    void loadConfiguredTools('tool-intro').then((nextTools) => {
+      setTools(nextTools);
+      setConfigLoaded(true);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (toolId && configLoaded && !hasToolIntro(activeTool)) {
+      void Taro.redirectTo({ url: getToolDetailUrl(activeTool.id) });
+    }
+  }, [activeTool, configLoaded, toolId]);
 
   useShareAppMessage(() => ({
     title: intro?.title || `${activeTool.name} - AIO AI工具`,
@@ -31,6 +44,15 @@ export default function ToolIntroPage(): JSX.Element {
   }));
 
   function startTool(): void {
+    if (isToolDisabled(activeTool)) {
+      void Taro.showModal({
+        title: activeTool.name,
+        content: `${activeTool.desc}还在接入中，暂时不可使用。`,
+        showCancel: false,
+        confirmText: '知道了',
+      });
+      return;
+    }
     void Taro.navigateTo({ url: getToolDetailUrl(activeTool.id) });
   }
 
@@ -54,7 +76,9 @@ export default function ToolIntroPage(): JSX.Element {
               <Text className='tool-intro-hero__subtitle'>{intro.subtitle}</Text>
             </View>
             <View className='tool-intro-hero__mark'>
-              <Text>{activeTool.icon}</Text>
+              {activeTool.iconImageFileId
+                ? <Image className='tool-intro-hero__mark-image' src={activeTool.iconImageFileId} mode='aspectFit' />
+                : <Text>{activeTool.icon}</Text>}
             </View>
           </View>
 
@@ -76,16 +100,25 @@ export default function ToolIntroPage(): JSX.Element {
               {intro.cases.map((item) => (
                 <View className='tool-intro-case' key={item.title}>
                   <Text className='tool-intro-case__title'>{item.title}</Text>
-                  <View className='tool-intro-case__compare'>
-                    <View className='tool-intro-case__side'>
-                      <Text className='tool-intro-case__label'>处理前</Text>
-                      <Text className='tool-intro-case__text'>{item.before}</Text>
+                  {item.mode === 'preview' ? (
+                    <View className='tool-intro-case__preview'>
+                      <Image className='tool-intro-case__preview-image' src={item.previewImageFileId} mode='aspectFill' />
+                      {item.previewDescription ? <Text className='tool-intro-case__text'>{item.previewDescription}</Text> : null}
                     </View>
-                    <View className='tool-intro-case__side tool-intro-case__side--after'>
-                      <Text className='tool-intro-case__label'>处理后</Text>
-                      <Text className='tool-intro-case__text'>{item.after}</Text>
+                  ) : (
+                    <View className='tool-intro-case__compare'>
+                      <View className='tool-intro-case__side'>
+                        <Text className='tool-intro-case__label'>处理前</Text>
+                        {item.beforeImageFileId ? <Image className='tool-intro-case__image' src={item.beforeImageFileId} mode='aspectFill' /> : null}
+                        <Text className='tool-intro-case__text'>{item.before}</Text>
+                      </View>
+                      <View className='tool-intro-case__side tool-intro-case__side--after'>
+                        <Text className='tool-intro-case__label'>处理后</Text>
+                        {item.afterImageFileId ? <Image className='tool-intro-case__image' src={item.afterImageFileId} mode='aspectFill' /> : null}
+                        <Text className='tool-intro-case__text'>{item.after}</Text>
+                      </View>
                     </View>
-                  </View>
+                  )}
                 </View>
               ))}
             </View>

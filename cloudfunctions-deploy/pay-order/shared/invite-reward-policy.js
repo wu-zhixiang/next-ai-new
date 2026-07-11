@@ -1,15 +1,5 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.INVITE_MILESTONE_REWARD = exports.INVITE_MILESTONE_TARGET = exports.INVITE_PURCHASE_REWARD = exports.INVITE_PURCHASE_MIN_AMOUNT = void 0;
-exports.calcInvitePurchaseReward = calcInvitePurchaseReward;
-exports.shouldGrantInviteMilestone = shouldGrantInviteMilestone;
-exports.INVITE_PURCHASE_MIN_AMOUNT = 50;
-exports.INVITE_PURCHASE_REWARD = 5;
-exports.INVITE_MILESTONE_TARGET = 10;
-exports.INVITE_MILESTONE_REWARD = 10;
-function calcInvitePurchaseReward(paidAmount) {
-    return paidAmount > exports.INVITE_PURCHASE_MIN_AMOUNT ? exports.INVITE_PURCHASE_REWARD : 0;
-}
-function shouldGrantInviteMilestone(inviteCount) {
-    return inviteCount >= exports.INVITE_MILESTONE_TARGET;
-}
+exports.INVITE_RELATION_REWARD = void 0;
+var points_config_1 = require("./points-config");
+Object.defineProperty(exports, "INVITE_RELATION_REWARD", { enumerable: true, get: function () { return points_config_1.DEFAULT_INVITE_BASE_REWARD_POINTS; } });

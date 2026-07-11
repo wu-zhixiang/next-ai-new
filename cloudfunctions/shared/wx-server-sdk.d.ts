@@ -18,8 +18,10 @@ declare module 'wx-server-sdk' {
     doc(id: string): {
       get(): Promise<{ data: unknown }>;
       update(payload: { data: unknown }): Promise<unknown>;
+      remove(): Promise<unknown>;
     };
     add(payload: { data: unknown }): Promise<{ _id: string }>;
+    get(): Promise<QueryResult>;
   }
 
   const cloud: {

@@ -7,6 +7,7 @@ const context_1 = require("./_lib/context");
 const constants_1 = require("./shared/constants");
 const client_config_1 = require("./shared/client-config");
 const payment_config_1 = require("./shared/payment-config");
+const points_config_1 = require("./shared/points-config");
 function normalizeAmount(amount) {
     return Number(amount.toFixed(2));
 }
@@ -22,7 +23,7 @@ async function hasPurchasedProductBefore(userId, productCode) {
         || orders.some((order) => normalizePurchasedProductCode(order) === productCode && order.payStatus === 'paid');
 }
 async function main(event) {
-    var _a;
+    var _a, _b;
     const { OPENID } = (0, context_1.getWxContext)();
     const user = await (0, db_1.getUserByOpenId)(OPENID);
     if (!user) {
@@ -38,10 +39,11 @@ async function main(event) {
     if (!plan) {
         throw new Error('套餐不存在或已下架');
     }
-    const [existingMembership, purchasedBefore, appConfig] = await Promise.all([
+    const [existingMembership, purchasedBefore, appConfig, pointsConfig] = await Promise.all([
         (0, db_1.getMembershipByUserId)(user._id, plan.productCode),
         hasPurchasedProductBefore(user._id, plan.productCode),
         (0, client_config_1.getClientAppConfig)(),
+        (0, points_config_1.getPointsConfig)(),
     ]);
     const now = Date.now();
     const pendingOrders = await (0, db_1.listPendingOrdersByUserId)(user._id);
@@ -55,9 +57,12 @@ async function main(event) {
     })));
     const orderNo = (0, utils_1.createOrderNo)();
     const availablePoints = Math.max(0, Math.floor((_a = user.pointsBalance) !== null && _a !== void 0 ? _a : 0));
-    const maxDeductiblePoints = Math.floor(plan.price);
-    const pointsDeducted = event.usePointsDeduction ? Math.min(availablePoints, maxDeductiblePoints) : 0;
-    const payableAmount = normalizeAmount(Math.max(0, plan.price - pointsDeducted));
+    const deduction = (0, points_config_1.calculatePointsDeduction)({
+        price: plan.price,
+        availablePoints,
+        usePointsDeduction: Boolean(event.usePointsDeduction),
+        pointsPerYuan: pointsConfig.pointsPerYuan,
+    });
     const order = {
         orderNo,
         userId: user._id,
@@ -67,11 +72,12 @@ async function main(event) {
         planName: plan.planName,
         virtualPaymentProductId: plan.virtualPaymentProductId,
         orderType: purchasedBefore || existingMembership ? 'renew' : 'purchase',
-        amount: payableAmount,
+        amount: deduction.payableAmount,
         originalAmount: normalizeAmount(plan.price),
+        totalAiPoints: Math.max(0, Math.floor((_b = plan.totalAiPoints) !== null && _b !== void 0 ? _b : 0)),
         pointsDeductionEnabled: Boolean(event.usePointsDeduction),
-        pointsDeducted,
-        pointsDeductAmount: pointsDeducted,
+        pointsDeducted: deduction.pointsDeducted,
+        pointsDeductAmount: deduction.pointsDeductAmount,
         durationDays: plan.durationDays,
         payStatus: 'pending',
         fulfillmentStatus: 'pending',
@@ -84,10 +90,10 @@ async function main(event) {
         orderNo,
         productCode: plan.productCode,
         productName: plan.productName,
-        amount: payableAmount,
+        amount: deduction.payableAmount,
         originalAmount: normalizeAmount(plan.price),
-        pointsDeducted,
-        pointsDeductAmount: pointsDeducted,
+        pointsDeducted: deduction.pointsDeducted,
+        pointsDeductAmount: deduction.pointsDeductAmount,
         planName: plan.planName,
         durationDays: plan.durationDays,
     });

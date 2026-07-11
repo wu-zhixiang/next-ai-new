@@ -21,6 +21,9 @@ interface OrderItem {
   planCode?: string;
   productName: string;
   planName: string;
+  orderType?: 'purchase' | 'renew' | 'tool_single';
+  toolName?: string;
+  toolPointCost?: number;
   amount: number;
   durationDays: number;
   payStatus: PayStatus;
@@ -93,6 +96,9 @@ export default function RecordsPage(): JSX.Element {
       setOrders(
         config.enableProductComplianceMode
           ? result.orders.map((order) => {
+              if (order.orderType === 'tool_single') {
+                return order;
+              }
               const display = getCompliantOrderDisplay(
                 order.productCode,
                 order.planCode,
@@ -147,7 +153,7 @@ export default function RecordsPage(): JSX.Element {
                 <View className='record-card__head'>
                   <View>
                     <Text className='record-card__tier'>{item.productName}</Text>
-                    {/* <Text className='record-card__title'>{item.planName}</Text> */}
+                    <Text className='record-card__title'>{item.orderType === 'tool_single' ? item.toolName ?? item.planName : item.planName}</Text>
                   </View>
                   <View className={`status-pill status-pill--${item.fulfillmentStatus === 'opening' ? 'opening' : item.payStatus}`}>
                     <Text className='status-pill__dot' />

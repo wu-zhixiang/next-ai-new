@@ -2,6 +2,8 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.main = main;
 const db_1 = require("./shared/db");
+const points_config_1 = require("./shared/points-config");
+const points_rewards_1 = require("./shared/points-rewards");
 const utils_1 = require("./shared/utils");
 const context_1 = require("./_lib/context");
 async function main() {
@@ -11,6 +13,9 @@ async function main() {
     if (!user) {
         throw new Error('用户未登录');
     }
+    await (0, points_rewards_1.grantPendingInviteRewards)(user._id);
+    const refreshedUser = await (0, db_1.getUserByOpenId)(OPENID);
+    const currentUser = refreshedUser !== null && refreshedUser !== void 0 ? refreshedUser : user;
     const relations = await (0, db_1.listInviteRelationsByInviterId)(user._id);
     const inviteeIds = relations.map((relation) => relation.inviteeUserId);
     const usersById = new Map();
@@ -24,22 +29,15 @@ async function main() {
             usersById.set(item._id, item);
         }
     }
-    const [ledgersResult, milestoneLedgersResult] = await Promise.all([
+    const [ledgersResult, pointsConfig] = await Promise.all([
         (0, db_1.collection)('pointsLedger')
-            .where({
-            userId: user._id,
-            type: 'invite_reward',
-        })
+            .where({ userId: user._id })
             .get(),
-        (0, db_1.collection)('pointsLedger')
-            .where({
-            userId: user._id,
-            type: 'invite_milestone',
-        })
-            .get(),
+        (0, points_config_1.getPointsConfig)(),
     ]);
-    const rewardLedgers = ledgersResult.data;
-    const milestoneLedgers = milestoneLedgersResult.data;
+    const ledgers = ledgersResult.data;
+    const rewardLedgers = ledgers.filter((ledger) => ledger.type === 'invite_reward');
+    const milestoneLedgers = ledgers.filter((ledger) => ledger.type === 'invite_milestone');
     const rewardByInvitee = new Map();
     for (const ledger of rewardLedgers) {
         const relatedUserId = ledger.relatedUserId;
@@ -59,13 +57,17 @@ async function main() {
             rewardPoints: (_a = rewardByInvitee.get(relation.inviteeUserId)) !== null && _a !== void 0 ? _a : 0,
         };
     });
-    const totalRewardPoints = [...rewardLedgers, ...milestoneLedgers]
-        .reduce((total, ledger) => total + ledger.points, 0);
+    const totalRewardPoints = [...rewardLedgers, ...milestoneLedgers].reduce((total, ledger) => total + ledger.points, 0);
     return (0, utils_1.ok)({
-        inviteCode: user.inviteCode,
+        inviteCode: currentUser.inviteCode,
         inviteCount: invitees.length,
-        pointsBalance: (_b = user.pointsBalance) !== null && _b !== void 0 ? _b : 0,
+        pointsBalance: (_b = currentUser.pointsBalance) !== null && _b !== void 0 ? _b : 0,
         totalRewardPoints,
         invitees,
+        pointsConfig: {
+            pointsPerYuan: pointsConfig.pointsPerYuan,
+            inviteBaseRewardPoints: pointsConfig.inviteBaseRewardPoints,
+            inviteMilestones: pointsConfig.inviteMilestones.filter((milestone) => milestone.enabled),
+        },
     });
 }

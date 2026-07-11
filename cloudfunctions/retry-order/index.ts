@@ -4,6 +4,8 @@ import { createOrderNo, ok } from '../shared/utils';
 import { getWxContext } from '../_lib/context';
 import { getClientAppConfig } from '../shared/client-config';
 import { paymentTypeToPayChannel } from '../shared/payment-config';
+import { calculatePointsDeduction, getPointsConfig } from '../shared/points-config';
+import { getEffectiveAiToolConfig } from '../shared/ai-tool-entitlements';
 
 interface Event {
   orderNo: string;
@@ -11,6 +13,13 @@ interface Event {
 
 function normalizeAmount(amount: number): number {
   return Number(amount.toFixed(2));
+}
+
+function getToolSingleVirtualPaymentProductId(toolId: string): string | undefined {
+  const toolKey = toolId.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase();
+  return process.env[`WX_VIRTUAL_PAY_PRODUCT_ID_TOOL_SINGLE_${toolKey}`]
+    || process.env.WX_VIRTUAL_PAY_PRODUCT_ID_TOOL_SINGLE
+    || process.env.WX_VIRTUAL_PAY_PRODUCT_ID_AI_TOOL_SINGLE;
 }
 
 export async function main(event: Event) {
@@ -36,14 +45,66 @@ export async function main(event: Event) {
     throw new Error('订单已支付');
   }
 
+  if (oldOrder.orderType === 'tool_single') {
+    const toolId = oldOrder.toolId || '';
+    const tool = toolId ? await getEffectiveAiToolConfig(toolId) : null;
+    if (!tool) {
+      throw new Error('工具不存在');
+    }
+    if (!tool.enabled) {
+      throw new Error('该工具正在接入中');
+    }
+    const appConfig = await getClientAppConfig();
+    const now = Date.now();
+    await collection('orders').doc(oldOrder._id).update({
+      data: {
+        payStatus: 'closed',
+        closedAt: now,
+        closeReason: 'retry_order_created',
+        updatedAt: now,
+      },
+    });
+
+    const amount = normalizeAmount(tool.pointCost / 10);
+    const nextOrder: OrderRecord = {
+      orderNo: createOrderNo('TOOL'),
+      userId: user._id,
+      productCode: oldOrder.productCode || 'ai_tool_single',
+      productName: oldOrder.productName || 'AI工具单次购买',
+      planCode: `tool_single_${tool.toolId}`,
+      planName: `${tool.name}单次使用`,
+      virtualPaymentProductId: getToolSingleVirtualPaymentProductId(tool.toolId),
+      orderType: 'tool_single',
+      amount,
+      originalAmount: amount,
+      toolId: tool.toolId,
+      toolName: tool.name,
+      toolPointCost: tool.pointCost,
+      durationDays: 0,
+      payStatus: 'pending',
+      fulfillmentStatus: 'pending',
+      payChannel: paymentTypeToPayChannel(appConfig.paymentType),
+      createdAt: now,
+      updatedAt: now,
+    };
+    await collection('orders').add({ data: nextOrder });
+    return ok({
+      orderNo: nextOrder.orderNo,
+      oldOrderNo: oldOrder.orderNo,
+      amount: nextOrder.amount,
+      originalAmount: nextOrder.originalAmount,
+    });
+  }
+
   const plan = await getPlanByCode(oldOrder.planCode);
   if (!plan) {
     throw new Error('套餐不存在或已下架，请重新选择套餐');
   }
 
-  const [existingMembership, appConfig] = await Promise.all([
+  const [existingMembership, appConfig, pointsConfig] = await Promise.all([
     getMembershipByUserId(user._id, plan.productCode),
     getClientAppConfig(),
+    getPointsConfig(),
   ]);
 
   const now = Date.now();
@@ -57,10 +118,13 @@ export async function main(event: Event) {
   });
 
   const availablePoints = Math.max(0, Math.floor(user.pointsBalance ?? 0));
-  const maxDeductiblePoints = Math.floor(plan.price);
   const usePointsDeduction = Boolean(oldOrder.pointsDeductionEnabled);
-  const pointsDeducted = usePointsDeduction ? Math.min(availablePoints, maxDeductiblePoints) : 0;
-  const payableAmount = normalizeAmount(Math.max(0, plan.price - pointsDeducted));
+  const deduction = calculatePointsDeduction({
+    price: plan.price,
+    availablePoints,
+    usePointsDeduction,
+    pointsPerYuan: pointsConfig.pointsPerYuan,
+  });
 
   const nextOrder: OrderRecord = {
     orderNo: createOrderNo(),
@@ -71,11 +135,12 @@ export async function main(event: Event) {
     planName: plan.planName,
     virtualPaymentProductId: plan.virtualPaymentProductId,
     orderType: existingMembership ? 'renew' : 'purchase',
-    amount: payableAmount,
+    amount: deduction.payableAmount,
     originalAmount: normalizeAmount(plan.price),
+    totalAiPoints: Math.max(0, Math.floor(plan.totalAiPoints ?? 0)),
     pointsDeductionEnabled: usePointsDeduction,
-    pointsDeducted,
-    pointsDeductAmount: pointsDeducted,
+    pointsDeducted: deduction.pointsDeducted,
+    pointsDeductAmount: deduction.pointsDeductAmount,
     durationDays: plan.durationDays,
     payStatus: 'pending',
     fulfillmentStatus: 'pending',

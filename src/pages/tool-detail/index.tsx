@@ -1,18 +1,26 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Button, Image, Text, Textarea, View } from '@tarojs/components';
 import Taro, { useLoad, useShareAppMessage, useShareTimeline } from '@tarojs/taro';
 import { AppTransparentHeader } from '@/components/AppTransparentHeader';
-import { callCloudFunction } from '@/services/api';
-import type { MembershipView } from '@/types';
-import { getToolById, type OutputType } from '@/pages/tools/definitions';
+import { PaymentLockOverlay } from '@/components/PaymentLockOverlay';
+import { PopLayout } from '@/components/PopLayout';
+import { callCloudFunction, CloudFunctionResponseError } from '@/services/api';
+import type { MembershipView, PlanView } from '@/types';
+import { TOOLS, getToolById, getToolByIdFromList, type OutputType, type ToolDefinition } from '@/pages/tools/definitions';
+import { loadConfiguredTools } from '@/pages/tools/runtime';
 import { useResetPageScroll } from '@/hooks/useResetPageScroll';
 import { ensurePrivacyAuthorization } from '@/utils/privacyAuthorization';
+import { createPayOrderPayload, MiniProgramPaymentError, requestMiniProgramPayment, type PayOrderResult } from '@/utils/payment';
+import { setPromotedProductCode } from '@/utils/productNavigation';
 
 const TOOL_ADD_FILE_ICON = require('../../assets/icons/tool-add-file.svg') as string;
 const TOOL_PASTE_ICON = require('../../assets/icons/tool-paste.svg') as string;
 
 interface MemberHomeResult {
     membership: MembershipView;
+    userInfo?: {
+        aiToolPointsBalance?: number;
+    };
 }
 
 interface SummaryResult {
@@ -37,9 +45,38 @@ interface RunAiToolResult {
         memberUsed: boolean;
         dailyFreeLimit: number;
         dailyFreeRemaining: number;
+        chargeMode?: 'trial' | 'points' | 'single';
+        pointCost?: number;
+        aiToolPointsBalance?: number;
+        singlePurchaseAmount?: number;
         model?: string;
     };
     createdAt: number;
+}
+
+interface QuotaExceededData {
+    code: 'QUOTA_EXCEEDED';
+    toolId: string;
+    pointCost: number;
+    aiToolPointsBalance: number;
+    singlePurchaseAmount: number;
+}
+
+interface PlanListResult {
+    plans: PlanView[];
+}
+
+interface CreateToolSingleOrderResult {
+    orderNo: string;
+    amount: number;
+    toolId: string;
+    toolName: string;
+    pointCost: number;
+}
+
+interface PayResultSnapshot {
+    payStatus: 'pending' | 'paid' | 'failed' | 'closed';
+    fulfillmentStatus?: 'pending' | 'opening' | 'fulfilled' | 'failed';
 }
 
 interface ReferenceAsset {
@@ -218,6 +255,40 @@ function getToolInputPlaceholder(toolId: string): string {
     return '粘贴文章、帖子、会议记录或一段长文本';
 }
 
+function isQuotaExceededData(value: unknown): value is QuotaExceededData {
+    const data = value as Partial<QuotaExceededData> | null;
+    return Boolean(
+        data
+        && data.code === 'QUOTA_EXCEEDED'
+        && typeof data.toolId === 'string'
+        && typeof data.pointCost === 'number'
+        && typeof data.aiToolPointsBalance === 'number'
+        && typeof data.singlePurchaseAmount === 'number',
+    );
+}
+
+function getQuotaExceededData(error: unknown): QuotaExceededData | null {
+    if (error instanceof CloudFunctionResponseError && isQuotaExceededData(error.data)) {
+        return error.data;
+    }
+    const data = (error as { data?: unknown })?.data;
+    return isQuotaExceededData(data) ? data : null;
+}
+
+function delay(ms: number): Promise<void> {
+    return new Promise((resolve) => {
+        setTimeout(resolve, ms);
+    });
+}
+
+function getPlanAiPoints(plan: PlanView): number {
+    return Math.max(0, Math.floor(plan.totalAiPoints ?? 0));
+}
+
+function getPlanDurationLabel(plan: PlanView): string {
+    return plan.durationDays > 0 ? `${plan.durationDays} 天有效` : '立即到账';
+}
+
 function getGenerateButtonText(params: {
     enabled: boolean;
     submitting: boolean;
@@ -232,7 +303,9 @@ export default function ToolDetailPage(): JSX.Element {
     useResetPageScroll();
 
     const [toolId, setToolId] = useState('');
+    const [tools, setTools] = useState<ToolDefinition[]>(TOOLS);
     const [membershipStatus, setMembershipStatus] = useState<MembershipView['status']>('none');
+    const [aiToolPointsBalance, setAiToolPointsBalance] = useState(0);
     const [content, setContent] = useState('');
     const [outputType, setOutputType] = useState<OutputType>('summary');
     const [result, setResult] = useState<SummaryResult | null>(null);
@@ -241,13 +314,26 @@ export default function ToolDetailPage(): JSX.Element {
     const [submitting, setSubmitting] = useState(false);
     const [todayUsed, setTodayUsed] = useState(false);
     const [adUnlocked, setAdUnlocked] = useState(false);
+    const [pointPlans, setPointPlans] = useState<PlanView[]>([]);
+    const [plansLoading, setPlansLoading] = useState(false);
+    const [quotaSheetVisible, setQuotaSheetVisible] = useState(false);
+    const [quotaData, setQuotaData] = useState<QuotaExceededData | null>(null);
+    const [paymentLocked, setPaymentLocked] = useState(false);
 
-    const activeTool = useMemo(() => getToolById(toolId), [toolId]);
+    const activeTool = useMemo(() => getToolByIdFromList(tools, toolId), [tools, toolId]);
     const imageTool = isImageTool(activeTool.id);
     const visibleOutputOptions = activeTool.id === 'copywriting' ? COPYWRITING_OUTPUT_OPTIONS : OUTPUT_OPTIONS;
     const memberActive = isMember(membershipStatus);
     const hasGenerationInput = stripLegacyPromptPrefixes(content).length > 0 || Boolean(referenceAsset);
-    const generateDisabled = submitting || !activeTool.enabled || !hasGenerationInput;
+    const generateDisabled = submitting || !hasGenerationInput;
+    const generateButtonMuted = generateDisabled || !activeTool.enabled;
+    const toolPointCost = quotaData?.pointCost ?? activeTool.pointCost ?? 0;
+    const singlePurchaseAmount = quotaData?.singlePurchaseAmount ?? Number((toolPointCost / 10).toFixed(2));
+    const displayedAiToolPointsBalance = quotaData?.aiToolPointsBalance ?? aiToolPointsBalance;
+    const availablePointPlans = useMemo(
+        () => pointPlans.filter((plan) => getPlanAiPoints(plan) > 0),
+        [pointPlans],
+    );
 
     useLoad((options) => {
         enableShareMenu();
@@ -271,6 +357,10 @@ export default function ToolDetailPage(): JSX.Element {
         query: `tool=${encodeURIComponent(activeTool.id)}`,
     }));
 
+    useEffect(() => {
+        void loadConfiguredTools('tool-detail').then(setTools);
+    }, []);
+
     function enableShareMenu(): void {
         try {
             Taro.showShareMenu({
@@ -286,8 +376,22 @@ export default function ToolDetailPage(): JSX.Element {
         try {
             const memberResult = await callCloudFunction<MemberHomeResult>('get-member-home');
             setMembershipStatus(memberResult.membership.status);
+            setAiToolPointsBalance(Math.max(0, Math.floor(memberResult.userInfo?.aiToolPointsBalance ?? 0)));
         } catch {
             setMembershipStatus('none');
+            setAiToolPointsBalance(0);
+        }
+    }
+
+    async function loadPointPlans(): Promise<void> {
+        setPlansLoading(true);
+        try {
+            const result = await callCloudFunction<PlanListResult>('list-member-plans');
+            setPointPlans(result.plans.filter((plan) => getPlanAiPoints(plan) > 0));
+        } catch {
+            setPointPlans([]);
+        } finally {
+            setPlansLoading(false);
         }
     }
 
@@ -485,6 +589,68 @@ export default function ToolDetailPage(): JSX.Element {
         setResult(null);
     }
 
+    function buildRunPayload(text: string): Record<string, unknown> {
+        return {
+            toolId: activeTool.id,
+            text,
+            outputType,
+            fileText: referenceAsset?.fileText || '',
+            fileBase64: referenceAsset?.fileBase64 || '',
+            imageDataUrl: referenceAsset?.imageDataUrl || '',
+            fileName: referenceAsset?.name || '',
+            fileType: referenceAsset?.fileType || '',
+            source: 'miniapp',
+        };
+    }
+
+    function handleRunSuccess(runResult: RunAiToolResult): void {
+        setResult(toSummaryResult(runResult));
+        if (typeof runResult.usage.aiToolPointsBalance === 'number') {
+            setAiToolPointsBalance(Math.max(0, Math.floor(runResult.usage.aiToolPointsBalance)));
+        }
+        if (runResult.usage.freeUsed) {
+            markDailyUsed();
+        } else if (runResult.usage.rewardAdUsed) {
+            setAdUnlocked(false);
+        }
+    }
+
+    async function runCurrentGeneration(): Promise<void> {
+        const text = stripLegacyPromptPrefixes(content);
+        const runResult = await callCloudFunction<RunAiToolResult>('run-ai-tool', buildRunPayload(text));
+        handleRunSuccess(runResult);
+    }
+
+    function openQuotaSheet(data: QuotaExceededData): void {
+        setQuotaData(data);
+        setAiToolPointsBalance(Math.max(0, Math.floor(data.aiToolPointsBalance)));
+        setQuotaSheetVisible(true);
+        if (pointPlans.length === 0 && !plansLoading) {
+            void loadPointPlans();
+        }
+    }
+
+    function closeQuotaSheet(): void {
+        if (paymentLocked) return;
+        setQuotaSheetVisible(false);
+    }
+
+    function handleGenerationError(error: unknown): boolean {
+        const quota = getQuotaExceededData(error);
+        if (quota) {
+            openQuotaSheet(quota);
+            return true;
+        }
+        return false;
+    }
+
+    function showErrorToast(error: unknown, fallback: string): void {
+        void Taro.showToast({
+            title: error instanceof Error ? error.message : fallback,
+            icon: 'none',
+        });
+    }
+
     async function handleGenerate(): Promise<void> {
         if (!activeTool.enabled) {
             await Taro.showModal({
@@ -501,37 +667,68 @@ export default function ToolDetailPage(): JSX.Element {
             return;
         }
         if (submitting) return;
-        const allowed = await ensureUsagePermission();
-        if (!allowed) return;
 
         setSubmitting(true);
         try {
-            const runResult = await callCloudFunction<RunAiToolResult>('run-ai-tool', {
-                toolId: activeTool.id,
-                text,
-                outputType,
-                fileText: referenceAsset?.fileText || '',
-                fileBase64: referenceAsset?.fileBase64 || '',
-                imageDataUrl: referenceAsset?.imageDataUrl || '',
-                fileName: referenceAsset?.name || '',
-                fileType: referenceAsset?.fileType || '',
-                adUnlocked,
-                source: 'miniapp',
-            });
-            setResult(toSummaryResult(runResult));
-            if (runResult.usage.freeUsed) {
-                markDailyUsed();
-            } else if (runResult.usage.rewardAdUsed) {
-                setAdUnlocked(false);
-            }
+            await runCurrentGeneration();
         } catch (error) {
-            void Taro.showToast({
-                title: error instanceof Error ? error.message : '生成失败',
-                icon: 'none',
-            });
+            if (!handleGenerationError(error)) {
+                showErrorToast(error, '生成失败');
+            }
         } finally {
             setSubmitting(false);
         }
+    }
+
+    async function waitForSingleOrderPaid(orderNo: string): Promise<void> {
+        for (let index = 0; index < 6; index += 1) {
+            await delay(index === 0 ? 700 : 1000);
+            const snapshot = await callCloudFunction<PayResultSnapshot>('get-pay-result', { orderNo });
+            if (snapshot.payStatus === 'paid') {
+                return;
+            }
+            if (snapshot.payStatus === 'closed' || snapshot.payStatus === 'failed') {
+                throw new Error('订单未完成支付，请重新购买');
+            }
+        }
+        throw new Error('支付结果同步中，请稍后再次点击生成');
+    }
+
+    async function handleSinglePurchase(): Promise<void> {
+        const currentQuota = quotaData;
+        if (!currentQuota || submitting || paymentLocked) return;
+        setSubmitting(true);
+        setPaymentLocked(true);
+        try {
+            const order = await callCloudFunction<CreateToolSingleOrderResult>('create-tool-single-order', {
+                toolId: currentQuota.toolId,
+            });
+            const payment = await callCloudFunction<PayOrderResult>('pay-order', await createPayOrderPayload(order.orderNo));
+            if (!payment.paid && (payment.payment || payment.virtualPayment)) {
+                await requestMiniProgramPayment(payment);
+            }
+            await waitForSingleOrderPaid(order.orderNo);
+            setQuotaSheetVisible(false);
+            setQuotaData(null);
+            await runCurrentGeneration();
+        } catch (error) {
+            if (error instanceof MiniProgramPaymentError) {
+                void Taro.showToast({ title: error.message, icon: 'none' });
+                return;
+            }
+            if (!handleGenerationError(error)) {
+                showErrorToast(error, '支付失败，请稍后再试');
+            }
+        } finally {
+            setPaymentLocked(false);
+            setSubmitting(false);
+        }
+    }
+
+    function openPointPlan(plan: PlanView): void {
+        setPromotedProductCode(plan.productCode);
+        setQuotaSheetVisible(false);
+        Taro.switchTab({ url: '/pages/member/index' });
     }
 
     async function copyResult(): Promise<void> {
@@ -573,9 +770,13 @@ export default function ToolDetailPage(): JSX.Element {
             <AppTransparentHeader title={activeTool.name} />
             <View className='tools-page'>
                 <View className='saas-shell tools-shell'>
-                    <View className='tool-detail-hero'>
+                        <View className='tool-detail-hero'>
                         <View className='tool-detail-hero__head'>
-                            <View className='tool-card__icon tool-detail-hero__icon'>{activeTool.icon}</View>
+                            <View className='tool-card__icon tool-detail-hero__icon'>
+                                {activeTool.iconImageFileId
+                                    ? <Image className='tool-card__icon-image' src={activeTool.iconImageFileId} mode='aspectFit' />
+                                    : <Text>{activeTool.icon}</Text>}
+                            </View>
                             <View>
                                 <Text className='tool-detail-hero__title'>{activeTool.name}</Text>
                                 <Text className='tool-detail-hero__desc'>{activeTool.desc}</Text>
@@ -583,7 +784,9 @@ export default function ToolDetailPage(): JSX.Element {
                         </View>
 
                         <Text className='tool-workbench__quota'>
-                            {memberActive ? '限时免费' : todayUsed && !adUnlocked ? '需看广告' : '今日可免费'}
+                            {!activeTool.enabled
+                                ? '接入中'
+                                : `${activeTool.pointCost ?? 0} 积分/次${(activeTool.trialLimit ?? 0) > 0 ? ` · 体验 ${activeTool.trialLimit} 次` : ''}`}
                         </Text>
                     </View>
 
@@ -670,7 +873,7 @@ export default function ToolDetailPage(): JSX.Element {
                             <View className='tool-action-row'>
                                 <Text className='tool-add-asset-button' onClick={() => void chooseReferenceFile()}>+</Text>
                                 <Button
-                                    className={`saas-button tool-generate-button ${generateDisabled ? 'saas-button--disabled' : ''}`}
+                                    className={`saas-button tool-generate-button ${generateButtonMuted ? 'saas-button--disabled' : ''}`}
                                     loading={submitting}
                                     disabled={generateDisabled}
                                     onClick={() => void handleGenerate()}
@@ -712,6 +915,66 @@ export default function ToolDetailPage(): JSX.Element {
                     </View>
                 </View>
             </View>
+            <PopLayout visible={quotaSheetVisible} onClose={closeQuotaSheet} panelClassName='plan-sheet tool-quota-sheet'>
+                <View className='plan-sheet__head'>
+                    <View>
+                        <Text className='plan-sheet__label'>AI 工具积分</Text>
+                        <Text className='plan-sheet__title'>补充积分后继续使用</Text>
+                    </View>
+                    <Text className='plan-sheet__close' onClick={closeQuotaSheet}>×</Text>
+                </View>
+                <Text className='plan-sheet__desc'>
+                    当前剩余 {displayedAiToolPointsBalance} 积分，{activeTool.name} 每次消耗 {toolPointCost} 积分。
+                </Text>
+                <View className='plan-sheet__plans'>
+                    {plansLoading ? (
+                        <View className='plan-option plan-option--disabled'>
+                            <View>
+                                <Text className='plan-option__name'>套餐加载中</Text>
+                                <Text className='plan-option__duration'>正在同步可购买积分套餐</Text>
+                            </View>
+                            <View className='plan-option__price-row'>
+                                <Text className='plan-option__price'>--</Text>
+                            </View>
+                        </View>
+                    ) : availablePointPlans.length === 0 ? (
+                        <View className='plan-option plan-option--disabled'>
+                            <View>
+                                <Text className='plan-option__name'>暂无可购买套餐</Text>
+                                <Text className='plan-option__duration'>请联系管理员配置套餐总积分</Text>
+                            </View>
+                            <View className='plan-option__price-row'>
+                                <Text className='plan-option__price'>--</Text>
+                            </View>
+                        </View>
+                    ) : availablePointPlans.map((plan) => (
+                        <View key={`${plan.productCode}-${plan.planCode}`} className='plan-option' onClick={() => openPointPlan(plan)}>
+                            <View className='plan-option__copy'>
+                                <Text className='plan-option__name'>{plan.planName}</Text>
+                                <Text className='plan-option__duration'>
+                                    {getPlanAiPoints(plan).toLocaleString('zh-CN')} 积分 · {getPlanDurationLabel(plan)}
+                                </Text>
+                            </View>
+                            <View className='plan-option__price-row'>
+                                <Text className='plan-option__price'>¥{plan.price.toFixed(2)}</Text>
+                            </View>
+                        </View>
+                    ))}
+                </View>
+                <View className='plan-sheet__points tool-quota-sheet__single'>
+                    <View>
+                        <Text className='plan-sheet__points-title'>单次购买当前工具</Text>
+                        <Text className='plan-sheet__points-desc'>
+                            本次生成消耗 {toolPointCost} 积分，按 10 积分抵 1 元计费。
+                        </Text>
+                        <Text className='plan-sheet__points-pay'>应付 ¥{singlePurchaseAmount.toFixed(2)}</Text>
+                    </View>
+                </View>
+                <Button className='saas-button plan-sheet__button' loading={submitting} onClick={() => void handleSinglePurchase()}>
+                    ¥{singlePurchaseAmount.toFixed(2)} 单次使用
+                </Button>
+            </PopLayout>
+            <PaymentLockOverlay visible={paymentLocked} />
         </View>
     );
 }

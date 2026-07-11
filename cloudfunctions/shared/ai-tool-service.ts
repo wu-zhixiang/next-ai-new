@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 
-import { DEFAULT_PRODUCT_CODE } from './constants';
-import { collection, ensureCollection, getMembershipByUserId, getUserByOpenId, _ } from './db';
+import { collection, ensureCollection, getUserByOpenId } from './db';
+import { getEffectiveAiToolConfig, releaseAiToolUsageReservation, reserveAiToolUsage } from './ai-tool-entitlements';
 import {
   buildAiToolContent,
   fallbackTextResult,
@@ -9,9 +9,7 @@ import {
   type AiToolTextResult,
 } from './ai-tool-generation';
 import {
-  getAiToolUsageDateKey,
   normalizeRunAiToolInput,
-  resolveAiToolEntitlement,
   type AiToolErrorCode,
   type NormalizedRunAiToolInput,
   type RunAiToolInput,
@@ -19,18 +17,15 @@ import {
 } from './ai-tool-core';
 import type {
   AiToolRunRecord,
-  AiToolUsageDailyRecord,
-  MembershipRecord,
   UserRecord,
 } from './types';
 
 type UserWithId = UserRecord & { _id: string };
 type RunWithId = AiToolRunRecord & { _id: string };
-type UsageWithId = AiToolUsageDailyRecord & { _id: string };
 
 export type AiToolServiceResult<T> =
   | { ok: true; data: T }
-  | { ok: false; code: AiToolErrorCode; message: string };
+  | { ok: false; code: AiToolErrorCode; message: string; data?: unknown };
 
 let aiToolCollectionsReady = false;
 
@@ -40,19 +35,8 @@ async function ensureAiToolCollections(): Promise<void> {
   }
   await Promise.all([
     ensureCollection('aiToolRuns'),
-    ensureCollection('aiToolUsageDaily'),
   ]);
   aiToolCollectionsReady = true;
-}
-
-function isActiveToolMembership(membership: MembershipRecord | null, now: number): boolean {
-  if (!membership) {
-    return false;
-  }
-  if (membership.status === 'opening') {
-    return true;
-  }
-  return membership.status === 'active' && membership.endAt > now;
 }
 
 function createInputDigest(input: {
@@ -75,44 +59,6 @@ function createInputDigest(input: {
     .digest('hex');
 }
 
-async function getDailyUsage(userId: string, date: string): Promise<UsageWithId | null> {
-  const result = await collection('aiToolUsageDaily').where({ userId, date }).limit(1).get();
-  return (result.data[0] as UsageWithId | undefined) ?? null;
-}
-
-async function recordUsage(
-  userId: string,
-  date: string,
-  usage: RunAiToolResult['usage'],
-  now: number,
-): Promise<void> {
-  const freeIncrement = usage.freeUsed ? 1 : 0;
-  const adIncrement = usage.rewardAdUsed ? 1 : 0;
-  const memberIncrement = usage.memberUsed ? 1 : 0;
-  const existing = await getDailyUsage(userId, date);
-  if (!existing) {
-    const record: AiToolUsageDailyRecord = {
-      userId,
-      date,
-      freeUsed: freeIncrement,
-      adUnlocked: adIncrement,
-      memberUsed: memberIncrement,
-      updatedAt: now,
-    };
-    await collection('aiToolUsageDaily').add({ data: record });
-    return;
-  }
-
-  await collection('aiToolUsageDaily').doc(existing._id).update({
-    data: {
-      freeUsed: _.inc(freeIncrement),
-      adUnlocked: _.inc(adIncrement),
-      memberUsed: _.inc(memberIncrement),
-      updatedAt: now,
-    },
-  });
-}
-
 function toRunResult(record: RunWithId): RunAiToolResult {
   return {
     runId: record._id,
@@ -128,7 +74,7 @@ function toRunResult(record: RunWithId): RunAiToolResult {
       freeUsed: false,
       rewardAdUsed: false,
       memberUsed: false,
-      dailyFreeLimit: 1,
+      dailyFreeLimit: 0,
       dailyFreeRemaining: 0,
     },
     createdAt: record.createdAt,
@@ -227,20 +173,12 @@ export async function executeAiTool(
     };
   }
 
-  const [membership, usageRecord] = await Promise.all([
-    getMembershipByUserId(user._id, DEFAULT_PRODUCT_CODE),
-    getDailyUsage(user._id, getAiToolUsageDateKey(now)),
-  ]);
-  const entitlement = resolveAiToolEntitlement({
-    isMember: isActiveToolMembership(membership, now),
-    freeUsedToday: usageRecord?.freeUsed ?? 0,
-    rewardAdUnlocked: normalized.input.rewardAdUnlocked,
-  });
-  if (entitlement.allowed === false) {
+  const toolConfig = await getEffectiveAiToolConfig(normalized.input.toolId);
+  if (!toolConfig?.enabled) {
     return {
       ok: false,
-      code: entitlement.code,
-      message: entitlement.message,
+      code: 'TOOL_DISABLED',
+      message: toolConfig ? '该工具正在接入中' : '该工具暂未开放',
     };
   }
 
@@ -249,6 +187,32 @@ export async function executeAiTool(
     input: normalized.input,
     now,
   });
+  const charge = await reserveAiToolUsage({
+    user,
+    tool: toolConfig,
+    runId,
+    now,
+  });
+  if (charge.ok === false) {
+    await markRunFailed({
+      runId,
+      code: charge.code,
+      message: charge.message,
+      now: Date.now(),
+    });
+    return {
+      ok: false,
+      code: charge.code,
+      message: charge.message,
+      data: {
+        code: charge.code,
+        toolId: normalized.input.toolId,
+        pointCost: charge.pointCost,
+        aiToolPointsBalance: charge.balance,
+        singlePurchaseAmount: charge.singlePurchaseAmount,
+      },
+    };
+  }
 
   const generated = await generateAiToolText(normalized.input);
   const textResult = generated.result ?? (
@@ -261,6 +225,13 @@ export async function executeAiTool(
     const message = generated.errorMessage.includes('CloudBase AI SDK unavailable')
       ? `AI 模型服务不可用：${generated.errorMessage}`
       : `参考素材解析失败：${generated.errorMessage || '请更换素材或补充文字描述'}`;
+    await releaseAiToolUsageReservation({
+      user,
+      tool: toolConfig,
+      charge,
+      runId,
+      now: completedAt,
+    });
     await markRunFailed({
       runId,
       code: 'MODEL_FAILED',
@@ -276,11 +247,19 @@ export async function executeAiTool(
     };
   }
 
-  const usage = {
-    ...entitlement.usage,
+  const usage: RunAiToolResult['usage'] = {
+    charged: charge.mode !== 'trial',
+    freeUsed: charge.mode === 'trial',
+    rewardAdUsed: false,
+    memberUsed: false,
+    dailyFreeLimit: charge.trialLimit,
+    dailyFreeRemaining: charge.trialRemaining,
+    chargeMode: charge.mode,
+    pointCost: charge.pointCost,
+    aiToolPointsBalance: charge.balanceAfter,
+    singlePurchaseAmount: Number((charge.pointCost / 10).toFixed(2)),
     model: generated.modelName,
   };
-  await recordUsage(user._id, getAiToolUsageDateKey(completedAt), usage, completedAt);
   await markRunSucceeded({
     runId,
     textResult,
