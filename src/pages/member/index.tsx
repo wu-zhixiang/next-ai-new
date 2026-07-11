@@ -32,6 +32,7 @@ interface MemberHomeData {
     nickname?: string;
     avatarUrl?: string;
     pointsBalance?: number;
+    aiToolPointsBalance?: number;
     aiAccount?: {
       registered: boolean;
       email?: string;
@@ -60,6 +61,7 @@ interface ProductPlanOption {
   displayName: string;
   price: number;
   priceLabel: string;
+  totalAiPoints: number;
   durationLabel: string;
   periodLabel?: string;
   recommended?: boolean;
@@ -182,6 +184,7 @@ function buildPlanOption(plan: PlanView, index: number): ProductPlanOption {
     planCode: plan.planCode,
     displayName: plan.planName,
     price: plan.price,
+    totalAiPoints: Math.max(0, Math.floor(plan.totalAiPoints ?? 0)),
     priceLabel: `¥${plan.price.toFixed(2)}`,
     durationLabel: `${plan.durationDays} 天`,
     periodLabel,
@@ -401,12 +404,13 @@ export default function MemberPage(): JSX.Element {
   const activePlans = plansByProduct[activeProductCode] ?? [];
   const activeProductAvailable = Boolean(activeProduct?.available && activePlans.some((plan) => plan.price > 0));
   const selectedPlan = activePlans.find((plan) => plan.planCode === selectedPlanCode) ?? activePlans[0];
-  const pointsBalance = Math.max(0, Math.floor(data.userInfo?.pointsBalance ?? cachedUserInfo?.pointsBalance ?? 0));
+  const pointsBalance = Math.max(0, Math.floor(data.userInfo?.aiToolPointsBalance ?? cachedUserInfo?.aiToolPointsBalance ?? 0));
   const pointsPerYuan = Math.max(1, Math.floor(data.pointsConfig?.pointsPerYuan ?? DEFAULT_POINTS_PER_YUAN));
-  const maxPointsDeducted = selectedPlan ? Math.min(pointsBalance, Math.floor(selectedPlan.price * pointsPerYuan)) : 0;
+  const aiToolPointPlan = Boolean(selectedPlan && selectedPlan.totalAiPoints > 0);
+  const maxPointsDeducted = selectedPlan && aiToolPointPlan ? Math.min(pointsBalance, Math.floor(selectedPlan.price * pointsPerYuan)) : 0;
   const pointsDeductAmount = Number((maxPointsDeducted / pointsPerYuan).toFixed(2));
   const finalPayAmount = selectedPlan ? Math.max(0, Number((selectedPlan.price - (usePointsDeduction ? pointsDeductAmount : 0)).toFixed(2))) : 0;
-  const pointsDeductionAvailable = activeProductAvailable && maxPointsDeducted > 0;
+  const pointsDeductionAvailable = activeProductAvailable && aiToolPointPlan && maxPointsDeducted > 0;
   const aiAccountRegistered = Boolean(data.userInfo?.aiAccount?.registered || data.userInfo?.aiAccount?.email || cachedUserInfo?.aiAccountRegistered);
   const aiAccountSheetDescription = aiAccountSheetSource === 'purchase'
     ? '请填写你已经注册好的账号邮箱。保存成功后将继续选择套餐。'
@@ -1362,11 +1366,13 @@ export default function MemberPage(): JSX.Element {
             ) : null}
             <View className={`plan-sheet__points ${usePointsDeduction ? 'plan-sheet__points--active' : ''} ${pointsDeductionAvailable ? '' : 'plan-sheet__points--disabled'}`}>
               <View>
-                <Text className='plan-sheet__points-title'>使用积分抵扣</Text>
+                <Text className='plan-sheet__points-title'>使用 AI 工具积分抵扣</Text>
                 <Text className='plan-sheet__points-desc'>
                   {pointsDeductionAvailable
                     ? `可用 ${pointsBalance} 积分，本次抵扣 ¥${pointsDeductAmount.toFixed(2)}`
-                    : `可用 ${pointsBalance} 积分，${pointsPerYuan} 积分可抵 ¥1`}
+                    : aiToolPointPlan
+                      ? `可用 ${pointsBalance} 积分，${pointsPerYuan} 积分可抵 ¥1`
+                      : '仅 AI 工具积分套餐支持积分抵扣'}
                 </Text>
                 {selectedPlan ? (
                   <Text className='plan-sheet__points-pay'>预计支付 ¥{finalPayAmount.toFixed(2)}</Text>

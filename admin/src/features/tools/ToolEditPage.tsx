@@ -60,8 +60,16 @@ interface ToolFormState {
   readonly iconImageFileId: string;
   readonly visible: boolean;
   readonly outputType: AiToolOutputType;
+  readonly workerModel: string;
   readonly intro: EditableIntro;
 }
+
+const WORKER_MODEL_OPTIONS = [
+  { value: 'google:image-lite', label: 'Gemini 低成本图片模型' },
+  { value: 'google:image-flash', label: 'Gemini 主力图片模型' },
+  { value: 'google:image-pro', label: 'Gemini 高质量图片模型' },
+  { value: 'openai:gpt-image-1.5', label: 'Azure OpenAI 图片模型' },
+] as const;
 
 const blankIntro: EditableIntro = {
   eyebrow: '',
@@ -87,6 +95,7 @@ function createEmptyForm(): ToolFormState {
     iconImageFileId: '',
     visible: true,
     outputType: 'summary',
+    workerModel: 'google:image-flash',
     intro: blankIntro,
   };
 }
@@ -138,6 +147,7 @@ function createFormFromTool(tool: AiToolRecord): ToolFormState {
     iconImageFileId: safeString(tool.iconImageFileId),
     visible: tool.visible !== false,
     outputType: tool.outputType ?? 'summary',
+    workerModel: safeString(tool.workerModel) || 'google:image-flash',
     intro: {
       eyebrow: safeString(tool.intro?.eyebrow),
       title: safeString(tool.intro?.title),
@@ -171,6 +181,7 @@ function buildToolInput(form: ToolFormState): AiToolInput {
     iconImageFileId: safeString(form.iconImageFileId).trim(),
     visible: form.visible,
     outputType: form.outputType,
+    workerModel: safeString(form.workerModel).trim(),
     intro: {
       eyebrow: safeString(form.intro.eyebrow).trim(),
       title: safeString(form.intro.title).trim(),
@@ -200,21 +211,6 @@ function buildToolInput(form: ToolFormState): AiToolInput {
       tips: form.intro.tips.map((item) => safeString(item).trim()).filter(Boolean),
     },
   };
-}
-
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        resolve(reader.result);
-      } else {
-        reject(new Error('图片读取失败'));
-      }
-    };
-    reader.onerror = () => reject(new Error('图片读取失败'));
-    reader.readAsDataURL(file);
-  });
 }
 
 interface ImageUploadFieldProps {
@@ -308,8 +304,7 @@ export function ToolEditPage(): JSX.Element {
     if (file.size > 3 * 1024 * 1024) {
       throw new Error('图片不能超过 3MB');
     }
-    const dataUrl = await readFileAsDataUrl(file);
-    const result = await api.uploadToolImage(dataUrl);
+    const result = await api.uploadToolImageFile(file);
     return result.fileId;
   }
 
@@ -439,6 +434,16 @@ export function ToolEditPage(): JSX.Element {
                   <span>排序值</span>
                   <input min="0" type="number" value={form.sortOrder} onChange={(event) => setForm({ ...form, sortOrder: event.target.value })} />
                 </label>
+                {form.category === 'image' || form.category === 'workflow' ? (
+                  <label className="field field--wide">
+                    <span>图片处理模型</span>
+                    <select value={form.workerModel} onChange={(event) => setForm({ ...form, workerModel: event.target.value })}>
+                      {WORKER_MODEL_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
               </div>
             </section>
 

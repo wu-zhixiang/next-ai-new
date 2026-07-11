@@ -2,11 +2,17 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.executeAiTool = executeAiTool;
 exports.getAiToolRun = getAiToolRun;
+exports.listAiToolRuns = listAiToolRuns;
+exports.markAiToolImageRunSucceeded = markAiToolImageRunSucceeded;
+exports.markAiToolImageRunFailed = markAiToolImageRunFailed;
 const node_crypto_1 = require("node:crypto");
 const db_1 = require("./db");
 const ai_tool_entitlements_1 = require("./ai-tool-entitlements");
+const points_rewards_1 = require("./points-rewards");
 const ai_tool_generation_1 = require("./ai-tool-generation");
+const ai_image_worker_1 = require("./ai-image-worker");
 const ai_tool_core_1 = require("./ai-tool-core");
+const AI_IMAGE_RUN_STALE_TIMEOUT_MS = 15 * 60 * 1000;
 let aiToolCollectionsReady = false;
 async function ensureAiToolCollections() {
     if (aiToolCollectionsReady) {
@@ -28,10 +34,13 @@ function createInputDigest(input) {
         .update(input.fileText)
         .update('\n')
         .update(input.imageDataUrl)
+        .update('\n')
+        .update(input.assetIds.join('\n'))
         .digest('hex');
 }
-function toRunResult(record) {
+async function toRunResult(record) {
     var _a;
+    const outputImages = await hydrateOutputImages(record.outputImages);
     return {
         runId: record._id,
         status: record.status,
@@ -40,7 +49,7 @@ function toRunResult(record) {
         summary: record.summary,
         points: record.points,
         outputText: record.outputText,
-        outputImages: record.outputImages,
+        outputImages,
         usage: (_a = record.usage) !== null && _a !== void 0 ? _a : {
             charged: false,
             freeUsed: false,
@@ -51,6 +60,48 @@ function toRunResult(record) {
         },
         createdAt: record.createdAt,
     };
+}
+function isStaleImageRun(record, now = Date.now()) {
+    return record.toolId === 'imageRepair'
+        && record.status === 'processing'
+        && now - (record.createdAt || record.updatedAt || 0) > AI_IMAGE_RUN_STALE_TIMEOUT_MS;
+}
+async function failStaleImageRun(record) {
+    if (!isStaleImageRun(record)) {
+        return record;
+    }
+    const now = Date.now();
+    await markAiToolImageRunFailed({
+        runId: record._id,
+        errorCode: 'JOB_TIMEOUT',
+        message: '图片修复超时，请重新提交',
+        now,
+    });
+    return {
+        ...record,
+        status: 'failed',
+        title: '修复超时',
+        summary: '图片修复超时，请重新提交',
+        outputText: '图片修复超时，请重新提交',
+        errorCode: 'JOB_TIMEOUT',
+        errorMessage: '图片修复超时，请重新提交',
+        updatedAt: now,
+    };
+}
+async function hydrateOutputImages(outputImages) {
+    if (!(outputImages === null || outputImages === void 0 ? void 0 : outputImages.length)) {
+        return undefined;
+    }
+    const result = await db_1.app.getTempFileURL({
+        fileList: outputImages.map((item) => ({ fileID: item.fileId, maxAge: 60 * 60 })),
+    });
+    return outputImages.map((item, index) => {
+        var _a;
+        return ({
+            ...item,
+            url: (_a = result.fileList[index]) === null || _a === void 0 ? void 0 : _a.tempFileURL,
+        });
+    });
 }
 async function createProcessingRun(params) {
     const record = {
@@ -77,6 +128,21 @@ async function markRunSucceeded(params) {
             points: params.textResult.points,
             outputText: params.textResult.outputText,
             usage: params.usage,
+            modelProvider: params.modelProvider,
+            modelName: params.modelName,
+            updatedAt: params.now,
+        },
+    });
+}
+async function markImageRunSubmitted(params) {
+    await (0, db_1.collection)('aiToolRuns').doc(params.runId).update({
+        data: {
+            status: 'processing',
+            title: '照片修复中',
+            summary: '旧照片已提交修复，通常需要几十秒到数分钟。',
+            outputText: '照片修复中，请稍后查看结果。',
+            usage: params.usage,
+            assetIds: [params.sourceFileId],
             modelProvider: params.modelProvider,
             modelName: params.modelName,
             updatedAt: params.now,
@@ -111,14 +177,15 @@ async function executeAiTool(event, openid) {
     }
     await ensureAiToolCollections();
     const now = Date.now();
-    const user = await (0, db_1.getUserByOpenId)(openid);
-    if (!user) {
+    const rawUser = await (0, db_1.getUserByOpenId)(openid);
+    if (!rawUser) {
         return {
             ok: false,
             code: 'UNAUTHENTICATED',
             message: '请先登录后再使用',
         };
     }
+    const user = await (0, points_rewards_1.migrateLegacyPointsBalanceToAiToolPoints)(rawUser, now);
     const toolConfig = await (0, ai_tool_entitlements_1.getEffectiveAiToolConfig)(normalized.input.toolId);
     if (!(toolConfig === null || toolConfig === void 0 ? void 0 : toolConfig.enabled)) {
         return {
@@ -158,6 +225,111 @@ async function executeAiTool(event, openid) {
             },
         };
     }
+    const baseUsage = {
+        charged: charge.mode !== 'trial',
+        freeUsed: charge.mode === 'trial',
+        rewardAdUsed: false,
+        memberUsed: false,
+        dailyFreeLimit: charge.trialLimit,
+        dailyFreeRemaining: charge.trialRemaining,
+        chargeMode: charge.mode,
+        pointCost: charge.pointCost,
+        aiToolPointsBalance: charge.balanceAfter,
+        singlePurchaseAmount: Number((charge.pointCost / 10).toFixed(2)),
+    };
+    if (normalized.input.toolId === 'imageRepair') {
+        const completedAt = Date.now();
+        const sourceFileId = normalized.input.assetIds[0] || '';
+        if (!normalized.input.imageDataUrl && !sourceFileId) {
+            await (0, ai_tool_entitlements_1.releaseAiToolUsageReservation)({
+                user,
+                tool: toolConfig,
+                charge,
+                runId,
+                now: completedAt,
+            });
+            await markRunFailed({
+                runId,
+                code: 'INVALID_INPUT',
+                message: '请先上传需要修复的旧照片',
+                now: completedAt,
+            });
+            return {
+                ok: false,
+                code: 'INVALID_INPUT',
+                message: '请先上传需要修复的旧照片',
+            };
+        }
+        try {
+            const sourceImage = sourceFileId
+                ? await (0, ai_image_worker_1.getAiToolSourceImageTempUrl)(sourceFileId)
+                : await (0, ai_image_worker_1.uploadAiToolSourceImage)({
+                    userId: user._id,
+                    runId,
+                    imageDataUrl: normalized.input.imageDataUrl,
+                });
+            const modelName = toolConfig.workerModel || 'google:image-flash';
+            await (0, ai_image_worker_1.submitOldPhotoRestoreJob)({
+                runId,
+                inputImageUrl: sourceImage.tempFileURL,
+                model: modelName,
+            });
+            const imageUsage = {
+                ...baseUsage,
+                model: modelName,
+            };
+            await markImageRunSubmitted({
+                runId,
+                usage: imageUsage,
+                modelProvider: modelName.startsWith('google:') || modelName.startsWith('gemini:') ? 'google' : 'openai',
+                modelName,
+                sourceFileId: sourceImage.fileId,
+                now: Date.now(),
+            });
+            return {
+                ok: true,
+                data: {
+                    result: {
+                        runId,
+                        status: 'processing',
+                        toolId: normalized.input.toolId,
+                        title: '照片修复中',
+                        summary: '旧照片已提交修复，通常需要几十秒到数分钟。',
+                        outputText: '照片修复中，请稍后查看结果。',
+                        usage: imageUsage,
+                        createdAt: now,
+                    },
+                    textResult: {
+                        title: '照片修复中',
+                        summary: '旧照片已提交修复，通常需要几十秒到数分钟。',
+                        points: [],
+                        outputText: '照片修复中，请稍后查看结果。',
+                    },
+                },
+            };
+        }
+        catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            await (0, ai_tool_entitlements_1.releaseAiToolUsageReservation)({
+                user,
+                tool: toolConfig,
+                charge,
+                runId,
+                now: Date.now(),
+            });
+            await markRunFailed({
+                runId,
+                code: 'MODEL_FAILED',
+                message,
+                now: Date.now(),
+            });
+            return {
+                ok: false,
+                code: 'MODEL_FAILED',
+                message,
+            };
+        }
+    }
     const generated = await (0, ai_tool_generation_1.generateAiToolText)(normalized.input);
     const textResult = (_a = generated.result) !== null && _a !== void 0 ? _a : (normalized.input.imageDataUrl
         ? null
@@ -189,16 +361,7 @@ async function executeAiTool(event, openid) {
         };
     }
     const usage = {
-        charged: charge.mode !== 'trial',
-        freeUsed: charge.mode === 'trial',
-        rewardAdUsed: false,
-        memberUsed: false,
-        dailyFreeLimit: charge.trialLimit,
-        dailyFreeRemaining: charge.trialRemaining,
-        chargeMode: charge.mode,
-        pointCost: charge.pointCost,
-        aiToolPointsBalance: charge.balanceAfter,
-        singlePurchaseAmount: Number((charge.pointCost / 10).toFixed(2)),
+        ...baseUsage,
         model: generated.modelName,
     };
     await markRunSucceeded({
@@ -255,9 +418,10 @@ async function getAiToolRun(runId, openid) {
                 message: '未找到该执行结果',
             };
         }
+        const finalRecord = await failStaleImageRun({ ...record, _id: normalizedRunId });
         return {
             ok: true,
-            data: toRunResult({ ...record, _id: normalizedRunId }),
+            data: await toRunResult(finalRecord),
         };
     }
     catch (_a) {
@@ -267,4 +431,147 @@ async function getAiToolRun(runId, openid) {
             message: '未找到该执行结果',
         };
     }
+}
+async function listAiToolRuns(params, openid) {
+    await ensureAiToolCollections();
+    const normalizedToolId = String(params.toolId || '').trim();
+    if (!normalizedToolId || !(0, ai_tool_core_1.getAiToolDefinition)(normalizedToolId)) {
+        return {
+            ok: false,
+            code: 'INVALID_INPUT',
+            message: '缺少有效工具 ID',
+        };
+    }
+    const user = await (0, db_1.getUserByOpenId)(openid);
+    if (!user) {
+        return {
+            ok: false,
+            code: 'UNAUTHENTICATED',
+            message: '请先登录后再使用',
+        };
+    }
+    const limit = Math.max(1, Math.min(50, Math.floor(params.limit || 30)));
+    const result = await (0, db_1.collection)('aiToolRuns')
+        .where({
+        userId: user._id,
+        toolId: normalizedToolId,
+    })
+        .get();
+    const records = result.data
+        .map((record) => ({ ...record, _id: String(record._id || '') }))
+        .filter((record) => Boolean(record._id))
+        .sort((left, right) => (right.createdAt || 0) - (left.createdAt || 0))
+        .slice(0, limit);
+    return {
+        ok: true,
+        data: await Promise.all(records.map(async (record) => toRunResult(await failStaleImageRun(record)))),
+    };
+}
+async function findRunById(runId) {
+    try {
+        const result = await (0, db_1.collection)('aiToolRuns').doc(runId).get();
+        const record = result.data;
+        return record ? { ...record, _id: runId } : null;
+    }
+    catch (_a) {
+        return null;
+    }
+}
+async function markAiToolImageRunSucceeded(params) {
+    var _a;
+    const now = (_a = params.now) !== null && _a !== void 0 ? _a : Date.now();
+    await (0, db_1.collection)('aiToolRuns').doc(params.runId).update({
+        data: {
+            status: 'succeeded',
+            title: '老照片修复完成',
+            summary: params.message || '照片已完成修复，可保存结果图。',
+            outputText: '老照片修复完成。',
+            outputImages: [{ fileId: params.fileId }],
+            ...(params.modelName ? { modelName: params.modelName } : {}),
+            updatedAt: now,
+        },
+    });
+}
+async function markAiToolImageRunFailed(params) {
+    var _a;
+    const now = (_a = params.now) !== null && _a !== void 0 ? _a : Date.now();
+    const record = await findRunById(params.runId);
+    if (record) {
+        await releaseAsyncRunReservation(record, now);
+    }
+    await (0, db_1.collection)('aiToolRuns').doc(params.runId).update({
+        data: {
+            status: 'failed',
+            title: '修复失败',
+            summary: params.message,
+            outputText: params.message,
+            errorCode: params.errorCode || 'MODEL_FAILED',
+            errorMessage: params.message,
+            updatedAt: now,
+        },
+    });
+}
+async function releaseAsyncRunReservation(record, now) {
+    var _a;
+    const usage = record.usage;
+    if (!usage) {
+        return;
+    }
+    const usageResult = await (0, db_1.collection)('aiToolUserUsage')
+        .where({ userId: record.userId, toolId: record.toolId })
+        .limit(1)
+        .get();
+    const usageRecord = usageResult.data[0];
+    if (usageRecord === null || usageRecord === void 0 ? void 0 : usageRecord._id) {
+        await (0, db_1.collection)('aiToolUserUsage').doc(usageRecord._id).update({
+            data: {
+                ...(usage.chargeMode === 'trial' ? { trialUsed: db_1._.inc(-1) } : {}),
+                consumeCount: db_1._.inc(-1),
+                updatedAt: now,
+            },
+        });
+    }
+    if (usage.chargeMode === 'single') {
+        const entitlementResult = await (0, db_1.collection)('aiToolSingleEntitlements')
+            .where({ userId: record.userId, toolId: record.toolId, usedRunId: record._id })
+            .limit(1)
+            .get();
+        const entitlement = entitlementResult.data[0];
+        if (entitlement === null || entitlement === void 0 ? void 0 : entitlement._id) {
+            await (0, db_1.collection)('aiToolSingleEntitlements').doc(entitlement._id).update({
+                data: {
+                    status: 'available',
+                    usedRunId: '',
+                    usedAt: 0,
+                    updatedAt: now,
+                },
+            });
+        }
+        return;
+    }
+    const pointCost = Math.max(0, Math.floor((_a = usage.pointCost) !== null && _a !== void 0 ? _a : 0));
+    if (usage.chargeMode !== 'points' || pointCost <= 0) {
+        return;
+    }
+    await (0, db_1.collection)('users').doc(record.userId).update({
+        data: {
+            aiToolPointsBalance: db_1._.inc(pointCost),
+            updatedAt: now,
+        },
+    });
+    const refreshedUser = await (0, db_1.getUserById)(record.userId);
+    await (0, db_1.collection)('aiToolPointsLedger').add({
+        data: {
+            userId: record.userId,
+            openid: record.openid,
+            toolId: record.toolId,
+            runId: record._id,
+            type: 'adjustment',
+            direction: 'in',
+            points: pointCost,
+            balanceAfter: refreshedUser === null || refreshedUser === void 0 ? void 0 : refreshedUser.aiToolPointsBalance,
+            description: '老照片修复失败退回积分',
+            createdAt: now,
+        },
+    });
 }

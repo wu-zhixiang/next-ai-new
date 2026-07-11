@@ -6,6 +6,7 @@ import { DEFAULT_PRODUCT_CODE } from '../shared/constants';
 import { getClientAppConfig } from '../shared/client-config';
 import { paymentTypeToPayChannel } from '../shared/payment-config';
 import { calculatePointsDeduction, getPointsConfig } from '../shared/points-config';
+import { migrateLegacyPointsBalanceToAiToolPoints } from '../shared/points-rewards';
 
 interface Event {
   pid: string;
@@ -31,10 +32,11 @@ async function hasPurchasedProductBefore(userId: string, productCode: string): P
 
 export async function main(event: Event) {
   const { OPENID } = getWxContext();
-  const user = await getUserByOpenId(OPENID);
-  if (!user) {
+  const rawUser = await getUserByOpenId(OPENID);
+  if (!rawUser) {
     throw new Error('用户未登录');
   }
+  const user = await migrateLegacyPointsBalanceToAiToolPoints(rawUser);
   if (!user.mobile) {
     throw new Error('请先完成手机号授权');
   }
@@ -71,11 +73,12 @@ export async function main(event: Event) {
   );
 
   const orderNo = createOrderNo();
-  const availablePoints = Math.max(0, Math.floor(user.pointsBalance ?? 0));
+  const aiToolPointPlan = Math.max(0, Math.floor(plan.totalAiPoints ?? 0)) > 0;
+  const availablePoints = Math.max(0, Math.floor(user.aiToolPointsBalance ?? 0));
   const deduction = calculatePointsDeduction({
     price: plan.price,
     availablePoints,
-    usePointsDeduction: Boolean(event.usePointsDeduction),
+    usePointsDeduction: aiToolPointPlan && Boolean(event.usePointsDeduction),
     pointsPerYuan: pointsConfig.pointsPerYuan,
   });
   const order: OrderRecord = {
@@ -90,7 +93,7 @@ export async function main(event: Event) {
     amount: deduction.payableAmount,
     originalAmount: normalizeAmount(plan.price),
     totalAiPoints: Math.max(0, Math.floor(plan.totalAiPoints ?? 0)),
-    pointsDeductionEnabled: Boolean(event.usePointsDeduction),
+    pointsDeductionEnabled: aiToolPointPlan && Boolean(event.usePointsDeduction),
     pointsDeducted: deduction.pointsDeducted,
     pointsDeductAmount: deduction.pointsDeductAmount,
     durationDays: plan.durationDays,

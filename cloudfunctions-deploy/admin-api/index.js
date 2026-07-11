@@ -464,6 +464,107 @@ function parseToolImageDataUrl(value) {
     }
     return { extension, bytes };
 }
+function sanitizeUploadId(value) {
+    const uploadId = sanitizeText(value, 80);
+    if (!/^[a-zA-Z0-9_-]{8,80}$/.test(uploadId)) {
+        throw withStatus(new Error('上传会话无效'), 422);
+    }
+    return uploadId;
+}
+function parseUploadChunkBody(body, scope) {
+    const uploadId = sanitizeUploadId(body.uploadId);
+    const chunkIndex = Math.floor(Number(body.chunkIndex));
+    const chunkCount = Math.floor(Number(body.chunkCount));
+    const totalSize = Math.floor(Number(body.totalSize));
+    const mimeType = sanitizeText(body.mimeType, 120).toLowerCase() || 'application/octet-stream';
+    const fallbackExtension = getExtensionFromMimeType(mimeType);
+    const fileName = sanitizeUploadFileName(body.fileName, fallbackExtension);
+    const chunkData = typeof body.chunkData === 'string' ? body.chunkData.trim() : '';
+    if (!Number.isFinite(chunkIndex) || chunkIndex < 0) {
+        throw withStatus(new Error('上传分片序号无效'), 422);
+    }
+    if (!Number.isFinite(chunkCount) || chunkCount < 1 || chunkCount > 80 || chunkIndex >= chunkCount) {
+        throw withStatus(new Error('上传分片数量无效'), 422);
+    }
+    if (!Number.isFinite(totalSize) || totalSize <= 0 || totalSize > MAX_ADMIN_UPLOAD_FILE_BYTES) {
+        throw withStatus(new Error('文件不能超过 10MB'), 422);
+    }
+    if (scope === 'toolAsset') {
+        if (!/^image\/(?:png|jpe?g|webp)$/.test(mimeType)) {
+            throw withStatus(new Error('图片仅支持 PNG/JPG/WebP'), 422);
+        }
+        if (totalSize > MAX_TOOL_IMAGE_BYTES) {
+            throw withStatus(new Error('图片不能超过 3MB'), 422);
+        }
+    }
+    if (!/^[A-Za-z0-9+/=]+$/.test(chunkData)) {
+        throw withStatus(new Error('上传分片格式不正确'), 422);
+    }
+    const chunkBytes = Buffer.from(chunkData, 'base64');
+    if (chunkBytes.length === 0 || chunkBytes.length > 512 * 1024) {
+        throw withStatus(new Error('上传分片大小无效'), 422);
+    }
+    return {
+        uploadId,
+        scope,
+        chunkIndex,
+        chunkCount,
+        fileName,
+        mimeType,
+        totalSize,
+        chunkData,
+        createdAt: Date.now(),
+    };
+}
+async function saveUploadChunk(record) {
+    await (0, db_1.ensureCollection)('adminUploadChunks');
+    const existing = await adminCollection('adminUploadChunks')
+        .where({
+        uploadId: record.uploadId,
+        scope: record.scope,
+        chunkIndex: record.chunkIndex,
+    })
+        .limit(1)
+        .get();
+    const current = existing.data[0];
+    if (current === null || current === void 0 ? void 0 : current._id) {
+        await adminCollection('adminUploadChunks').doc(current._id).update({ data: record });
+        return;
+    }
+    await adminCollection('adminUploadChunks').add({ data: record });
+}
+async function readUploadChunks(uploadId, scope) {
+    await (0, db_1.ensureCollection)('adminUploadChunks');
+    const result = await adminCollection('adminUploadChunks').where({ uploadId, scope }).get();
+    return result.data
+        .filter((record) => Boolean(record._id))
+        .sort((left, right) => left.chunkIndex - right.chunkIndex);
+}
+async function deleteUploadChunks(records) {
+    await Promise.all(records.map((record) => adminCollection('adminUploadChunks').doc(record._id).remove()));
+}
+function assembleUploadChunks(records, expected) {
+    if (records.length !== expected.chunkCount) {
+        throw withStatus(new Error('上传分片未完成'), 202);
+    }
+    const seen = new Set();
+    for (const record of records) {
+        if (record.chunkCount !== expected.chunkCount || record.totalSize !== expected.totalSize || record.mimeType !== expected.mimeType) {
+            throw withStatus(new Error('上传分片信息不一致'), 422);
+        }
+        seen.add(record.chunkIndex);
+    }
+    for (let index = 0; index < expected.chunkCount; index += 1) {
+        if (!seen.has(index)) {
+            throw withStatus(new Error('上传分片未完成'), 202);
+        }
+    }
+    const bytes = Buffer.concat(records.map((record) => Buffer.from(record.chunkData, 'base64')));
+    if (bytes.length !== expected.totalSize) {
+        throw withStatus(new Error('上传文件大小不一致'), 422);
+    }
+    return bytes;
+}
 function toPublicFileUrl(tempUrl) {
     var _a;
     return (_a = tempUrl.split('?')[0]) !== null && _a !== void 0 ? _a : '';
@@ -580,6 +681,53 @@ async function uploadAdminFile(event) {
     const fileUrls = await getFileUrls(result.fileID);
     return ok(event, toAdminFileView({ ...record, _id: created._id }, fileUrls));
 }
+async function uploadAdminFileChunk(event) {
+    await (0, db_1.ensureCollection)('adminFiles');
+    const body = parseBody(event);
+    const chunk = parseUploadChunkBody(body, 'file');
+    await saveUploadChunk(chunk);
+    const chunks = await readUploadChunks(chunk.uploadId, 'file');
+    if (chunks.length < chunk.chunkCount) {
+        return ok(event, {
+            uploadId: chunk.uploadId,
+            received: chunks.length,
+            chunkCount: chunk.chunkCount,
+            done: false,
+        });
+    }
+    const bytes = assembleUploadChunks(chunks, chunk);
+    const now = Date.now();
+    const random = Math.floor(Math.random() * 100000).toString().padStart(5, '0');
+    const extension = getExtensionFromFileName(chunk.fileName) || getExtensionFromMimeType(chunk.mimeType);
+    const baseName = sanitizeCloudPathSegment(chunk.fileName);
+    const cloudPath = `cloud-admin/uploads/${now}-${random}-${baseName}.${extension}`;
+    const result = await db_1.app.uploadFile({
+        cloudPath,
+        fileContent: bytes,
+    });
+    const record = {
+        fileId: result.fileID,
+        cloudPath,
+        name: chunk.fileName,
+        displayName: normalizeAdminFileDisplayName(body.displayName, chunk.fileName),
+        usage: normalizeAdminFileUsage(body.usage),
+        note: normalizeAdminFileNote(body.note),
+        size: bytes.length,
+        mimeType: chunk.mimeType,
+        createdAt: now,
+        updatedAt: now,
+    };
+    const created = await adminCollection('adminFiles').add({ data: record });
+    await deleteUploadChunks(chunks);
+    const fileUrls = await getFileUrls(result.fileID);
+    return ok(event, {
+        ...toAdminFileView({ ...record, _id: created._id }, fileUrls),
+        uploadId: chunk.uploadId,
+        received: chunks.length,
+        chunkCount: chunk.chunkCount,
+        done: true,
+    });
+}
 async function updateAdminFile(event, fileRecordId) {
     var _a;
     await (0, db_1.ensureCollection)('adminFiles');
@@ -654,6 +802,36 @@ async function uploadToolAsset(event) {
     });
     return ok(event, { fileId: result.fileID });
 }
+async function uploadToolAssetChunk(event) {
+    const body = parseBody(event);
+    const chunk = parseUploadChunkBody(body, 'toolAsset');
+    await saveUploadChunk(chunk);
+    const chunks = await readUploadChunks(chunk.uploadId, 'toolAsset');
+    if (chunks.length < chunk.chunkCount) {
+        return ok(event, {
+            uploadId: chunk.uploadId,
+            received: chunks.length,
+            chunkCount: chunk.chunkCount,
+            done: false,
+        });
+    }
+    const bytes = assembleUploadChunks(chunks, chunk);
+    const extension = getExtensionFromFileName(chunk.fileName) || getExtensionFromMimeType(chunk.mimeType);
+    const now = Date.now();
+    const random = Math.floor(Math.random() * 100000).toString().padStart(5, '0');
+    const result = await db_1.app.uploadFile({
+        cloudPath: `ai-tools/intro/${now}-${random}.${extension}`,
+        fileContent: bytes,
+    });
+    await deleteUploadChunks(chunks);
+    return ok(event, {
+        fileId: result.fileID,
+        uploadId: chunk.uploadId,
+        received: chunks.length,
+        chunkCount: chunk.chunkCount,
+        done: true,
+    });
+}
 function normalizeToolOutputType(value, existing) {
     if (value === 'bullets' || value === 'xiaohongshu' || value === 'moments') {
         return value;
@@ -684,6 +862,7 @@ function toToolView(record, runCounts) {
         visible: record.visible !== false,
         sortOrder: (0, ai_tool_config_1.normalizeAiToolSortOrder)(record.sortOrder, 999),
         outputType: (_f = record.outputType) !== null && _f !== void 0 ? _f : 'summary',
+        workerModel: (0, ai_tool_config_1.normalizeAiToolWorkerModel)(record.workerModel),
         ...(intro ? { intro } : {}),
     };
 }
@@ -1001,6 +1180,7 @@ function normalizeToolInput(body, existing, fallbackToolId) {
         visible: body.visible !== false,
         sortOrder: (0, ai_tool_config_1.normalizeAiToolSortOrder)(body.sortOrder, (_f = existing === null || existing === void 0 ? void 0 : existing.sortOrder) !== null && _f !== void 0 ? _f : 999),
         outputType: normalizeToolOutputType(body.outputType, existing === null || existing === void 0 ? void 0 : existing.outputType),
+        workerModel: (0, ai_tool_config_1.normalizeAiToolWorkerModel)(body.workerModel, existing === null || existing === void 0 ? void 0 : existing.workerModel),
         intro: (0, ai_tool_config_1.normalizeAiToolIntroConfig)(body.intro),
     };
 }
@@ -1202,6 +1382,12 @@ async function route(event) {
     }
     if (path.replace(/^\/admin-api/, '') === '/tool-assets' && method === 'POST') {
         return uploadToolAsset(event);
+    }
+    if (path.replace(/^\/admin-api/, '') === '/tool-assets/chunks' && method === 'POST') {
+        return uploadToolAssetChunk(event);
+    }
+    if (path.replace(/^\/admin-api/, '') === '/files/chunks' && method === 'POST') {
+        return uploadAdminFileChunk(event);
     }
     if (path.replace(/^\/admin-api/, '') === '/points-config' && method === 'GET') {
         return getAdminPointsConfig(event);

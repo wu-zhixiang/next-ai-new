@@ -118,6 +118,7 @@ async function main(event = {}) {
                 updatedAt: now,
             },
         });
+        const migratedUser = await (0, points_rewards_1.migrateLegacyPointsBalanceToAiToolPoints)(existingUser, now);
         await (0, points_rewards_1.grantPendingInviteRewards)(existingUser._id, now);
         const refreshedUser = await (0, db_1.getUserById)(existingUser._id);
         return (0, utils_1.ok)({
@@ -129,7 +130,8 @@ async function main(event = {}) {
             avatarUrl: (_g = event.avatarUrl) !== null && _g !== void 0 ? _g : existingUser.avatarUrl,
             inviteCode,
             inviterUserId,
-            pointsBalance: (_j = (_h = refreshedUser === null || refreshedUser === void 0 ? void 0 : refreshedUser.pointsBalance) !== null && _h !== void 0 ? _h : existingUser.pointsBalance) !== null && _j !== void 0 ? _j : 0,
+            pointsBalance: 0,
+            aiToolPointsBalance: (_j = (_h = refreshedUser === null || refreshedUser === void 0 ? void 0 : refreshedUser.aiToolPointsBalance) !== null && _h !== void 0 ? _h : migratedUser.aiToolPointsBalance) !== null && _j !== void 0 ? _j : 0,
             aiAccountRegistered,
         });
     }
@@ -140,6 +142,7 @@ async function main(event = {}) {
         avatarUrl: event.avatarUrl,
         inviteCode: createInviteCode(OPENID),
         pointsBalance: 0,
+        aiToolPointsBalance: 0,
         aiAccountRegistered: false,
         status: 'active',
         subscribeMsgAuth: false,
@@ -169,7 +172,8 @@ async function main(event = {}) {
         avatarUrl: user.avatarUrl,
         inviteCode: user.inviteCode,
         inviterUserId,
-        pointsBalance: user.pointsBalance,
+        pointsBalance: 0,
+        aiToolPointsBalance: user.aiToolPointsBalance,
         aiAccountRegistered: user.aiAccountRegistered,
     });
 }

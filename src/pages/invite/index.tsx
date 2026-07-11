@@ -21,6 +21,7 @@ interface LoginResult extends CachedUserInfo {
   openid?: string;
   openId?: string;
   pointsBalance?: number;
+  aiToolPointsBalance?: number;
   aiAccountRegistered?: boolean;
 }
 
@@ -37,6 +38,7 @@ interface InviteHomeResult {
   inviteCode?: string;
   inviteCount: number;
   pointsBalance: number;
+  aiToolPointsBalance?: number;
   totalRewardPoints: number;
   invitees: InviteeView[];
   pointsConfig?: {
@@ -173,7 +175,7 @@ export default function InvitePage(): JSX.Element {
                     </View>
                   </View>
                   <View className='invite-stat'>
-                    <Text className='invite-stat__label'>当前积分</Text>
+                    <Text className='invite-stat__label'>AI 工具积分</Text>
                     <View className='invite-stat__line'>
                       <Text className='invite-stat__value'>{formatNumber(data.pointsBalance)}</Text>
                     </View>

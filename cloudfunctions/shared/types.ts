@@ -253,10 +253,20 @@ export interface AiToolPointsLedgerRecord {
   _id?: string;
   userId: string;
   openid?: string;
+  relatedUserId?: string;
+  milestoneKey?: string;
   toolId?: string;
   orderNo?: string;
   runId?: string;
-  type: 'plan_grant' | 'tool_consume' | 'single_purchase' | 'adjustment';
+  type:
+    | 'plan_grant'
+    | 'tool_consume'
+    | 'single_purchase'
+    | 'payment_deduct'
+    | 'invite_reward'
+    | 'invite_milestone'
+    | 'legacy_points_migration'
+    | 'adjustment';
   direction: 'in' | 'out';
   points: number;
   balanceAfter?: number;

@@ -9,6 +9,7 @@ import { calcExpireTag, calcRemainDays, maskMobile, normalizeMembership, ok } fr
 import { getWxContext } from '../_lib/context';
 import type { MembershipRecord, OrderRecord } from '../shared/types';
 import { getPointsConfig } from '../shared/points-config';
+import { migrateLegacyPointsBalanceToAiToolPoints } from '../shared/points-rewards';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -39,10 +40,10 @@ function buildMembershipFromOrder(order: OrderRecord): MembershipRecord | null {
 
 export async function main() {
   const { OPENID } = getWxContext();
-  const user = await getUserByOpenId(OPENID);
+  const rawUser = await getUserByOpenId(OPENID);
   const pointsConfig = await getPointsConfig();
 
-  if (!user) {
+  if (!rawUser) {
     return ok({
       userInfo: {},
       membership: { status: 'none' as const, openStatusLabel: '立即开通' as const },
@@ -57,6 +58,7 @@ export async function main() {
       },
     });
   }
+  const user = await migrateLegacyPointsBalanceToAiToolPoints(rawUser);
 
   const now = Date.now();
   const [memberships, orders] = await Promise.all([
@@ -94,7 +96,7 @@ export async function main() {
       nickname: user.nickname,
       avatarUrl: user.avatarUrl,
       inviteCode: user.inviteCode,
-      pointsBalance: user.pointsBalance ?? 0,
+      pointsBalance: 0,
       aiToolPointsBalance: user.aiToolPointsBalance ?? 0,
       aiAccount: {
         registered: aiAccountRegistered,

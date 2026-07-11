@@ -20,15 +20,28 @@ const PHOTO_REPAIR_UPLOAD_ICON = 'cloud://cloud1-d3gbrpive8611514c.636c-cloud1-d
 interface MemberHomeResult {
     membership: MembershipView;
     userInfo?: {
+        pointsBalance?: number;
         aiToolPointsBalance?: number;
+    };
+    pointsConfig?: {
+        pointsPerYuan?: number;
     };
 }
 
 interface SummaryResult {
+    runId?: string;
     title: string;
     summary: string;
     points: string[];
     outputText: string;
+    status: RunAiToolResult['status'];
+    toolId: string;
+    outputImages?: Array<{
+        fileId: string;
+        url?: string;
+        width?: number;
+        height?: number;
+    }>;
 }
 
 interface RunAiToolResult {
@@ -39,6 +52,12 @@ interface RunAiToolResult {
     summary?: string;
     points?: string[];
     outputText?: string;
+    outputImages?: Array<{
+        fileId: string;
+        url?: string;
+        width?: number;
+        height?: number;
+    }>;
     usage: {
         charged: boolean;
         freeUsed: boolean;
@@ -70,6 +89,9 @@ interface PlanListResult {
 interface CreateToolSingleOrderResult {
     orderNo: string;
     amount: number;
+    originalAmount?: number;
+    pointsDeducted?: number;
+    pointsDeductAmount?: number;
     toolId: string;
     toolName: string;
     pointCost: number;
@@ -87,6 +109,7 @@ interface ReferenceAsset {
     fileBase64?: string;
     imageDataUrl?: string;
     imagePreviewUrl?: string;
+    uploadedFileId?: string;
     fileType?: string;
     fileKind: 'text' | 'document' | 'image';
 }
@@ -123,9 +146,13 @@ const PROMPT_PRESETS: Array<{ label: string; outputType: OutputType }> = [
 ];
 
 const DAILY_USAGE_KEY = 'ai_tool_daily_usage';
+const DEFAULT_POINTS_PER_YUAN = 10;
 const MAX_REFERENCE_FILE_SIZE = 5 * 1024 * 1024;
 const MAX_REFERENCE_IMAGE_SIZE = 10 * 1024 * 1024;
 const MAX_REFERENCE_FILE_TEXT_LENGTH = 6000;
+const AI_IMAGE_RUN_MAX_POLLS = 120;
+const AI_IMAGE_RUN_FIRST_POLL_DELAY_MS = 1200;
+const AI_IMAGE_RUN_POLL_INTERVAL_MS = 2500;
 const TEXT_FILE_EXTENSIONS = ['txt', 'md', 'markdown', 'csv', 'json', 'html', 'htm', 'xml', 'log'];
 const DOCUMENT_FILE_EXTENSIONS = ['doc', 'docx', 'xls', 'xlsx', 'pptx', 'pdf'];
 const IMAGE_FILE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp'];
@@ -218,6 +245,12 @@ function getImageMimeType(fileName: string): string {
     return 'image/webp';
 }
 
+function buildCloudImagePath(fileName: string): string {
+    const extension = getFileExtension(fileName) || 'jpg';
+    const random = Math.random().toString(16).slice(2, 10);
+    return `ai-tools/source/miniapp-${Date.now()}-${random}.${extension}`;
+}
+
 function buildResultMarkdown(result: SummaryResult): string {
     const points = result.points.length
         ? ['', '## 要点', ...result.points.map((point, index) => `${index + 1}. ${point}`)]
@@ -236,10 +269,14 @@ function buildResultMarkdown(result: SummaryResult): string {
 
 function toSummaryResult(runResult: RunAiToolResult): SummaryResult {
     return {
+        runId: runResult.runId,
         title: runResult.title,
         summary: runResult.summary || '',
         points: runResult.points || [],
         outputText: runResult.outputText || '',
+        status: runResult.status,
+        toolId: runResult.toolId,
+        outputImages: runResult.outputImages,
     };
 }
 
@@ -320,7 +357,10 @@ export default function ToolDetailPage(): JSX.Element {
     const [plansLoading, setPlansLoading] = useState(false);
     const [quotaSheetVisible, setQuotaSheetVisible] = useState(false);
     const [quotaData, setQuotaData] = useState<QuotaExceededData | null>(null);
+    const [usePointsDeduction, setUsePointsDeduction] = useState(false);
+    const [pointsPerYuan, setPointsPerYuan] = useState(DEFAULT_POINTS_PER_YUAN);
     const [paymentLocked, setPaymentLocked] = useState(false);
+    const [sharePanelVisible, setSharePanelVisible] = useState(false);
 
     const activeTool = useMemo(() => getToolByIdFromList(tools, toolId), [tools, toolId]);
     const imageTool = isImageTool(activeTool.id);
@@ -337,6 +377,19 @@ export default function ToolDetailPage(): JSX.Element {
     const toolPointCost = quotaData?.pointCost ?? activeTool.pointCost ?? 0;
     const singlePurchaseAmount = quotaData?.singlePurchaseAmount ?? Number((toolPointCost / 10).toFixed(2));
     const displayedAiToolPointsBalance = quotaData?.aiToolPointsBalance ?? aiToolPointsBalance;
+    const singleDeductiblePoints = Math.min(displayedAiToolPointsBalance, Math.floor(singlePurchaseAmount * pointsPerYuan));
+    const singleDeductAmount = Number((singleDeductiblePoints / pointsPerYuan).toFixed(2));
+    const singlePayAmount = Math.max(0, Number((singlePurchaseAmount - (usePointsDeduction ? singleDeductAmount : 0)).toFixed(2)));
+    const pointsDeductionAvailable = singleDeductiblePoints > 0;
+    const resultIsMedia = Boolean(result && isImageTool(result.toolId));
+    const resultProcessing = result?.status === 'processing';
+    const resultFailed = result?.status === 'failed';
+    const resultShareImageUrl = result?.outputImages?.find((image) => Boolean(image.url))?.url;
+    const resultShareReady = Boolean(result && result.status === 'succeeded' && (
+        resultIsMedia
+            ? resultShareImageUrl
+            : result.outputText || result.summary || result.points.length > 0
+    ));
     const showInitialSourceActions = inputMode === 'idle' && !referenceAsset && (photoRepairTool || !textContent);
     const showRequirementInput = allowRequirementInput && (inputMode === 'paste' || Boolean(textContent));
     const showActionRow = photoRepairTool
@@ -361,12 +414,18 @@ export default function ToolDetailPage(): JSX.Element {
 
     useShareAppMessage(() => ({
         title: result?.title || `${activeTool.name} - AIO AI工具`,
-        path: `/pages/tool-detail/index?tool=${encodeURIComponent(activeTool.id)}`,
+        path: result?.runId
+            ? `/pages/tool-detail/index?tool=${encodeURIComponent(activeTool.id)}&runId=${encodeURIComponent(result.runId)}`
+            : `/pages/tool-detail/index?tool=${encodeURIComponent(activeTool.id)}`,
+        imageUrl: resultShareImageUrl,
     }));
 
     useShareTimeline(() => ({
         title: result?.title || `${activeTool.name} - AIO AI工具`,
-        query: `tool=${encodeURIComponent(activeTool.id)}`,
+        query: result?.runId
+            ? `tool=${encodeURIComponent(activeTool.id)}&runId=${encodeURIComponent(result.runId)}`
+            : `tool=${encodeURIComponent(activeTool.id)}`,
+        imageUrl: resultShareImageUrl,
     }));
 
     useEffect(() => {
@@ -384,14 +443,38 @@ export default function ToolDetailPage(): JSX.Element {
         }
     }
 
+    function openResultSharePanel(): void {
+        if (!resultShareReady || !result) {
+            void Taro.showToast({ title: '生成完成后可分享', icon: 'none' });
+            return;
+        }
+        setSharePanelVisible(true);
+        enableShareMenu();
+    }
+
+    function closeResultSharePanel(): void {
+        setSharePanelVisible(false);
+    }
+
+    function showResultTimelineGuide(): void {
+        setSharePanelVisible(false);
+        enableShareMenu();
+        void Taro.showToast({
+            title: '请点击右上角分享到朋友圈',
+            icon: 'none',
+        });
+    }
+
     async function loadMemberStatus(): Promise<void> {
         try {
             const memberResult = await callCloudFunction<MemberHomeResult>('get-member-home');
             setMembershipStatus(memberResult.membership.status);
             setAiToolPointsBalance(Math.max(0, Math.floor(memberResult.userInfo?.aiToolPointsBalance ?? 0)));
+            setPointsPerYuan(Math.max(1, Math.floor(memberResult.pointsConfig?.pointsPerYuan ?? DEFAULT_POINTS_PER_YUAN)));
         } catch {
             setMembershipStatus('none');
             setAiToolPointsBalance(0);
+            setPointsPerYuan(DEFAULT_POINTS_PER_YUAN);
         }
     }
 
@@ -417,7 +500,11 @@ export default function ToolDetailPage(): JSX.Element {
         try {
             const runResult = await callCloudFunction<RunAiToolResult>('get-ai-tool-run', { runId });
             setToolId(getToolById(runResult.toolId).id);
-            setResult(toSummaryResult(runResult));
+            handleRunSuccess(runResult);
+            if (runResult.status === 'processing') {
+                const completedResult = await waitForRunCompleted(runResult.runId);
+                handleRunSuccess(completedResult);
+            }
         } catch (error) {
             void Taro.showToast({
                 title: error instanceof Error ? error.message : '结果读取失败',
@@ -426,6 +513,23 @@ export default function ToolDetailPage(): JSX.Element {
         } finally {
             setSubmitting(false);
         }
+    }
+
+    async function waitForRunCompleted(runId: string): Promise<RunAiToolResult> {
+        let latest: RunAiToolResult | null = null;
+        for (let index = 0; index < AI_IMAGE_RUN_MAX_POLLS; index += 1) {
+            await delay(index === 0 ? AI_IMAGE_RUN_FIRST_POLL_DELAY_MS : AI_IMAGE_RUN_POLL_INTERVAL_MS);
+            latest = await callCloudFunction<RunAiToolResult>('get-ai-tool-run', { runId });
+            handleRunSuccess(latest);
+            if (latest.status === 'succeeded') {
+                return latest;
+            }
+            if (latest.status === 'failed') {
+                throw new Error(latest.summary || latest.outputText || '修复失败，请稍后再试');
+            }
+        }
+        void Taro.showToast({ title: '仍在处理中，可稍后查看历史', icon: 'none' });
+        return latest ?? await callCloudFunction<RunAiToolResult>('get-ai-tool-run', { runId });
     }
 
     function markDailyUsed(): void {
@@ -567,6 +671,18 @@ export default function ToolDetailPage(): JSX.Element {
                     fileKind: getFileKind(fileName),
                 });
             } else {
+                if (photoRepairTool && isImageFile(fileName)) {
+                    setReferenceAsset({
+                        kind: 'file',
+                        name: fileName,
+                        imagePreviewUrl: filePath,
+                        fileType: fileTypeLabel,
+                        fileKind: 'image',
+                    });
+                    setInputMode('idle');
+                    setResult(null);
+                    return;
+                }
                 const fileBase64 = String(fileManager.readFileSync(filePath, 'base64') || '').trim();
                 if (fileBase64.length < 10) {
                     void Taro.showToast({ title: '文件内容为空或不可读取', icon: 'none' });
@@ -609,7 +725,43 @@ export default function ToolDetailPage(): JSX.Element {
         setResult(null);
     }
 
-    function buildRunPayload(text: string): Record<string, unknown> {
+    async function uploadPhotoRepairSourceImage(asset: ReferenceAsset): Promise<string> {
+        if (asset.uploadedFileId) {
+            return asset.uploadedFileId;
+        }
+        if (!asset.imagePreviewUrl) {
+            throw new Error('请先上传需要修复的旧照片');
+        }
+        const upload = await Taro.cloud.uploadFile({
+            cloudPath: buildCloudImagePath(asset.name),
+            filePath: asset.imagePreviewUrl,
+        });
+        const fileId = upload.fileID;
+        if (!fileId) {
+            throw new Error('照片上传失败');
+        }
+        setReferenceAsset((current) => (
+            current === asset ? { ...current, uploadedFileId: fileId } : current
+        ));
+        return fileId;
+    }
+
+    async function buildRunPayload(text: string): Promise<Record<string, unknown>> {
+        if (photoRepairTool) {
+            if (!referenceAsset || referenceAsset.fileKind !== 'image') {
+                throw new Error('请先上传需要修复的旧照片');
+            }
+            const sourceFileId = await uploadPhotoRepairSourceImage(referenceAsset);
+            return {
+                toolId: activeTool.id,
+                text,
+                outputType,
+                assetIds: [sourceFileId],
+                fileName: referenceAsset.name,
+                fileType: referenceAsset.fileType || '',
+                source: 'miniapp',
+            };
+        }
         return {
             toolId: activeTool.id,
             text,
@@ -637,13 +789,19 @@ export default function ToolDetailPage(): JSX.Element {
 
     async function runCurrentGeneration(): Promise<void> {
         const text = photoRepairTool ? '' : stripLegacyPromptPrefixes(content);
-        const runResult = await callCloudFunction<RunAiToolResult>('run-ai-tool', buildRunPayload(text));
-        handleRunSuccess(runResult);
+        const payload = await buildRunPayload(text);
+        const initialResult = await callCloudFunction<RunAiToolResult>('run-ai-tool', payload);
+        handleRunSuccess(initialResult);
+        if (photoRepairTool && initialResult.status === 'processing') {
+            const completedResult = await waitForRunCompleted(initialResult.runId);
+            handleRunSuccess(completedResult);
+        }
     }
 
     function openQuotaSheet(data: QuotaExceededData): void {
         setQuotaData(data);
         setAiToolPointsBalance(Math.max(0, Math.floor(data.aiToolPointsBalance)));
+        setUsePointsDeduction(false);
         setQuotaSheetVisible(true);
         if (pointPlans.length === 0 && !plansLoading) {
             void loadPointPlans();
@@ -722,6 +880,7 @@ export default function ToolDetailPage(): JSX.Element {
         try {
             const order = await callCloudFunction<CreateToolSingleOrderResult>('create-tool-single-order', {
                 toolId: currentQuota.toolId,
+                usePointsDeduction,
             });
             const payment = await callCloudFunction<PayOrderResult>('pay-order', await createPayOrderPayload(order.orderNo));
             if (!payment.paid && (payment.payment || payment.virtualPayment)) {
@@ -751,6 +910,15 @@ export default function ToolDetailPage(): JSX.Element {
         Taro.switchTab({ url: '/pages/member/index' });
     }
 
+    function previewResultImage(url: string): void {
+        const urls = result?.outputImages?.map((image) => image.url).filter((item): item is string => Boolean(item)) ?? [];
+        if (!url || urls.length === 0) return;
+        void Taro.previewImage({
+            current: url,
+            urls,
+        });
+    }
+
     async function copyResult(): Promise<void> {
         if (!result?.outputText) return;
         if (!await ensurePrivacyAuthorization()) return;
@@ -758,13 +926,20 @@ export default function ToolDetailPage(): JSX.Element {
     }
 
     async function prepareShareToFriend(): Promise<void> {
-        if (!result) return;
+        if (!resultShareReady || !result) {
+            void Taro.showToast({ title: '生成完成后可分享', icon: 'none' });
+            return;
+        }
         if (!await ensurePrivacyAuthorization()) return;
         await Taro.setClipboardData({ data: buildResultMarkdown(result) });
         void Taro.showToast({ title: '结果已复制，可粘贴给好友', icon: 'none' });
     }
 
     async function shareToTimeline(): Promise<void> {
+        if (!resultShareReady) {
+            void Taro.showToast({ title: '生成完成后可分享', icon: 'none' });
+            return;
+        }
         if (result) {
             if (!await ensurePrivacyAuthorization()) return;
             await Taro.setClipboardData({ data: buildResultMarkdown(result) });
@@ -785,6 +960,12 @@ export default function ToolDetailPage(): JSX.Element {
         setResult(null);
     }
 
+    function openToolHistory(): void {
+        void Taro.navigateTo({
+            url: `/pages/tool-history/index?tool=${encodeURIComponent(activeTool.id)}`,
+        });
+    }
+
     return (
         <View className='page'>
             <AppTransparentHeader title={activeTool.name} />
@@ -803,11 +984,18 @@ export default function ToolDetailPage(): JSX.Element {
                             </View>
                         </View>
 
-                        <Text className='tool-workbench__quota'>
-                            {!activeTool.enabled
-                                ? '接入中'
-                                : `${activeTool.pointCost ?? 0} 积分/次${(activeTool.trialLimit ?? 0) > 0 ? ` · 体验 ${activeTool.trialLimit} 次` : ''}`}
-                        </Text>
+                        <View className='tool-workbench__meta-actions'>
+                            <Text className='tool-workbench__quota tool-workbench__quota--cost'>
+                                {!activeTool.enabled
+                                    ? '接入中'
+                                    : `${activeTool.pointCost ?? 0} 积分/次`}
+                            </Text>
+                            <Text className='tool-workbench__quota tool-workbench__quota--trial'>
+                                {(activeTool.trialLimit ?? 0) > 0
+                                    ? `免费体验 ${activeTool.trialLimit} 次`
+                                    : '暂无体验次数'}
+                            </Text>
+                        </View>
                     </View>
 
                     <View className='tool-workbench tool-workbench--detail'>
@@ -890,6 +1078,7 @@ export default function ToolDetailPage(): JSX.Element {
                                         className='tool-reference-preview__photo'
                                         src={referenceAsset.imagePreviewUrl || referenceAsset.imageDataUrl || ''}
                                         mode='widthFix'
+                                        onClick={() => void chooseReferenceFile()}
                                     />
                                     <View className='tool-reference-preview__photo-meta'>
                                         <Text className='tool-reference-preview__title'>{referenceAsset.name}</Text>
@@ -918,7 +1107,9 @@ export default function ToolDetailPage(): JSX.Element {
 
                         {showActionRow ? (
                             <View className='tool-action-row'>
-                                <Text className='tool-add-asset-button' onClick={() => void chooseReferenceFile()}>+</Text>
+                                {!photoRepairTool ? (
+                                    <Text className='tool-add-asset-button' onClick={() => void chooseReferenceFile()}>+</Text>
+                                ) : null}
                                 <Button
                                     className={`saas-button tool-generate-button ${generateButtonMuted ? 'saas-button--disabled' : ''}`}
                                     loading={submitting}
@@ -936,31 +1127,89 @@ export default function ToolDetailPage(): JSX.Element {
                         ) : null}
 
                         {result ? (
-                            <View className='tool-result'>
-                                <Text className='tool-result__ai-badge'>AI生成内容</Text>
-                                <View className='tool-result__head'>
-                                    <Text className='tool-result__title'>{result.title}</Text>
-                                    <Text className='tool-result__copy' onClick={() => void copyResult()}>复制</Text>
-                                </View>
-                                <Text className='tool-result__summary'>{result.summary}</Text>
-                                {result.points.length > 0 ? (
-                                    <View className='tool-result__points'>
-                                        {result.points.map((point) => (
-                                            <Text className='tool-result__point' key={point}>{point}</Text>
-                                        ))}
+                            <View className={`tool-result ${resultIsMedia ? 'tool-result--media' : ''}`}>
+                                {/* <Text className='tool-result__ai-badge'>AI生成内容</Text> */}
+                                {resultIsMedia ? (
+                                    <View className='tool-result__media-body'>
+                                        {resultProcessing ? (
+                                            <View className='tool-result__media-loading'>
+                                                <View className='tool-result__media-skeleton' />
+                                            </View>
+                                        ) : result.outputImages?.some((image) => Boolean(image.url)) ? (
+                                            <View className='tool-result__images'>
+                                                {result.outputImages.map((image) => (
+                                                    image.url ? (
+                                                        <Image
+                                                            key={image.fileId}
+                                                            className='tool-result__image'
+                                                            src={image.url}
+                                                            mode='widthFix'
+                                                            showMenuByLongpress
+                                                            onClick={() => previewResultImage(image.url || '')}
+                                                        />
+                                                    ) : null
+                                                ))}
+                                            </View>
+                                        ) : (
+                                            <View className={`tool-result__media-empty ${resultFailed ? 'tool-result__media-empty--failed' : ''}`}>
+                                                <Text className='tool-result__media-empty-title'>{result.title || (resultFailed ? '生成失败' : '暂无结果')}</Text>
+                                                <Text className='tool-result__media-empty-desc'>{result.summary || result.outputText || '请稍后重试'}</Text>
+                                            </View>
+                                        )}
                                     </View>
-                                ) : null}
-                                <Text className='tool-result__output'>{result.outputText}</Text>
-                                <View className='tool-result__actions'>
-                                    <Button className='tool-result__share-button' openType='share' onClick={() => void prepareShareToFriend()}>
-                                        分享好友
-                                    </Button>
-                                    <Text className='tool-result__timeline-button' onClick={() => void shareToTimeline()}>分享到朋友圈</Text>
-                                </View>
+                                ) : (
+                                    <View>
+                                        <View className='tool-result__head'>
+                                            <Text className='tool-result__title'>{result.title}</Text>
+                                            <Text className='tool-result__copy' onClick={() => void copyResult()}>复制</Text>
+                                        </View>
+                                        <Text className='tool-result__summary'>{result.summary}</Text>
+                                        {result.points.length > 0 ? (
+                                            <View className='tool-result__points'>
+                                                {result.points.map((point) => (
+                                                    <Text className='tool-result__point' key={point}>{point}</Text>
+                                                ))}
+                                            </View>
+                                        ) : null}
+                                        {result.outputText ? (
+                                            <Text className='tool-result__output'>{result.outputText}</Text>
+                                        ) : null}
+                                    </View>
+                                )}
+                                {resultIsMedia ? (
+                                    <View className={`tool-result__share-entry ${resultShareReady ? '' : 'tool-result__share-entry--disabled'}`}>
+                                        <Text className='tool-result__share-entry-text'>快分享给你的好友，回忆童年吧</Text>
+                                        <Button className='tool-result__share-entry-button' onClick={openResultSharePanel}>
+                                            <View className='wechat-share-icon wechat-share-icon--small' />
+                                        </Button>
+                                    </View>
+                                ) : (
+                                    <View className='tool-result__actions'>
+                                        <Button
+                                            className={`tool-result__share-button ${resultShareReady ? '' : 'tool-result__share-button--disabled'}`}
+                                            openType={resultShareReady ? 'share' : undefined}
+                                            disabled={!resultShareReady}
+                                            onClick={() => void prepareShareToFriend()}
+                                        >
+                                            分享好友
+                                        </Button>
+                                        <Text
+                                            className={`tool-result__timeline-button ${resultShareReady ? '' : 'tool-result__timeline-button--disabled'}`}
+                                            onClick={() => void shareToTimeline()}
+                                        >
+                                            分享朋友圈
+                                        </Text>
+                                    </View>
+                                )}
                             </View>
                         ) : null}
                     </View>
                 </View>
+            </View>
+            <View className='tool-detail-historybar'>
+                <Button className='saas-button tool-detail-historybar__button' onClick={openToolHistory}>
+                    查看历史
+                </Button>
             </View>
             <PopLayout visible={quotaSheetVisible} onClose={closeQuotaSheet} panelClassName='plan-sheet tool-quota-sheet'>
                 <View className='plan-sheet__head'>
@@ -1012,15 +1261,56 @@ export default function ToolDetailPage(): JSX.Element {
                     <View>
                         <Text className='plan-sheet__points-title'>单次购买当前工具</Text>
                         <Text className='plan-sheet__points-desc'>
-                            本次生成消耗 {toolPointCost} 积分，按 10 积分抵 1 元计费。
+                            本次生成消耗 {toolPointCost} AI 工具积分，{pointsPerYuan} 积分可抵 ¥1。
                         </Text>
-                        <Text className='plan-sheet__points-pay'>应付 ¥{singlePurchaseAmount.toFixed(2)}</Text>
+                        <Text className='plan-sheet__points-pay'>应付 ¥{singlePayAmount.toFixed(2)}</Text>
+                    </View>
+                </View>
+                <View className={`plan-sheet__points ${usePointsDeduction ? 'plan-sheet__points--active' : ''} ${pointsDeductionAvailable ? '' : 'plan-sheet__points--disabled'}`}>
+                    <View>
+                        <Text className='plan-sheet__points-title'>使用 AI 工具积分抵扣</Text>
+                        <Text className='plan-sheet__points-desc'>
+                            {pointsDeductionAvailable
+                                ? `可用 ${displayedAiToolPointsBalance} 积分，本次抵扣 ¥${singleDeductAmount.toFixed(2)}`
+                                : `可用 ${displayedAiToolPointsBalance} 积分，${pointsPerYuan} 积分可抵 ¥1`}
+                        </Text>
+                        <Text className='plan-sheet__points-pay'>预计支付 ¥{singlePayAmount.toFixed(2)}</Text>
+                    </View>
+                    <View
+                        className={`ios-switch ${usePointsDeduction ? 'ios-switch--on' : ''}`}
+                        onClick={() => {
+                            if (!pointsDeductionAvailable) {
+                                Taro.showToast({ title: '暂无可抵扣积分', icon: 'none' });
+                                return;
+                            }
+                            setUsePointsDeduction((enabled) => !enabled);
+                        }}
+                    >
+                        <Text className='ios-switch__thumb' />
                     </View>
                 </View>
                 <Button className='saas-button plan-sheet__button' loading={submitting} onClick={() => void handleSinglePurchase()}>
-                    ¥{singlePurchaseAmount.toFixed(2)} 单次使用
+                    ¥{singlePayAmount.toFixed(2)} 单次使用
                 </Button>
             </PopLayout>
+            {sharePanelVisible ? (
+                <View className='news-share-sheet' onClick={closeResultSharePanel}>
+                    <View className='news-share-sheet__panel' onClick={(event) => event.stopPropagation()}>
+                        <Text className='news-share-sheet__title'>分享结果</Text>
+                        <Text className='news-share-sheet__desc'>{result?.title || `${activeTool.name}生成结果`}</Text>
+                        <View className='news-share-sheet__actions'>
+                            <Button className='news-share-sheet__action' openType='share' onClick={closeResultSharePanel}>
+                                <Text className='news-share-sheet__action-icon'>友</Text>
+                                <Text className='news-share-sheet__action-text'>微信好友</Text>
+                            </Button>
+                            <View className='news-share-sheet__action' onClick={showResultTimelineGuide}>
+                                <Text className='news-share-sheet__action-icon'>圈</Text>
+                                <Text className='news-share-sheet__action-text'>朋友圈</Text>
+                            </View>
+                        </View>
+                    </View>
+                </View>
+            ) : null}
             <PaymentLockOverlay visible={paymentLocked} />
         </View>
     );

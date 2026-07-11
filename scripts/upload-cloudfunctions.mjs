@@ -9,6 +9,7 @@ const privateKeyPath = '/Users/qitmac001343/.codex/private.wx1bbde9dcd7559d54.ke
 const deployRoot = path.join(projectPath, 'cloudfunctions-deploy');
 
 const functions = [
+  'ai-worker-callback',
   'admin-api',
   'bind-mobile',
   'clear-email-code',

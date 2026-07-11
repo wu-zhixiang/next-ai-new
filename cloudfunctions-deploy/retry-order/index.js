@@ -8,6 +8,7 @@ const client_config_1 = require("./shared/client-config");
 const payment_config_1 = require("./shared/payment-config");
 const points_config_1 = require("./shared/points-config");
 const ai_tool_entitlements_1 = require("./shared/ai-tool-entitlements");
+const points_rewards_1 = require("./shared/points-rewards");
 function normalizeAmount(amount) {
     return Number(amount.toFixed(2));
 }
@@ -18,16 +19,17 @@ function getToolSingleVirtualPaymentProductId(toolId) {
         || process.env.WX_VIRTUAL_PAY_PRODUCT_ID_AI_TOOL_SINGLE;
 }
 async function main(event) {
-    var _a, _b, _c;
+    var _a, _b, _c, _d, _e;
     const orderNo = (_a = event.orderNo) === null || _a === void 0 ? void 0 : _a.trim();
     if (!orderNo) {
         throw new Error('缺少订单号');
     }
     const { OPENID } = (0, context_1.getWxContext)();
-    const user = await (0, db_1.getUserByOpenId)(OPENID);
-    if (!user) {
+    const rawUser = await (0, db_1.getUserByOpenId)(OPENID);
+    if (!rawUser) {
         throw new Error('用户未登录');
     }
+    const user = await (0, points_rewards_1.migrateLegacyPointsBalanceToAiToolPoints)(rawUser);
     const oldOrder = await (0, db_1.getOrderByNo)(orderNo);
     if (!oldOrder) {
         throw new Error('订单不存在');
@@ -47,7 +49,10 @@ async function main(event) {
         if (!tool.enabled) {
             throw new Error('该工具正在接入中');
         }
-        const appConfig = await (0, client_config_1.getClientAppConfig)();
+        const [appConfig, pointsConfig] = await Promise.all([
+            (0, client_config_1.getClientAppConfig)(),
+            (0, points_config_1.getPointsConfig)(),
+        ]);
         const now = Date.now();
         await (0, db_1.collection)('orders').doc(oldOrder._id).update({
             data: {
@@ -57,7 +62,14 @@ async function main(event) {
                 updatedAt: now,
             },
         });
-        const amount = normalizeAmount(tool.pointCost / 10);
+        const originalAmount = normalizeAmount(tool.pointCost / 10);
+        const usePointsDeduction = Boolean(oldOrder.pointsDeductionEnabled);
+        const deduction = (0, points_config_1.calculatePointsDeduction)({
+            price: originalAmount,
+            availablePoints: Math.max(0, Math.floor((_b = user.aiToolPointsBalance) !== null && _b !== void 0 ? _b : 0)),
+            usePointsDeduction,
+            pointsPerYuan: pointsConfig.pointsPerYuan,
+        });
         const nextOrder = {
             orderNo: (0, utils_1.createOrderNo)('TOOL'),
             userId: user._id,
@@ -67,8 +79,11 @@ async function main(event) {
             planName: `${tool.name}单次使用`,
             virtualPaymentProductId: getToolSingleVirtualPaymentProductId(tool.toolId),
             orderType: 'tool_single',
-            amount,
-            originalAmount: amount,
+            amount: deduction.payableAmount,
+            originalAmount,
+            pointsDeductionEnabled: usePointsDeduction,
+            pointsDeducted: deduction.pointsDeducted,
+            pointsDeductAmount: deduction.pointsDeductAmount,
             toolId: tool.toolId,
             toolName: tool.name,
             toolPointCost: tool.pointCost,
@@ -105,8 +120,9 @@ async function main(event) {
             updatedAt: now,
         },
     });
-    const availablePoints = Math.max(0, Math.floor((_b = user.pointsBalance) !== null && _b !== void 0 ? _b : 0));
-    const usePointsDeduction = Boolean(oldOrder.pointsDeductionEnabled);
+    const aiToolPointPlan = Math.max(0, Math.floor((_c = plan.totalAiPoints) !== null && _c !== void 0 ? _c : 0)) > 0;
+    const availablePoints = Math.max(0, Math.floor((_d = user.aiToolPointsBalance) !== null && _d !== void 0 ? _d : 0));
+    const usePointsDeduction = aiToolPointPlan && Boolean(oldOrder.pointsDeductionEnabled);
     const deduction = (0, points_config_1.calculatePointsDeduction)({
         price: plan.price,
         availablePoints,
@@ -124,7 +140,7 @@ async function main(event) {
         orderType: existingMembership ? 'renew' : 'purchase',
         amount: deduction.payableAmount,
         originalAmount: normalizeAmount(plan.price),
-        totalAiPoints: Math.max(0, Math.floor((_c = plan.totalAiPoints) !== null && _c !== void 0 ? _c : 0)),
+        totalAiPoints: Math.max(0, Math.floor((_e = plan.totalAiPoints) !== null && _e !== void 0 ? _e : 0)),
         pointsDeductionEnabled: usePointsDeduction,
         pointsDeducted: deduction.pointsDeducted,
         pointsDeductAmount: deduction.pointsDeductAmount,

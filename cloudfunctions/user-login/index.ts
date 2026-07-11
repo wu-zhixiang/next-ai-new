@@ -2,7 +2,7 @@ import { collection, getUserById, getUserByInviteCode, getUserByOpenId } from '.
 import type { UserRecord } from '../shared/types';
 import { ok } from '../shared/utils';
 import { getWxContext } from '../_lib/context';
-import { grantPendingInviteRewards } from '../shared/points-rewards';
+import { grantPendingInviteRewards, migrateLegacyPointsBalanceToAiToolPoints } from '../shared/points-rewards';
 
 interface Event {
   nickname?: string;
@@ -138,6 +138,7 @@ export async function main(event: Event = {}) {
         updatedAt: now,
       },
     });
+    const migratedUser = await migrateLegacyPointsBalanceToAiToolPoints(existingUser, now);
     await grantPendingInviteRewards(existingUser._id, now);
     const refreshedUser = await getUserById(existingUser._id);
 
@@ -150,7 +151,8 @@ export async function main(event: Event = {}) {
       avatarUrl: event.avatarUrl ?? existingUser.avatarUrl,
       inviteCode,
       inviterUserId,
-      pointsBalance: refreshedUser?.pointsBalance ?? existingUser.pointsBalance ?? 0,
+      pointsBalance: 0,
+      aiToolPointsBalance: refreshedUser?.aiToolPointsBalance ?? migratedUser.aiToolPointsBalance ?? 0,
       aiAccountRegistered,
     });
   }
@@ -162,6 +164,7 @@ export async function main(event: Event = {}) {
     avatarUrl: event.avatarUrl,
     inviteCode: createInviteCode(OPENID),
     pointsBalance: 0,
+    aiToolPointsBalance: 0,
     aiAccountRegistered: false,
     status: 'active',
     subscribeMsgAuth: false,
@@ -193,7 +196,8 @@ export async function main(event: Event = {}) {
     avatarUrl: user.avatarUrl,
     inviteCode: user.inviteCode,
     inviterUserId,
-    pointsBalance: user.pointsBalance,
+    pointsBalance: 0,
+    aiToolPointsBalance: user.aiToolPointsBalance,
     aiAccountRegistered: user.aiAccountRegistered,
   });
 }

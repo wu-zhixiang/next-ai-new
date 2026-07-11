@@ -5,6 +5,8 @@ const db_1 = require("./shared/db");
 const ai_tool_entitlements_1 = require("./shared/ai-tool-entitlements");
 const client_config_1 = require("./shared/client-config");
 const payment_config_1 = require("./shared/payment-config");
+const points_config_1 = require("./shared/points-config");
+const points_rewards_1 = require("./shared/points-rewards");
 const utils_1 = require("./shared/utils");
 const context_1 = require("./_lib/context");
 function normalizeAmount(amount) {
@@ -17,11 +19,13 @@ function getToolSingleVirtualPaymentProductId(toolId) {
         || process.env.WX_VIRTUAL_PAY_PRODUCT_ID_AI_TOOL_SINGLE;
 }
 async function main(event = {}) {
+    var _a;
     const { OPENID } = (0, context_1.getWxContext)();
-    const user = await (0, db_1.getUserByOpenId)(OPENID);
-    if (!user) {
+    const rawUser = await (0, db_1.getUserByOpenId)(OPENID);
+    if (!rawUser) {
         throw new Error('用户未登录');
     }
+    const user = await (0, points_rewards_1.migrateLegacyPointsBalanceToAiToolPoints)(rawUser);
     const toolId = String(event.toolId || '').trim();
     if (!toolId) {
         throw new Error('缺少工具 ID');
@@ -48,9 +52,18 @@ async function main(event = {}) {
             updatedAt: now,
         },
     })));
-    const appConfig = await (0, client_config_1.getClientAppConfig)();
+    const [appConfig, pointsConfig] = await Promise.all([
+        (0, client_config_1.getClientAppConfig)(),
+        (0, points_config_1.getPointsConfig)(),
+    ]);
     const orderNo = (0, utils_1.createOrderNo)('TOOL');
-    const amount = normalizeAmount(tool.pointCost / 10);
+    const originalAmount = normalizeAmount(tool.pointCost / 10);
+    const deduction = (0, points_config_1.calculatePointsDeduction)({
+        price: originalAmount,
+        availablePoints: Math.max(0, Math.floor((_a = user.aiToolPointsBalance) !== null && _a !== void 0 ? _a : 0)),
+        usePointsDeduction: Boolean(event.usePointsDeduction),
+        pointsPerYuan: pointsConfig.pointsPerYuan,
+    });
     const order = {
         orderNo,
         userId: user._id,
@@ -60,8 +73,11 @@ async function main(event = {}) {
         planName: `${tool.name}单次使用`,
         virtualPaymentProductId: getToolSingleVirtualPaymentProductId(tool.toolId),
         orderType: 'tool_single',
-        amount,
-        originalAmount: amount,
+        amount: deduction.payableAmount,
+        originalAmount,
+        pointsDeductionEnabled: Boolean(event.usePointsDeduction),
+        pointsDeducted: deduction.pointsDeducted,
+        pointsDeductAmount: deduction.pointsDeductAmount,
         toolId: tool.toolId,
         toolName: tool.name,
         toolPointCost: tool.pointCost,
@@ -75,7 +91,10 @@ async function main(event = {}) {
     await (0, db_1.collection)('orders').add({ data: order });
     return (0, utils_1.ok)({
         orderNo,
-        amount,
+        amount: deduction.payableAmount,
+        originalAmount,
+        pointsDeducted: deduction.pointsDeducted,
+        pointsDeductAmount: deduction.pointsDeductAmount,
         toolId: tool.toolId,
         toolName: tool.name,
         pointCost: tool.pointCost,

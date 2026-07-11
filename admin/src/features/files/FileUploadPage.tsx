@@ -28,21 +28,6 @@ const fileUsageLabels: Record<AdminFileUsage, string> = {
   other: '其他文件',
 };
 
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        resolve(reader.result);
-      } else {
-        reject(new Error('文件读取失败'));
-      }
-    };
-    reader.onerror = () => reject(new Error('文件读取失败'));
-    reader.readAsDataURL(file);
-  });
-}
-
 function formatFileSize(value: number): string {
   if (value >= 1024 * 1024) {
     return `${(value / 1024 / 1024).toFixed(2)} MB`;
@@ -149,10 +134,8 @@ export function FileUploadPage(): JSX.Element {
     setErrorMessage('');
     setSuccessMessage('');
     try {
-      const dataUrl = await readFileAsDataUrl(selectedFile);
-      const result = await api.uploadFile({
-        fileName: selectedFile.name,
-        dataUrl,
+      const result = await api.uploadFileChunked({
+        file: selectedFile,
         displayName: displayName.trim() || selectedFile.name,
         usage,
         note: note.trim(),

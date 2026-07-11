@@ -15,11 +15,31 @@ import type {
   PointsConfigRecord,
   ProductTypeInput,
   ProductTypeRecord,
+  UploadFileChunkResult,
   UploadFileResult,
+  UploadToolImageChunkResult,
   UploadToolImageResult,
   UserRecord,
   UserUpdateInput,
 } from '../types/admin';
+
+const ADMIN_UPLOAD_CHUNK_BYTES = 384 * 1024;
+
+function createUploadId(): string {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID().replace(/-/g, '');
+  }
+  return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 14)}`;
+}
+
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+  }
+  return btoa(binary);
+}
 
 export interface AdminApiConfig {
   readonly baseUrl: string;
@@ -194,6 +214,14 @@ export class AdminApi {
     });
   }
 
+  async uploadToolImageFile(file: File): Promise<UploadToolImageResult> {
+    const result = await this.uploadChunks<UploadToolImageChunkResult>('/tool-assets/chunks', file, {});
+    if (!result.fileId) {
+      throw new Error('图片上传失败');
+    }
+    return { fileId: result.fileId };
+  }
+
   listFiles(): Promise<readonly AdminFileRecord[]> {
     return this.http.request<readonly AdminFileRecord[]>('/files');
   }
@@ -211,6 +239,23 @@ export class AdminApi {
     });
   }
 
+  async uploadFileChunked(input: {
+    readonly file: File;
+    readonly displayName: string;
+    readonly usage: AdminFileInput['usage'];
+    readonly note: string;
+  }): Promise<UploadFileResult> {
+    const result = await this.uploadChunks<UploadFileChunkResult>('/files/chunks', input.file, {
+      displayName: input.displayName,
+      usage: input.usage,
+      note: input.note,
+    });
+    if (!result.id || !result.fileId) {
+      throw new Error('文件上传失败');
+    }
+    return result as UploadFileResult;
+  }
+
   updateFile(id: string, input: AdminFileInput): Promise<AdminFileRecord> {
     return this.http.request<AdminFileRecord>(`/files/${encodeURIComponent(id)}`, {
       method: 'PATCH',
@@ -223,5 +268,37 @@ export class AdminApi {
       method: 'DELETE',
       body: JSON.stringify({ confirm: 'DELETE' }),
     });
+  }
+
+  private async uploadChunks<T extends { readonly done: boolean }>(
+    path: string,
+    file: File,
+    extra: Record<string, unknown>,
+  ): Promise<T> {
+    const uploadId = createUploadId();
+    const chunkCount = Math.max(1, Math.ceil(file.size / ADMIN_UPLOAD_CHUNK_BYTES));
+    let latest: T | null = null;
+    for (let chunkIndex = 0; chunkIndex < chunkCount; chunkIndex += 1) {
+      const start = chunkIndex * ADMIN_UPLOAD_CHUNK_BYTES;
+      const end = Math.min(file.size, start + ADMIN_UPLOAD_CHUNK_BYTES);
+      const chunkData = arrayBufferToBase64(await file.slice(start, end).arrayBuffer());
+      latest = await this.http.request<T>(path, {
+        method: 'POST',
+        body: JSON.stringify({
+          ...extra,
+          uploadId,
+          fileName: file.name,
+          mimeType: file.type || 'application/octet-stream',
+          totalSize: file.size,
+          chunkIndex,
+          chunkCount,
+          chunkData,
+        }),
+      });
+    }
+    if (!latest?.done) {
+      throw new Error('上传分片未完成');
+    }
+    return latest;
   }
 }

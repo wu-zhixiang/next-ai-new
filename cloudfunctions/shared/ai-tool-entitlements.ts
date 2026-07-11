@@ -1,7 +1,9 @@
 import { _, collection, ensureCollection, getUserById } from './db';
 import {
+  DEFAULT_IMAGE_REPAIR_WORKER_MODEL,
   buildDefaultAiToolRecord,
   getDefaultAdminToolDefinitions,
+  normalizeAiToolWorkerModel,
   normalizeToolConfigStatus,
   type AiToolConfigRecord,
 } from './ai-tool-config';
@@ -9,6 +11,8 @@ import type {
   AiToolPointsLedgerRecord,
   AiToolSingleEntitlementRecord,
   AiToolUserUsageRecord,
+  MemberPlanRecord,
+  MembershipRecord,
   OrderRecord,
   UserRecord,
 } from './types';
@@ -20,6 +24,7 @@ export interface EffectiveAiToolConfig {
   status: AiToolConfigRecord['status'];
   pointCost: number;
   trialLimit: number;
+  workerModel?: string;
 }
 
 export type AiToolChargeResult =
@@ -60,6 +65,70 @@ function normalizeNonNegativeInteger(value: unknown): number {
   return Number.isFinite(numeric) ? Math.max(0, Math.floor(numeric)) : 0;
 }
 
+function isActiveMembership(record: MembershipRecord, now: number): boolean {
+  return record.status === 'active' && record.endAt > now;
+}
+
+function isAiToolPointPlan(record: Pick<MemberPlanRecord, 'totalAiPoints'>): boolean {
+  return normalizeNonNegativeInteger(record.totalAiPoints) > 0;
+}
+
+function isActiveAiToolPointOrder(record: OrderRecord, now: number): boolean {
+  if (
+    record.orderType === 'tool_single'
+    || record.payStatus !== 'paid'
+    || record.fulfillmentStatus !== 'fulfilled'
+    || !isAiToolPointPlan(record)
+  ) {
+    return false;
+  }
+  const startAt = record.fulfilledAt ?? record.paidAt;
+  if (!startAt || record.durationDays <= 0) {
+    return false;
+  }
+  return startAt + record.durationDays * 24 * 60 * 60 * 1000 > now;
+}
+
+export function hasActiveAiToolPointPlanFromRecords(params: {
+  memberships: readonly MembershipRecord[];
+  plans: readonly MemberPlanRecord[];
+  orders: readonly OrderRecord[];
+  now: number;
+}): boolean {
+  if (params.orders.some((order) => isActiveAiToolPointOrder(order, params.now))) {
+    return true;
+  }
+  const activeMemberships = params.memberships.filter((membership) => isActiveMembership(membership, params.now));
+  if (activeMemberships.length === 0) {
+    return false;
+  }
+  const aiToolPlans = params.plans.filter(isAiToolPointPlan);
+  return activeMemberships.some((membership) => (
+    aiToolPlans.some((plan) => (
+      plan.productCode === membership.productCode && plan.planCode === membership.planCode
+    ))
+  ));
+}
+
+async function hasActiveAiToolPointPlan(userId: string, now: number): Promise<boolean> {
+  await Promise.all([
+    ensureCollection('memberships'),
+    ensureCollection('memberPlans'),
+    ensureCollection('orders'),
+  ]);
+  const [membershipsResult, plansResult, ordersResult] = await Promise.all([
+    collection('memberships').where({ userId }).get(),
+    collection('memberPlans').where({ status: 'on' }).get(),
+    collection('orders').where({ userId, payStatus: 'paid' }).get(),
+  ]);
+  return hasActiveAiToolPointPlanFromRecords({
+    memberships: membershipsResult.data as MembershipRecord[],
+    plans: plansResult.data as MemberPlanRecord[],
+    orders: ordersResult.data as OrderRecord[],
+    now,
+  });
+}
+
 async function getToolOverride(toolId: string): Promise<(AiToolConfigRecord & { _id: string }) | undefined> {
   try {
     await ensureCollection('aiTools');
@@ -88,6 +157,7 @@ export async function getEffectiveAiToolConfig(toolId: string): Promise<Effectiv
       status: 'disabled',
       pointCost: normalizeNonNegativeInteger(override.pointCost ?? base.pointCost),
       trialLimit: normalizeNonNegativeInteger(override.trialLimit ?? base.trialLimit),
+      workerModel: normalizeAiToolWorkerModel(override.workerModel ?? base.workerModel),
     };
   }
   const merged = override ? { ...base, ...override, toolId } : base;
@@ -99,6 +169,7 @@ export async function getEffectiveAiToolConfig(toolId: string): Promise<Effectiv
     status,
     pointCost: normalizeNonNegativeInteger(merged.pointCost),
     trialLimit: normalizeNonNegativeInteger(merged.trialLimit),
+    workerModel: normalizeAiToolWorkerModel(merged.workerModel, toolId === 'imageRepair' ? DEFAULT_IMAGE_REPAIR_WORKER_MODEL : ''),
   };
 }
 
@@ -197,6 +268,18 @@ export async function reserveAiToolUsage(params: {
   }
 
   const balance = normalizeNonNegativeInteger(params.user.aiToolPointsBalance);
+  const aiToolPointPlanActive = await hasActiveAiToolPointPlan(params.user._id, params.now);
+  if (!aiToolPointPlanActive) {
+    return {
+      ok: false,
+      code: 'QUOTA_EXCEEDED',
+      message: '请单次购买或开通AI工具套餐后继续使用',
+      pointCost: params.tool.pointCost,
+      balance,
+      singlePurchaseAmount: Number((params.tool.pointCost / 10).toFixed(2)),
+    };
+  }
+
   if (balance < params.tool.pointCost) {
     return {
       ok: false,

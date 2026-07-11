@@ -2,12 +2,15 @@ import { collection, getUserByOpenId, listPendingOrdersByUserId } from '../share
 import { getEffectiveAiToolConfig } from '../shared/ai-tool-entitlements';
 import { getClientAppConfig } from '../shared/client-config';
 import { paymentTypeToPayChannel } from '../shared/payment-config';
+import { calculatePointsDeduction, getPointsConfig } from '../shared/points-config';
+import { migrateLegacyPointsBalanceToAiToolPoints } from '../shared/points-rewards';
 import type { OrderRecord } from '../shared/types';
 import { createOrderNo, ok } from '../shared/utils';
 import { getWxContext } from '../_lib/context';
 
 interface Event {
   toolId?: string;
+  usePointsDeduction?: boolean;
 }
 
 function normalizeAmount(amount: number): number {
@@ -23,10 +26,11 @@ function getToolSingleVirtualPaymentProductId(toolId: string): string | undefine
 
 export async function main(event: Event = {}) {
   const { OPENID } = getWxContext();
-  const user = await getUserByOpenId(OPENID);
-  if (!user) {
+  const rawUser = await getUserByOpenId(OPENID);
+  if (!rawUser) {
     throw new Error('用户未登录');
   }
+  const user = await migrateLegacyPointsBalanceToAiToolPoints(rawUser);
 
   const toolId = String(event.toolId || '').trim();
   if (!toolId) {
@@ -61,9 +65,18 @@ export async function main(event: Event = {}) {
       ),
   );
 
-  const appConfig = await getClientAppConfig();
+  const [appConfig, pointsConfig] = await Promise.all([
+    getClientAppConfig(),
+    getPointsConfig(),
+  ]);
   const orderNo = createOrderNo('TOOL');
-  const amount = normalizeAmount(tool.pointCost / 10);
+  const originalAmount = normalizeAmount(tool.pointCost / 10);
+  const deduction = calculatePointsDeduction({
+    price: originalAmount,
+    availablePoints: Math.max(0, Math.floor(user.aiToolPointsBalance ?? 0)),
+    usePointsDeduction: Boolean(event.usePointsDeduction),
+    pointsPerYuan: pointsConfig.pointsPerYuan,
+  });
   const order: OrderRecord = {
     orderNo,
     userId: user._id,
@@ -73,8 +86,11 @@ export async function main(event: Event = {}) {
     planName: `${tool.name}单次使用`,
     virtualPaymentProductId: getToolSingleVirtualPaymentProductId(tool.toolId),
     orderType: 'tool_single',
-    amount,
-    originalAmount: amount,
+    amount: deduction.payableAmount,
+    originalAmount,
+    pointsDeductionEnabled: Boolean(event.usePointsDeduction),
+    pointsDeducted: deduction.pointsDeducted,
+    pointsDeductAmount: deduction.pointsDeductAmount,
     toolId: tool.toolId,
     toolName: tool.name,
     toolPointCost: tool.pointCost,
@@ -90,7 +106,10 @@ export async function main(event: Event = {}) {
 
   return ok({
     orderNo,
-    amount,
+    amount: deduction.payableAmount,
+    originalAmount,
+    pointsDeducted: deduction.pointsDeducted,
+    pointsDeductAmount: deduction.pointsDeductAmount,
     toolId: tool.toolId,
     toolName: tool.name,
     pointCost: tool.pointCost,

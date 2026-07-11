@@ -76,6 +76,7 @@ export interface AiToolConfigRecord {
   visible?: boolean;
   sortOrder?: number;
   outputType?: AiToolTextOutputType;
+  workerModel?: string;
   intro?: AiToolIntroConfig;
 }
 
@@ -93,6 +94,7 @@ export interface AiToolPublicView {
   visible: boolean;
   sortOrder: number;
   outputType: AiToolTextOutputType;
+  workerModel?: string;
   pointCost: number;
   trialLimit: number;
   intro?: AiToolIntroConfig;
@@ -112,6 +114,15 @@ export const DEFAULT_TOOL_TRIAL_LIMITS: Readonly<Record<AiToolId, number>> = {
   imageGenerate: 0,
   imageRepair: 1,
 };
+
+export const AI_IMAGE_WORKER_MODEL_OPTIONS = [
+  { value: 'google:image-lite', label: 'Gemini 低成本图片模型' },
+  { value: 'google:image-flash', label: 'Gemini 主力图片模型' },
+  { value: 'google:image-pro', label: 'Gemini 高质量图片模型' },
+  { value: 'openai:gpt-image-1.5', label: 'Azure OpenAI 图片模型' },
+] as const;
+
+export const DEFAULT_IMAGE_REPAIR_WORKER_MODEL = 'google:image-flash';
 
 const DEFAULT_TOOL_CARDS: Readonly<Record<AiToolId, AiToolCardConfig>> = {
   articleSummary: {
@@ -147,8 +158,8 @@ const DEFAULT_TOOL_CARDS: Readonly<Record<AiToolId, AiToolCardConfig>> = {
   imageRepair: {
     title: '老照片修复',
     description: '老照片褪色、划痕、模糊修复',
-    badge: '接入中',
-    tags: ['接入中', '老照片', '清晰增强'],
+    badge: '已上线',
+    tags: ['已上线', '老照片', '清晰增强'],
     icon: '修',
     visible: true,
     sortOrder: 30,
@@ -247,6 +258,14 @@ function normalizeToolOutputType(value: unknown, fallback: AiToolTextOutputType)
 
 function normalizeImageFileId(value: unknown): string {
   return sanitizeAiToolConfigText(value, 500);
+}
+
+export function normalizeAiToolWorkerModel(value: unknown, fallback = ''): string {
+  const model = sanitizeAiToolConfigText(value, 80);
+  if (AI_IMAGE_WORKER_MODEL_OPTIONS.some((item) => item.value === model)) {
+    return model;
+  }
+  return fallback;
 }
 
 export function normalizeAiToolTags(value: unknown, fallback: readonly string[] = []): string[] {
@@ -359,6 +378,7 @@ export function buildDefaultAiToolRecord(definition: AiToolDefinition): AiToolCo
     visible: card.visible,
     sortOrder: card.sortOrder,
     outputType: card.outputType,
+    workerModel: definition.toolId === 'imageRepair' ? DEFAULT_IMAGE_REPAIR_WORKER_MODEL : undefined,
     intro: getDefaultToolIntroConfig(definition.toolId),
   };
 }
@@ -386,6 +406,7 @@ export function toPublicAiToolView(record: AiToolConfigRecord & { _id: string })
     visible: record.visible !== false && !record.deleted,
     sortOrder: normalizeAiToolSortOrder(record.sortOrder, defaultCard?.sortOrder ?? 999),
     outputType,
+    workerModel: normalizeAiToolWorkerModel(record.workerModel),
     pointCost: Math.max(0, Math.floor(Number(record.pointCost ?? DEFAULT_TOOL_POINT_COSTS[toolId as AiToolId] ?? 0))),
     trialLimit: Math.max(0, Math.floor(Number(record.trialLimit ?? DEFAULT_TOOL_TRIAL_LIMITS[toolId as AiToolId] ?? 0))),
     ...(hasAiToolIntroContent(intro) ? { intro } : {}),

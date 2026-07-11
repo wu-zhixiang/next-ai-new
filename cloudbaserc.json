@@ -3,6 +3,9 @@
   "functionRoot": "cloudfunctions",
   "functions": [
     {
+      "name": "ai-worker-callback"
+    },
+    {
       "name": "bind-mobile"
     },
     {
@@ -19,6 +22,9 @@
     },
     {
       "name": "list-member-plans"
+    },
+    {
+      "name": "list-ai-tool-runs"
     },
     {
       "name": "list-appstore-countries"

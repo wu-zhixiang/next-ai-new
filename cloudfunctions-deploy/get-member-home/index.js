@@ -6,6 +6,7 @@ const db_1 = require("./shared/db");
 const utils_1 = require("./shared/utils");
 const context_1 = require("./_lib/context");
 const points_config_1 = require("./shared/points-config");
+const points_rewards_1 = require("./shared/points-rewards");
 const DAY_MS = 24 * 60 * 60 * 1000;
 function buildMembershipFromOrder(order) {
     var _a;
@@ -33,11 +34,11 @@ function buildMembershipFromOrder(order) {
     };
 }
 async function main() {
-    var _a, _b, _c;
+    var _a, _b;
     const { OPENID } = (0, context_1.getWxContext)();
-    const user = await (0, db_1.getUserByOpenId)(OPENID);
+    const rawUser = await (0, db_1.getUserByOpenId)(OPENID);
     const pointsConfig = await (0, points_config_1.getPointsConfig)();
-    if (!user) {
+    if (!rawUser) {
         return (0, utils_1.ok)({
             userInfo: {},
             membership: { status: 'none', openStatusLabel: '立即开通' },
@@ -52,6 +53,7 @@ async function main() {
             },
         });
     }
+    const user = await (0, points_rewards_1.migrateLegacyPointsBalanceToAiToolPoints)(rawUser);
     const now = Date.now();
     const [memberships, orders] = await Promise.all([
         (0, db_1.listMembershipsByUserId)(user._id),
@@ -81,8 +83,8 @@ async function main() {
             nickname: user.nickname,
             avatarUrl: user.avatarUrl,
             inviteCode: user.inviteCode,
-            pointsBalance: (_b = user.pointsBalance) !== null && _b !== void 0 ? _b : 0,
-            aiToolPointsBalance: (_c = user.aiToolPointsBalance) !== null && _c !== void 0 ? _c : 0,
+            pointsBalance: 0,
+            aiToolPointsBalance: (_b = user.aiToolPointsBalance) !== null && _b !== void 0 ? _b : 0,
             aiAccount: {
                 registered: aiAccountRegistered,
                 email: user.aiAccountEmail,

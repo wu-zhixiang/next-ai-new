@@ -1,7 +1,7 @@
 import { _, collection, getUserByOpenId, listInviteRelationsByInviterId } from '../shared/db';
-import type { PointsLedgerRecord, UserRecord } from '../shared/types';
+import type { AiToolPointsLedgerRecord, PointsLedgerRecord, UserRecord } from '../shared/types';
 import { getPointsConfig } from '../shared/points-config';
-import { grantPendingInviteRewards } from '../shared/points-rewards';
+import { grantPendingInviteRewards, migrateLegacyPointsBalanceToAiToolPoints } from '../shared/points-rewards';
 import { ok } from '../shared/utils';
 import { getWxContext } from '../_lib/context';
 
@@ -16,10 +16,11 @@ interface InviteeView {
 
 export async function main() {
   const { OPENID } = getWxContext();
-  const user = await getUserByOpenId(OPENID);
-  if (!user) {
+  const rawUser = await getUserByOpenId(OPENID);
+  if (!rawUser) {
     throw new Error('用户未登录');
   }
+  const user = await migrateLegacyPointsBalanceToAiToolPoints(rawUser);
 
   await grantPendingInviteRewards(user._id);
   const refreshedUser = await getUserByOpenId(OPENID);
@@ -39,13 +40,15 @@ export async function main() {
     }
   }
 
-  const [ledgersResult, pointsConfig] = await Promise.all([
-    collection('pointsLedger')
-      .where({ userId: user._id })
-      .get(),
+  const [legacyLedgersResult, aiToolLedgersResult, pointsConfig] = await Promise.all([
+    collection('pointsLedger').where({ userId: user._id }).get(),
+    collection('aiToolPointsLedger').where({ userId: user._id }).get(),
     getPointsConfig(),
   ]);
-  const ledgers = ledgersResult.data as PointsLedgerRecord[];
+  const ledgers = [
+    ...(legacyLedgersResult.data as PointsLedgerRecord[]),
+    ...(aiToolLedgersResult.data as AiToolPointsLedgerRecord[]),
+  ];
   const rewardLedgers = ledgers.filter((ledger) => ledger.type === 'invite_reward');
   const milestoneLedgers = ledgers.filter((ledger) => ledger.type === 'invite_milestone');
   const rewardByInvitee = new Map<string, number>();
@@ -72,7 +75,8 @@ export async function main() {
   return ok({
     inviteCode: currentUser.inviteCode,
     inviteCount: invitees.length,
-    pointsBalance: currentUser.pointsBalance ?? 0,
+    pointsBalance: currentUser.aiToolPointsBalance ?? 0,
+    aiToolPointsBalance: currentUser.aiToolPointsBalance ?? 0,
     totalRewardPoints,
     invitees,
     pointsConfig: {

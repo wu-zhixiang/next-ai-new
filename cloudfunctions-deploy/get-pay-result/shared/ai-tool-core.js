@@ -52,7 +52,7 @@ exports.AI_TOOL_DEFINITIONS = [
         name: '老照片修复',
         description: '老照片褪色、划痕、模糊修复。',
         category: 'image',
-        enabled: false,
+        enabled: true,
         inputModes: ['image', 'text'],
         outputModes: ['image'],
         dailyFreeLimit: exports.AI_TOOL_DAILY_FREE_LIMIT,
@@ -140,7 +140,8 @@ function normalizeRunAiToolInput(event = {}) {
     const text = sanitizeText((_a = event.text) !== null && _a !== void 0 ? _a : event.content);
     const fileText = sanitizeFileText(event.fileText);
     const imageDataUrl = sanitizeImageDataUrl(event.imageDataUrl);
-    if (!text && !fileText && !imageDataUrl) {
+    const assetIds = normalizeAssetIds(event.assetIds);
+    if (!text && !fileText && !imageDataUrl && assetIds.length === 0) {
         return {
             ok: false,
             code: 'INVALID_INPUT',
@@ -157,7 +158,7 @@ function normalizeRunAiToolInput(event = {}) {
             fileName: sanitizeFileName(event.fileName),
             fileType: sanitizeFileType(event.fileType),
             imageDataUrl,
-            assetIds: normalizeAssetIds(event.assetIds),
+            assetIds,
             source: normalizeSource(event.source),
             rewardAdUnlocked: Boolean(event.rewardAdUnlocked || event.adUnlocked),
         },

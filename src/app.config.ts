@@ -7,6 +7,7 @@ const appConfig = {
     'pages/tools/index',
     'pages/tool-intro/index',
     'pages/tool-detail/index',
+    'pages/tool-history/index',
     'pages/records/index',
     'pages/invite/index',
     'pages/member/index',

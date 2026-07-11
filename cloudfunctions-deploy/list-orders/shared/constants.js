@@ -25,6 +25,7 @@ exports.COLLECTIONS = {
     aiToolTemplates: 'ai_tool_templates',
     aiTools: 'ai_tools',
     adminFiles: 'admin_files',
+    adminUploadChunks: 'admin_upload_chunks',
     invoiceRequests: 'invoice_requests',
     deliveries: 'deliveries',
     reminderLogs: 'reminder_logs',

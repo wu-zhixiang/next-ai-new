@@ -8,12 +8,16 @@ const operator_notify_1 = require("./operator-notify");
 const utils_1 = require("./utils");
 const ai_tool_entitlements_1 = require("./ai-tool-entitlements");
 async function deductPaymentPointsOnce(order, paidAt) {
-    var _a;
+    var _a, _b;
     const points = Math.max(0, Math.floor((_a = order.pointsDeducted) !== null && _a !== void 0 ? _a : 0));
     if (points <= 0) {
         return;
     }
-    const existing = await (0, db_1.collection)('pointsLedger')
+    if (order.orderType !== 'tool_single' && Math.max(0, Math.floor((_b = order.totalAiPoints) !== null && _b !== void 0 ? _b : 0)) <= 0) {
+        return;
+    }
+    await (0, db_1.ensureCollection)('aiToolPointsLedger');
+    const existing = await (0, db_1.collection)('aiToolPointsLedger')
         .where({
         type: 'payment_deduct',
         orderNo: order.orderNo,
@@ -31,22 +35,23 @@ async function deductPaymentPointsOnce(order, paidAt) {
     }
     await (0, db_1.collection)('users').doc(order.userId).update({
         data: {
-            pointsBalance: db_1._.inc(-points),
+            aiToolPointsBalance: db_1._.inc(-points),
             updatedAt: paidAt,
         },
     });
     const user = await (0, db_1.getUserById)(order.userId);
     const ledger = {
         userId: order.userId,
+        openid: user === null || user === void 0 ? void 0 : user.openid,
         orderNo: order.orderNo,
         type: 'payment_deduct',
         direction: 'out',
         points,
-        balanceAfter: user === null || user === void 0 ? void 0 : user.pointsBalance,
-        description: `订阅 ${order.planName} 抵扣积分`,
+        balanceAfter: user === null || user === void 0 ? void 0 : user.aiToolPointsBalance,
+        description: `${order.planName}抵扣${points}AI工具积分`,
         createdAt: paidAt,
     };
-    await (0, db_1.collection)('pointsLedger').add({ data: ledger });
+    await (0, db_1.collection)('aiToolPointsLedger').add({ data: ledger });
     console.info('points.deduct.created', {
         orderNo: order.orderNo,
         userId: order.userId,
@@ -69,6 +74,7 @@ async function markOrderPaidAndStartOpening(order, options = {}) {
                 },
             });
         }
+        await deductPaymentPointsOnce(order, paidAt);
         await (0, ai_tool_entitlements_1.grantSingleToolEntitlementOnce)(order, paidAt);
         return;
     }

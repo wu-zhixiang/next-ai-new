@@ -7,12 +7,13 @@ const points_rewards_1 = require("./shared/points-rewards");
 const utils_1 = require("./shared/utils");
 const context_1 = require("./_lib/context");
 async function main() {
-    var _a, _b;
+    var _a, _b, _c;
     const { OPENID } = (0, context_1.getWxContext)();
-    const user = await (0, db_1.getUserByOpenId)(OPENID);
-    if (!user) {
+    const rawUser = await (0, db_1.getUserByOpenId)(OPENID);
+    if (!rawUser) {
         throw new Error('用户未登录');
     }
+    const user = await (0, points_rewards_1.migrateLegacyPointsBalanceToAiToolPoints)(rawUser);
     await (0, points_rewards_1.grantPendingInviteRewards)(user._id);
     const refreshedUser = await (0, db_1.getUserByOpenId)(OPENID);
     const currentUser = refreshedUser !== null && refreshedUser !== void 0 ? refreshedUser : user;
@@ -29,13 +30,15 @@ async function main() {
             usersById.set(item._id, item);
         }
     }
-    const [ledgersResult, pointsConfig] = await Promise.all([
-        (0, db_1.collection)('pointsLedger')
-            .where({ userId: user._id })
-            .get(),
+    const [legacyLedgersResult, aiToolLedgersResult, pointsConfig] = await Promise.all([
+        (0, db_1.collection)('pointsLedger').where({ userId: user._id }).get(),
+        (0, db_1.collection)('aiToolPointsLedger').where({ userId: user._id }).get(),
         (0, points_config_1.getPointsConfig)(),
     ]);
-    const ledgers = ledgersResult.data;
+    const ledgers = [
+        ...legacyLedgersResult.data,
+        ...aiToolLedgersResult.data,
+    ];
     const rewardLedgers = ledgers.filter((ledger) => ledger.type === 'invite_reward');
     const milestoneLedgers = ledgers.filter((ledger) => ledger.type === 'invite_milestone');
     const rewardByInvitee = new Map();
@@ -61,7 +64,8 @@ async function main() {
     return (0, utils_1.ok)({
         inviteCode: currentUser.inviteCode,
         inviteCount: invitees.length,
-        pointsBalance: (_b = currentUser.pointsBalance) !== null && _b !== void 0 ? _b : 0,
+        pointsBalance: (_b = currentUser.aiToolPointsBalance) !== null && _b !== void 0 ? _b : 0,
+        aiToolPointsBalance: (_c = currentUser.aiToolPointsBalance) !== null && _c !== void 0 ? _c : 0,
         totalRewardPoints,
         invitees,
         pointsConfig: {

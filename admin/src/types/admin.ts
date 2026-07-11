@@ -61,6 +61,13 @@ export interface AdminFileRecord {
   readonly updatedAt: string;
 }
 
+export interface ChunkUploadProgress {
+  readonly uploadId: string;
+  readonly received: number;
+  readonly chunkCount: number;
+  readonly done: boolean;
+}
+
 export interface AiToolIntroHighlight {
   readonly title: string;
   readonly desc: string;
@@ -145,6 +152,7 @@ export interface AiToolRecord {
   readonly visible: boolean;
   readonly sortOrder: number;
   readonly outputType: AiToolOutputType;
+  readonly workerModel?: string;
   readonly intro?: AiToolIntroConfig;
 }
 
@@ -253,6 +261,7 @@ export type AiToolInput = Pick<
   | 'visible'
   | 'sortOrder'
   | 'outputType'
+  | 'workerModel'
   | 'intro'
 >;
 
@@ -267,4 +276,10 @@ export interface UploadToolImageResult {
   readonly fileId: string;
 }
 
+export type UploadToolImageChunkResult = ChunkUploadProgress & {
+  readonly fileId?: string;
+};
+
 export type UploadFileResult = AdminFileRecord;
+
+export type UploadFileChunkResult = Partial<AdminFileRecord> & ChunkUploadProgress;

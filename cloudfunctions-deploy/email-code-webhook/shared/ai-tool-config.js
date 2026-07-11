@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.DEFAULT_TOOL_TRIAL_LIMITS = exports.DEFAULT_TOOL_POINT_COSTS = exports.DEFAULT_TOOL_BASELINE_AT = exports.ADMIN_VISIBLE_DEFAULT_TOOL_IDS = void 0;
+exports.DEFAULT_IMAGE_REPAIR_WORKER_MODEL = exports.AI_IMAGE_WORKER_MODEL_OPTIONS = exports.DEFAULT_TOOL_TRIAL_LIMITS = exports.DEFAULT_TOOL_POINT_COSTS = exports.DEFAULT_TOOL_BASELINE_AT = exports.ADMIN_VISIBLE_DEFAULT_TOOL_IDS = void 0;
 exports.sanitizeAiToolConfigText = sanitizeAiToolConfigText;
 exports.getDefaultAdminToolDefinitions = getDefaultAdminToolDefinitions;
 exports.getDefaultToolCardConfig = getDefaultToolCardConfig;
@@ -9,6 +9,7 @@ exports.normalizeToolConfigCategory = normalizeToolConfigCategory;
 exports.normalizeToolConfigStatus = normalizeToolConfigStatus;
 exports.normalizeDefinitionCategory = normalizeDefinitionCategory;
 exports.getDefaultToolStatus = getDefaultToolStatus;
+exports.normalizeAiToolWorkerModel = normalizeAiToolWorkerModel;
 exports.normalizeAiToolTags = normalizeAiToolTags;
 exports.normalizeAiToolSortOrder = normalizeAiToolSortOrder;
 exports.normalizeAiToolIntroConfig = normalizeAiToolIntroConfig;
@@ -30,6 +31,13 @@ exports.DEFAULT_TOOL_TRIAL_LIMITS = {
     imageGenerate: 0,
     imageRepair: 1,
 };
+exports.AI_IMAGE_WORKER_MODEL_OPTIONS = [
+    { value: 'google:image-lite', label: 'Gemini 低成本图片模型' },
+    { value: 'google:image-flash', label: 'Gemini 主力图片模型' },
+    { value: 'google:image-pro', label: 'Gemini 高质量图片模型' },
+    { value: 'openai:gpt-image-1.5', label: 'Azure OpenAI 图片模型' },
+];
+exports.DEFAULT_IMAGE_REPAIR_WORKER_MODEL = 'google:image-flash';
 const DEFAULT_TOOL_CARDS = {
     articleSummary: {
         title: '摘要总结',
@@ -64,8 +72,8 @@ const DEFAULT_TOOL_CARDS = {
     imageRepair: {
         title: '老照片修复',
         description: '老照片褪色、划痕、模糊修复',
-        badge: '接入中',
-        tags: ['接入中', '老照片', '清晰增强'],
+        badge: '已上线',
+        tags: ['已上线', '老照片', '清晰增强'],
         icon: '修',
         visible: true,
         sortOrder: 30,
@@ -151,6 +159,13 @@ function normalizeToolOutputType(value, fallback) {
 }
 function normalizeImageFileId(value) {
     return sanitizeAiToolConfigText(value, 500);
+}
+function normalizeAiToolWorkerModel(value, fallback = '') {
+    const model = sanitizeAiToolConfigText(value, 80);
+    if (exports.AI_IMAGE_WORKER_MODEL_OPTIONS.some((item) => item.value === model)) {
+        return model;
+    }
+    return fallback;
 }
 function normalizeAiToolTags(value, fallback = []) {
     const source = Array.isArray(value)
@@ -256,6 +271,7 @@ function buildDefaultAiToolRecord(definition) {
         visible: card.visible,
         sortOrder: card.sortOrder,
         outputType: card.outputType,
+        workerModel: definition.toolId === 'imageRepair' ? exports.DEFAULT_IMAGE_REPAIR_WORKER_MODEL : undefined,
         intro: getDefaultToolIntroConfig(definition.toolId),
     };
 }
@@ -283,6 +299,7 @@ function toPublicAiToolView(record) {
         visible: record.visible !== false && !record.deleted,
         sortOrder: normalizeAiToolSortOrder(record.sortOrder, (_c = defaultCard === null || defaultCard === void 0 ? void 0 : defaultCard.sortOrder) !== null && _c !== void 0 ? _c : 999),
         outputType,
+        workerModel: normalizeAiToolWorkerModel(record.workerModel),
         pointCost: Math.max(0, Math.floor(Number((_e = (_d = record.pointCost) !== null && _d !== void 0 ? _d : exports.DEFAULT_TOOL_POINT_COSTS[toolId]) !== null && _e !== void 0 ? _e : 0))),
         trialLimit: Math.max(0, Math.floor(Number((_g = (_f = record.trialLimit) !== null && _f !== void 0 ? _f : exports.DEFAULT_TOOL_TRIAL_LIMITS[toolId]) !== null && _g !== void 0 ? _g : 0))),
         ...(hasAiToolIntroContent(intro) ? { intro } : {}),

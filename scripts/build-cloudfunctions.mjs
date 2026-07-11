@@ -7,6 +7,7 @@ const sourceRoot = path.join(projectRoot, 'cloudfunctions');
 const compileRoot = path.join('/private/tmp', 'gpt-pay-cloudfunctions-compiled');
 const deployRoot = path.join(projectRoot, 'cloudfunctions-deploy');
 const functionNames = [
+  'ai-worker-callback',
   'admin-api',
   'bind-mobile',
   'cleanup-abandoned-orders',
@@ -27,6 +28,7 @@ const functionNames = [
   'get-pay-result',
   'get-profile',
   'list-ai-news',
+  'list-ai-tool-runs',
   'list-ai-tools',
   'list-invoice-orders',
   'list-orders',
@@ -78,6 +80,8 @@ execFileSync(
     path.join(sourceRoot, 'shared', 'ai-tool-core.ts'),
     path.join(sourceRoot, 'shared', 'ai-tool-entitlements.ts'),
     path.join(sourceRoot, 'shared', 'ai-tool-generation.ts'),
+    path.join(sourceRoot, 'shared', 'ai-image-worker-core.ts'),
+    path.join(sourceRoot, 'shared', 'ai-image-worker.ts'),
     path.join(sourceRoot, 'shared', 'ai-tool-service.ts'),
     path.join(sourceRoot, 'shared', 'client-config.ts'),
     path.join(sourceRoot, 'shared', 'ai-account.ts'),
@@ -149,8 +153,10 @@ const functionsThatNeedXVideo = new Set([
   'operator-api',
 ]);
 const functionsThatNeedAiToolShared = new Set([
+  'ai-worker-callback',
   'admin-api',
   'get-ai-tool-run',
+  'list-ai-tool-runs',
   'list-ai-tools',
   'run-ai-tool',
   'summarize-ai-tool',
@@ -195,6 +201,8 @@ for (const name of functionNames) {
     fs.rmSync(path.join(targetSharedRoot, 'x-video.js'), { force: true });
   }
   if (!functionsThatNeedAiToolShared.has(name)) {
+    fs.rmSync(path.join(targetSharedRoot, 'ai-image-worker-core.js'), { force: true });
+    fs.rmSync(path.join(targetSharedRoot, 'ai-image-worker.js'), { force: true });
     fs.rmSync(path.join(targetSharedRoot, 'ai-tool-generation.js'), { force: true });
     fs.rmSync(path.join(targetSharedRoot, 'ai-tool-service.js'), { force: true });
   }

@@ -13,6 +13,7 @@ export interface LoginResult {
   inviterUserId?: string;
   inviteCode?: string;
   pointsBalance?: number;
+  aiToolPointsBalance?: number;
   aiAccountRegistered?: boolean;
   profileAuthed?: boolean;
   authConsentGranted?: boolean;

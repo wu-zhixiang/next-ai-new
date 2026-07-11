@@ -1,7 +1,7 @@
-import { _, collection, getMembershipByUserId, getUserById } from './db';
+import { _, collection, ensureCollection, getMembershipByUserId, getUserById } from './db';
 import { sendMembershipOpenedReminder } from './member-reminders';
 import { notifyOperatorPaidOrderOnce } from './operator-notify';
-import type { MembershipRecord, OrderRecord, PointsLedgerRecord } from './types';
+import type { AiToolPointsLedgerRecord, MembershipRecord, OrderRecord } from './types';
 import { calcMembershipRemainDays } from './utils';
 import { grantAiToolPlanPointsOnce, grantSingleToolEntitlementOnce } from './ai-tool-entitlements';
 
@@ -10,8 +10,12 @@ async function deductPaymentPointsOnce(order: OrderRecord & { _id: string }, pai
   if (points <= 0) {
     return;
   }
+  if (order.orderType !== 'tool_single' && Math.max(0, Math.floor(order.totalAiPoints ?? 0)) <= 0) {
+    return;
+  }
+  await ensureCollection('aiToolPointsLedger');
 
-  const existing = await collection('pointsLedger')
+  const existing = await collection('aiToolPointsLedger')
     .where({
       type: 'payment_deduct',
       orderNo: order.orderNo,
@@ -30,23 +34,24 @@ async function deductPaymentPointsOnce(order: OrderRecord & { _id: string }, pai
 
   await collection('users').doc(order.userId).update({
     data: {
-      pointsBalance: _.inc(-points),
+      aiToolPointsBalance: _.inc(-points),
       updatedAt: paidAt,
     },
   });
 
   const user = await getUserById(order.userId);
-  const ledger: PointsLedgerRecord = {
+  const ledger: AiToolPointsLedgerRecord = {
     userId: order.userId,
+    openid: user?.openid,
     orderNo: order.orderNo,
     type: 'payment_deduct',
     direction: 'out',
     points,
-    balanceAfter: user?.pointsBalance,
-    description: `订阅 ${order.planName} 抵扣积分`,
+    balanceAfter: user?.aiToolPointsBalance,
+    description: `${order.planName}抵扣${points}AI工具积分`,
     createdAt: paidAt,
   };
-  await collection('pointsLedger').add({ data: ledger });
+  await collection('aiToolPointsLedger').add({ data: ledger });
   console.info('points.deduct.created', {
     orderNo: order.orderNo,
     userId: order.userId,
@@ -75,6 +80,7 @@ export async function markOrderPaidAndStartOpening(
         },
       });
     }
+    await deductPaymentPointsOnce(order, paidAt);
     await grantSingleToolEntitlementOnce(order, paidAt);
     return;
   }

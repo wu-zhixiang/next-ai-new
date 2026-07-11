@@ -56,6 +56,18 @@ test('run AI tool input requires text or a readable image/file context', () => {
   });
 });
 
+test('run AI tool input accepts uploaded cloud asset ids', () => {
+  const result = normalizeRunAiToolInput({
+    toolId: 'imageRepair',
+    assetIds: ['cloud://env-id.bucket/ai-tools/source/photo.jpg'],
+  });
+
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.deepEqual(result.input.assetIds, ['cloud://env-id.bucket/ai-tools/source/photo.jpg']);
+  assert.equal(result.input.imageDataUrl, '');
+});
+
 test('AI tool usage date key uses China timezone boundaries', () => {
   assert.equal(getAiToolUsageDateKey(Date.UTC(2026, 6, 9, 15, 59, 59)), '2026-07-09');
   assert.equal(getAiToolUsageDateKey(Date.UTC(2026, 6, 9, 16, 0, 0)), '2026-07-10');

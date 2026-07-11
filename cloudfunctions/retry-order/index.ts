@@ -6,6 +6,7 @@ import { getClientAppConfig } from '../shared/client-config';
 import { paymentTypeToPayChannel } from '../shared/payment-config';
 import { calculatePointsDeduction, getPointsConfig } from '../shared/points-config';
 import { getEffectiveAiToolConfig } from '../shared/ai-tool-entitlements';
+import { migrateLegacyPointsBalanceToAiToolPoints } from '../shared/points-rewards';
 
 interface Event {
   orderNo: string;
@@ -29,10 +30,11 @@ export async function main(event: Event) {
   }
 
   const { OPENID } = getWxContext();
-  const user = await getUserByOpenId(OPENID);
-  if (!user) {
+  const rawUser = await getUserByOpenId(OPENID);
+  if (!rawUser) {
     throw new Error('用户未登录');
   }
+  const user = await migrateLegacyPointsBalanceToAiToolPoints(rawUser);
 
   const oldOrder = await getOrderByNo(orderNo);
   if (!oldOrder) {
@@ -54,7 +56,10 @@ export async function main(event: Event) {
     if (!tool.enabled) {
       throw new Error('该工具正在接入中');
     }
-    const appConfig = await getClientAppConfig();
+    const [appConfig, pointsConfig] = await Promise.all([
+      getClientAppConfig(),
+      getPointsConfig(),
+    ]);
     const now = Date.now();
     await collection('orders').doc(oldOrder._id).update({
       data: {
@@ -65,7 +70,14 @@ export async function main(event: Event) {
       },
     });
 
-    const amount = normalizeAmount(tool.pointCost / 10);
+    const originalAmount = normalizeAmount(tool.pointCost / 10);
+    const usePointsDeduction = Boolean(oldOrder.pointsDeductionEnabled);
+    const deduction = calculatePointsDeduction({
+      price: originalAmount,
+      availablePoints: Math.max(0, Math.floor(user.aiToolPointsBalance ?? 0)),
+      usePointsDeduction,
+      pointsPerYuan: pointsConfig.pointsPerYuan,
+    });
     const nextOrder: OrderRecord = {
       orderNo: createOrderNo('TOOL'),
       userId: user._id,
@@ -75,8 +87,11 @@ export async function main(event: Event) {
       planName: `${tool.name}单次使用`,
       virtualPaymentProductId: getToolSingleVirtualPaymentProductId(tool.toolId),
       orderType: 'tool_single',
-      amount,
-      originalAmount: amount,
+      amount: deduction.payableAmount,
+      originalAmount,
+      pointsDeductionEnabled: usePointsDeduction,
+      pointsDeducted: deduction.pointsDeducted,
+      pointsDeductAmount: deduction.pointsDeductAmount,
       toolId: tool.toolId,
       toolName: tool.name,
       toolPointCost: tool.pointCost,
@@ -117,8 +132,9 @@ export async function main(event: Event) {
     },
   });
 
-  const availablePoints = Math.max(0, Math.floor(user.pointsBalance ?? 0));
-  const usePointsDeduction = Boolean(oldOrder.pointsDeductionEnabled);
+  const aiToolPointPlan = Math.max(0, Math.floor(plan.totalAiPoints ?? 0)) > 0;
+  const availablePoints = Math.max(0, Math.floor(user.aiToolPointsBalance ?? 0));
+  const usePointsDeduction = aiToolPointPlan && Boolean(oldOrder.pointsDeductionEnabled);
   const deduction = calculatePointsDeduction({
     price: plan.price,
     availablePoints,

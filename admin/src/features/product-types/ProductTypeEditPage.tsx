@@ -139,21 +139,6 @@ function buildProductInput(form: ProductTypeFormState): ProductTypeInput {
   };
 }
 
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        resolve(reader.result);
-      } else {
-        reject(new Error('图片读取失败'));
-      }
-    };
-    reader.onerror = () => reject(new Error('图片读取失败'));
-    reader.readAsDataURL(file);
-  });
-}
-
 interface ImageUploadFieldProps {
   readonly label: string;
   readonly value: string;
@@ -245,8 +230,7 @@ export function ProductTypeEditPage(): JSX.Element {
     if (file.size > 3 * 1024 * 1024) {
       throw new Error('图片不能超过 3MB');
     }
-    const dataUrl = await readFileAsDataUrl(file);
-    const result = await api.uploadToolImage(dataUrl);
+    const result = await api.uploadToolImageFile(file);
     return result.fileId;
   }
 
