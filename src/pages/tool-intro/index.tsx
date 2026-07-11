@@ -82,7 +82,7 @@ export default function ToolIntroPage(): JSX.Element {
             </View>
           </View>
 
-          <View className='tool-intro-section'>
+          {intro.highlights?.length > 0 && <View className='tool-intro-section'>
             <Text className='tool-intro-section__title'>适合处理</Text>
             <View className='tool-intro-highlights'>
               {intro.highlights.map((item) => (
@@ -92,7 +92,7 @@ export default function ToolIntroPage(): JSX.Element {
                 </View>
               ))}
             </View>
-          </View>
+          </View>}
 
           <View className='tool-intro-section'>
             <Text className='tool-intro-section__title'>案例展示</Text>
