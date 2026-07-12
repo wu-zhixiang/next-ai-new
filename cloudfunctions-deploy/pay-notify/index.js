@@ -80,7 +80,7 @@ async function main(event) {
         }));
         return notifyXmlResponse('FAIL', '订单金额不匹配');
     }
-    if (order.payStatus === 'paid') {
+    if (order.payStatus === 'paid' && order.fulfillmentStatus === 'fulfilled') {
         return notify.callbackMode ? notifyXmlResponse('SUCCESS', 'OK') : (0, utils_1.ok)({ success: true, duplicated: true });
     }
     const now = (_a = notify.paidAt) !== null && _a !== void 0 ? _a : (0, utils_1.parseWechatPayTime)(notify.time_end);
@@ -123,7 +123,7 @@ async function handleVirtualPaymentNotify(notify) {
         }));
         return notifyTextResponse('fail');
     }
-    if (order.payStatus === 'paid') {
+    if (order.payStatus === 'paid' && order.fulfillmentStatus === 'fulfilled') {
         return notifyTextResponse('success');
     }
     await (0, orders_1.markOrderPaidAndStartOpening)(order, {

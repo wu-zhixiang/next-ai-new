@@ -10,6 +10,7 @@ export type MembershipStatus = 'opening' | 'active' | 'expired' | 'cancelled' | 
 export type ExpireTag = 'normal' | 'within_30d' | 'within_7d' | 'within_3d' | 'expired';
 export type PayStatus = 'pending' | 'paid' | 'failed' | 'closed' | 'refunded';
 export type FulfillmentStatus = 'pending' | 'opening' | 'fulfilled' | 'failed';
+export type FulfillmentMode = 'immediate' | 'manual';
 export type PayChannel = 'wechat_pay' | 'wechat_virtual_pay';
 export type InvoiceStatus = 'none' | 'submitted' | 'processing' | 'issued' | 'failed' | 'rejected';
 export type OrderType = 'purchase' | 'renew' | 'tool_single';
@@ -118,6 +119,7 @@ export interface ProductTypeRecord {
       description: string;
     }>;
   };
+  fulfillmentMode?: FulfillmentMode;
   sort: number;
   status: 'on' | 'off';
   createdAt: number;
@@ -219,6 +221,7 @@ export interface OrderRecord {
   durationDays: number;
   payStatus: PayStatus;
   fulfillmentStatus?: FulfillmentStatus;
+  fulfillmentMode?: FulfillmentMode;
   payChannel: PayChannel;
   transactionId?: string;
   prepayId?: string;
@@ -266,12 +269,41 @@ export interface AiToolPointsLedgerRecord {
     | 'invite_reward'
     | 'invite_milestone'
     | 'legacy_points_migration'
+    | 'points_expire'
     | 'adjustment';
   direction: 'in' | 'out';
   points: number;
+  bucketDeductions?: AiToolPointBucketDeduction[];
   balanceAfter?: number;
   description: string;
   createdAt: number;
+}
+
+export type AiToolPointBucketSourceType = 'plan' | 'adjustment';
+export type AiToolPointBucketStatus = 'active' | 'expired' | 'used_up';
+
+export interface AiToolPointBucketDeduction {
+  bucketId: string;
+  sourceType: AiToolPointBucketSourceType;
+  points: number;
+  expiresAt?: number;
+}
+
+export interface AiToolPointBucketRecord {
+  _id?: string;
+  userId: string;
+  openid?: string;
+  sourceType: AiToolPointBucketSourceType;
+  orderNo?: string;
+  relatedUserId?: string;
+  milestoneKey?: string;
+  runId?: string;
+  pointsTotal: number;
+  pointsRemaining: number;
+  expiresAt?: number;
+  status: AiToolPointBucketStatus;
+  createdAt: number;
+  updatedAt: number;
 }
 
 export interface AiToolSingleEntitlementRecord {
@@ -521,6 +553,7 @@ export interface ProductTypeView {
   }>;
   complianceEnabled?: boolean;
   complianceDisplay?: ProductTypeRecord['complianceDisplay'];
+  fulfillmentMode?: FulfillmentMode;
 }
 
 export interface AppStoreCountryView {

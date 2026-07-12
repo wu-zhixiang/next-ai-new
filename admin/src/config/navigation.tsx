@@ -2,6 +2,7 @@ import {
   BadgeDollarSign,
   Bot,
   Coins,
+  Settings,
   FileUp,
   LayoutDashboard,
   ListChecks,
@@ -47,6 +48,11 @@ export const navigationItems: readonly NavigationItem[] = [
     label: '积分配置',
     path: '/points-config',
     icon: Coins,
+  },
+  {
+    label: 'APP Config',
+    path: '/app-config',
+    icon: Settings,
   },
   {
     label: '文件管理',

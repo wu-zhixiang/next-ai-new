@@ -78,6 +78,16 @@ export function ProductTypesPage(): JSX.Element {
       cell: (row) => <StatusBadge label={row.available ? '可选择' : '不可选'} tone={row.available ? 'success' : 'neutral'} />,
     },
     {
+      id: 'fulfillmentMode',
+      header: '生效方式',
+      cell: (row) => (
+        <StatusBadge
+          label={row.fulfillmentMode === 'manual' ? '人工开通' : '立即生效'}
+          tone={row.fulfillmentMode === 'manual' ? 'warning' : 'success'}
+        />
+      ),
+    },
+    {
       id: 'sort',
       header: '排序',
       align: 'right',

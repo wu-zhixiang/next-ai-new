@@ -23,6 +23,13 @@
           "scene": null
         },
         {
+          "name": "pages/tool-detail/index",
+          "pathName": "pages/tool-detail/index",
+          "query": "tool=imageRepair",
+          "launchMode": "default",
+          "scene": null
+        },
+        {
           "name": "pages/pay-result/index",
           "pathName": "pages/pay-result/index",
           "query": "orderNo=ORD177929024340992016",

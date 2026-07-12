@@ -12,9 +12,9 @@ import {
 test('default points policy uses invitation rewards only', () => {
   const config = normalizePointsConfigRecord(null);
 
-  assert.equal(DEFAULT_POINTS_PER_YUAN, 10);
+  assert.equal(DEFAULT_POINTS_PER_YUAN, 1);
   assert.equal(DEFAULT_INVITE_BASE_REWARD_POINTS, 5);
-  assert.equal(config.pointsPerYuan, 10);
+  assert.equal(config.pointsPerYuan, 1);
   assert.equal(config.inviteBaseRewardPoints, 5);
   assert.deepEqual(config.inviteMilestones, []);
 });

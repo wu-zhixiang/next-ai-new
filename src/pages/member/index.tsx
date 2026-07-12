@@ -97,23 +97,9 @@ interface SaveAiAccountResult {
   aiAccountEmail: string;
 }
 
-const DAY_MS = 24 * 60 * 60 * 1000;
 const MINUTE_MS = 60 * 1000;
 const EMAIL_CODE_VISIBLE_WINDOW_MS = 5 * MINUTE_MS;
-const DEFAULT_POINTS_PER_YUAN = 10;
-
-function formatRemainCountdown(endAt?: number, now = Date.now()): { value: string; label: string; remainMs: number } {
-  if (!endAt) {
-    return { value: '0', label: '剩余时间', remainMs: 0 };
-  }
-  const remainMs = Math.max(0, endAt - now);
-  const days = Math.floor(remainMs / DAY_MS);
-  return {
-    value: String(days),
-    label: '剩余天数',
-    remainMs,
-  };
-}
+const DEFAULT_POINTS_PER_YUAN = 1;
 
 interface AiAccountResult {
   email: string;
@@ -164,6 +150,7 @@ const CHEVRON_RIGHT_ICON = require('../../assets/icons/chevron-right.svg') as st
 const CACHE_KEY = AUTH_CACHE_KEY;
 const USER_AGREEMENT_URL = 'https://cloud1-d3gbrpive8611514c-1348953433.tcloudbaseapp.com/cloud-admin/htmls/%E7%94%A8%E6%88%B7%E5%8D%8F%E8%AE%AE.html?sign=55a2a34c2317b48fc09603658d7a64b1&t=1779005578';
 const PRIVACY_AGREEMENT_URL = 'https://cloud1-d3gbrpive8611514c-1348953433.tcloudbaseapp.com/cloud-admin/htmls/%E9%9A%90%E7%A7%81%E5%8D%8F%E8%AE%AE.html?sign=3626cb47334346612df3a4d34746e859&t=1779005613';
+const AI_TOOL_MEMBER_AVATAR_URL = 'cloud://cloud1-d3gbrpive8611514c.636c-cloud1-d3gbrpive8611514c-1348953433/cloud-admin/uploads/1783835486584-02643-ai_robot_ghibli_400x400_under100kb.webp';
 const PRODUCT_DETAIL_PAGE_URLS: Record<string, string> = {
   ai_news: 'pages/news-detail/index?id=516f04746a473228001c688068c819b7',
   quota_points: 'pages/news-detail/index?id=e1a876e86a47362d000e27b855d8b1ed',
@@ -224,7 +211,6 @@ export default function MemberPage(): JSX.Element {
   const [memberLoading, setMemberLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [paymentLocked, setPaymentLocked] = useState(false);
-  const [clockNow, setClockNow] = useState(Date.now());
   const [authModalVisible, setAuthModalVisible] = useState(false);
   const [pendingAuthAction, setPendingAuthAction] = useState<PendingAuthAction | null>(null);
   const [productComplianceMode, setProductComplianceMode] = useState<boolean | null>(null);
@@ -281,14 +267,6 @@ export default function MemberPage(): JSX.Element {
       showTabBarSafely();
     };
   }, [paymentLocked]);
-
-  useEffect(() => {
-    if (data.membership.status !== 'active') return;
-    const timer = setInterval(() => {
-      setClockNow(Date.now());
-    }, MINUTE_MS);
-    return () => clearInterval(timer);
-  }, [data.membership.status, data.membership.endAt]);
 
   function loadCachedUserInfo(): void {
     const cached = getCachedUserInfo();
@@ -358,29 +336,9 @@ export default function MemberPage(): JSX.Element {
   }
 
   const isActive = data.membership.status === 'active';
-  const isOpening = data.membership.status === 'opening';
-  const displayedMembership = productComplianceMode === true
-    ? toCompliantMembership(data.membership, backendProductTypes, backendPlans)
-    : data.membership;
-  const remainCountdown = isActive
-    ? formatRemainCountdown(data.membership.endAt, clockNow)
-    : { value: String(data.membership.remainDays ?? 0), label: '剩余天数', remainMs: 0 };
-  const hasVisibleMembership = isOpening || (isActive && Number(remainCountdown.value) > 0);
-  const noVisibleMembership = !hasVisibleMembership;
-  const memberActionLabel = noVisibleMembership ? '立即开通' : data.membership.openStatusLabel ?? '立即开通';
-  const memberActionStatus = noVisibleMembership ? 'none' : data.membership.status;
-  const planLabel = hasVisibleMembership ? displayedMembership.planName ?? '会员套餐' : '暂无会员';
-  const renewAvailable = isActive && remainCountdown.remainMs > DAY_MS && remainCountdown.remainMs <= 2 * DAY_MS;
-  const membershipDurationMs = data.membership.startAt && data.membership.endAt
-    ? Math.max(DAY_MS, data.membership.endAt - data.membership.startAt)
-    : 30 * DAY_MS;
-  const progress = Math.max(8, Math.min(100, hasVisibleMembership && isActive ? Math.round((remainCountdown.remainMs / membershipDurationMs) * 100) : 8));
-  const expiryLabel = noVisibleMembership ? '开通后展示到期时间' : isOpening ? '人工开通中' : formatDate(data.membership.endAt);
   const currentProductCode = data.membership.productCode ?? 'ai_news';
   const mobileBound = isMobileBound(data.userInfo?.mobile);
   const authConsentGranted = hasAuthConsent(cachedUserInfo);
-  const nickname = data.userInfo?.nickname ?? cachedUserInfo?.nickname ?? '微信用户';
-  const avatarUrl = data.userInfo?.avatarUrl ?? cachedUserInfo?.avatarUrl ?? '';
   const productTypes = useMemo(
     () => (productComplianceMode === true
       ? backendProductTypes
@@ -388,8 +346,34 @@ export default function MemberPage(): JSX.Element {
       : backendProductTypes).filter((item) => item.productCode !== 'claude_pro'),
     [backendProductTypes, productComplianceMode],
   );
-  const membershipProduct = productTypes.find((item) => item.productCode === currentProductCode);
-  const memberCardAvatarUrl = noVisibleMembership ? avatarUrl : membershipProduct?.avatarUrl || avatarUrl;
+  const aiToolPlanKeys = useMemo(
+    () => new Set(
+      backendPlans
+        .filter((plan) => Math.max(0, Math.floor(plan.totalAiPoints ?? 0)) > 0)
+        .map((plan) => `${plan.productCode}::${plan.planCode}`),
+    ),
+    [backendPlans],
+  );
+  const aiToolMembershipCandidates = [
+    ...(data.activeServices ?? []),
+    ...(data.membership.status === 'opening' ? [data.membership] : []),
+  ];
+  const aiToolMembership = aiToolMembershipCandidates.find((item) => (
+    Boolean(item.productCode && item.planCode)
+    && aiToolPlanKeys.has(`${item.productCode}::${item.planCode}`)
+  ));
+  const displayedAiToolMembership = aiToolMembership && productComplianceMode === true
+    ? toCompliantMembership(aiToolMembership, backendProductTypes, backendPlans)
+    : aiToolMembership;
+  const aiToolPointsBalance = Math.max(0, Math.floor(data.userInfo?.aiToolPointsBalance ?? cachedUserInfo?.aiToolPointsBalance ?? 0));
+  const aiToolMemberActive = displayedAiToolMembership?.status === 'active';
+  const aiToolMemberOpening = displayedAiToolMembership?.status === 'opening';
+  const aiToolMemberActionLabel = aiToolMemberActive ? '已开通' : aiToolMemberOpening ? '开通中' : '立即开通';
+  const aiToolMemberActionStatus = aiToolMemberActive ? 'active' : aiToolMemberOpening ? 'opening' : 'none';
+  const aiToolPlanLabel = displayedAiToolMembership?.planName ?? (aiToolMemberOpening ? 'AI工具套餐开通中' : '暂无AI工具会员');
+  const aiToolExpiryLabel = aiToolMemberActive && displayedAiToolMembership?.endAt
+    ? formatDate(displayedAiToolMembership.endAt)
+    : aiToolMemberOpening ? '权益开通中' : '开通套餐后展示有效期';
   const activeProduct = productTypes.find((item) => item.productCode === activeProductCode);
   const plansByProduct = useMemo(() => {
     const nextMap: Record<string, ProductPlanOption[]> = {};
@@ -404,13 +388,12 @@ export default function MemberPage(): JSX.Element {
   const activePlans = plansByProduct[activeProductCode] ?? [];
   const activeProductAvailable = Boolean(activeProduct?.available && activePlans.some((plan) => plan.price > 0));
   const selectedPlan = activePlans.find((plan) => plan.planCode === selectedPlanCode) ?? activePlans[0];
-  const pointsBalance = Math.max(0, Math.floor(data.userInfo?.aiToolPointsBalance ?? cachedUserInfo?.aiToolPointsBalance ?? 0));
+  const pointsBalance = Math.max(0, Math.floor(data.userInfo?.pointsBalance ?? cachedUserInfo?.pointsBalance ?? 0));
   const pointsPerYuan = Math.max(1, Math.floor(data.pointsConfig?.pointsPerYuan ?? DEFAULT_POINTS_PER_YUAN));
-  const aiToolPointPlan = Boolean(selectedPlan && selectedPlan.totalAiPoints > 0);
-  const maxPointsDeducted = selectedPlan && aiToolPointPlan ? Math.min(pointsBalance, Math.floor(selectedPlan.price * pointsPerYuan)) : 0;
+  const maxPointsDeducted = selectedPlan ? Math.min(pointsBalance, Math.floor(selectedPlan.price * pointsPerYuan)) : 0;
   const pointsDeductAmount = Number((maxPointsDeducted / pointsPerYuan).toFixed(2));
   const finalPayAmount = selectedPlan ? Math.max(0, Number((selectedPlan.price - (usePointsDeduction ? pointsDeductAmount : 0)).toFixed(2))) : 0;
-  const pointsDeductionAvailable = activeProductAvailable && aiToolPointPlan && maxPointsDeducted > 0;
+  const pointsDeductionAvailable = activeProductAvailable && maxPointsDeducted > 0;
   const aiAccountRegistered = Boolean(data.userInfo?.aiAccount?.registered || data.userInfo?.aiAccount?.email || cachedUserInfo?.aiAccountRegistered);
   const aiAccountSheetDescription = aiAccountSheetSource === 'purchase'
     ? '请填写你已经注册好的账号邮箱。保存成功后将继续选择套餐。'
@@ -987,7 +970,7 @@ export default function MemberPage(): JSX.Element {
       <View className='member-page'>
       <View className='saas-shell member-shell'>
         <View className='member-premium-card'>
-          {memberLoading || productComplianceMode === null ? (
+          {memberLoading || productComplianceMode === null || !plansLoaded ? (
             <View className='member-card-skeleton'>
               <View className='member-card-skeleton__head'>
                 <View className='member-card-skeleton__avatar' />
@@ -1000,39 +983,33 @@ export default function MemberPage(): JSX.Element {
             </View>
           ) : (
             <>
-              <View className='member-profile'>
-                <View className='member-profile__avatar'>
-                  {memberCardAvatarUrl ? (
-                    <Image className='member-profile__avatar-image' src={memberCardAvatarUrl} mode='aspectFill' />
-                  ) : (
-                    <Text>{nickname.slice(0, 1).toUpperCase()}</Text>
-                  )}
-                  <Text className='member-profile__ai'>AI</Text>
+              <View className='member-card-head'>
+                <View className='member-profile'>
+                  <View className='member-profile__avatar'>
+                    <Image className='member-profile__avatar-image' src={AI_TOOL_MEMBER_AVATAR_URL} mode='aspectFill' />
+                    <Text className='member-profile__ai'>AI</Text>
+                  </View>
+                  <View className='member-plan-title'>
+                    <Text className='member-plan-title__label'>AI工具会员</Text>
+                    <Text className='member-plan-title__name'>{aiToolPlanLabel}</Text>
+                  </View>
                 </View>
-                <View className='member-profile__copy'>
-                  <Text
-                    className={`member-plan-title__status member-plan-title__status--${renewAvailable ? 'none' : memberActionStatus}`}
-                    onClick={() => (noVisibleMembership || renewAvailable) && openProductTypeSheet()}
-                  >
-                    {renewAvailable ? '立即续费' : memberActionLabel}
-                  </Text>
-                </View>
-              </View>
-              <View className='member-plan-title'>
-                <Text className='member-plan-title__label'>当前方案</Text>
-                <View className='member-plan-title__row'>
-                  <Text className='member-plan-title__name'>{planLabel}</Text>
-                </View>
+                <Text
+                  className={`member-plan-title__status member-plan-title__status--${aiToolMemberActionStatus}`}
+                  onClick={() => !aiToolMemberActive && openProductTypeSheet()}
+                >
+                  {aiToolMemberActionLabel}
+                </Text>
               </View>
               <View className='member-days'>
                 <View>
-                  <Text className='member-days__value'>{remainCountdown.value}</Text>
-                  <Text className='member-days__label'>{remainCountdown.label}</Text>
+                  <Text className='member-days__value'>{aiToolPointsBalance}</Text>
+                  <Text className='member-days__label'>剩余积分</Text>
                 </View>
-                <Text className='member-days__expiry'>到期时间 {expiryLabel}</Text>
+                <Text className='member-days__expiry'>有效期 {aiToolExpiryLabel}</Text>
               </View>
               <View className='member-progress'>
-                <View className='member-progress__bar' style={{ width: `${progress}%` }} />
+                <View className='member-progress__bar' style={{ width: `${aiToolPointsBalance > 0 ? 100 : 8}%` }} />
               </View>
             </>
           )}
@@ -1366,13 +1343,11 @@ export default function MemberPage(): JSX.Element {
             ) : null}
             <View className={`plan-sheet__points ${usePointsDeduction ? 'plan-sheet__points--active' : ''} ${pointsDeductionAvailable ? '' : 'plan-sheet__points--disabled'}`}>
               <View>
-                <Text className='plan-sheet__points-title'>使用 AI 工具积分抵扣</Text>
+                <Text className='plan-sheet__points-title'>使用 T币 抵扣</Text>
                 <Text className='plan-sheet__points-desc'>
                   {pointsDeductionAvailable
-                    ? `可用 ${pointsBalance} 积分，本次抵扣 ¥${pointsDeductAmount.toFixed(2)}`
-                    : aiToolPointPlan
-                      ? `可用 ${pointsBalance} 积分，${pointsPerYuan} 积分可抵 ¥1`
-                      : '仅 AI 工具积分套餐支持积分抵扣'}
+                    ? `可用 ${pointsBalance} T币，本次抵扣 ¥${pointsDeductAmount.toFixed(2)}`
+                    : `可用 ${pointsBalance} T币，${pointsPerYuan} T币可抵 ¥1`}
                 </Text>
                 {selectedPlan ? (
                   <Text className='plan-sheet__points-pay'>预计支付 ¥{finalPayAmount.toFixed(2)}</Text>
@@ -1382,7 +1357,7 @@ export default function MemberPage(): JSX.Element {
                 className={`ios-switch ${usePointsDeduction ? 'ios-switch--on' : ''}`}
                 onClick={() => {
                   if (!pointsDeductionAvailable) {
-                    Taro.showToast({ title: '暂无可抵扣积分', icon: 'none' });
+                    Taro.showToast({ title: '暂无可抵扣 T币', icon: 'none' });
                     return;
                   }
                   setUsePointsDeduction((enabled) => !enabled);

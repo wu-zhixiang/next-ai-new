@@ -8,6 +8,7 @@ exports.grantAiToolPlanPointsOnce = grantAiToolPlanPointsOnce;
 exports.grantSingleToolEntitlementOnce = grantSingleToolEntitlementOnce;
 const db_1 = require("./db");
 const ai_tool_config_1 = require("./ai-tool-config");
+const ai_tool_points_wallet_1 = require("./ai-tool-points-wallet");
 let collectionsReady = false;
 async function ensureAiToolEntitlementCollections() {
     if (collectionsReady) {
@@ -16,6 +17,7 @@ async function ensureAiToolEntitlementCollections() {
     await Promise.all([
         (0, db_1.ensureCollection)('aiToolUserUsage'),
         (0, db_1.ensureCollection)('aiToolPointsLedger'),
+        (0, db_1.ensureCollection)('aiToolPointBuckets'),
         (0, db_1.ensureCollection)('aiToolSingleEntitlements'),
     ]);
     collectionsReady = true;
@@ -44,6 +46,12 @@ function isActiveAiToolPointOrder(record, now) {
     }
     return startAt + record.durationDays * 24 * 60 * 60 * 1000 > now;
 }
+function isUsableAiToolPointBucket(record, now) {
+    return record.sourceType === 'plan'
+        && record.status === 'active'
+        && normalizeNonNegativeInteger(record.pointsRemaining) > 0
+        && (!record.expiresAt || record.expiresAt > now);
+}
 function hasActiveAiToolPointPlanFromRecords(params) {
     if (params.orders.some((order) => isActiveAiToolPointOrder(order, params.now))) {
         return true;
@@ -60,12 +68,17 @@ async function hasActiveAiToolPointPlan(userId, now) {
         (0, db_1.ensureCollection)('memberships'),
         (0, db_1.ensureCollection)('memberPlans'),
         (0, db_1.ensureCollection)('orders'),
+        (0, db_1.ensureCollection)('aiToolPointBuckets'),
     ]);
-    const [membershipsResult, plansResult, ordersResult] = await Promise.all([
+    const [membershipsResult, plansResult, ordersResult, bucketsResult] = await Promise.all([
         (0, db_1.collection)('memberships').where({ userId }).get(),
         (0, db_1.collection)('memberPlans').where({ status: 'on' }).get(),
         (0, db_1.collection)('orders').where({ userId, payStatus: 'paid' }).get(),
+        (0, db_1.collection)('aiToolPointBuckets').where({ userId, sourceType: 'plan', status: 'active' }).get(),
     ]);
+    if (bucketsResult.data.some((bucket) => isUsableAiToolPointBucket(bucket, now))) {
+        return true;
+    }
     return hasActiveAiToolPointPlanFromRecords({
         memberships: membershipsResult.data,
         plans: plansResult.data,
@@ -196,7 +209,7 @@ async function reserveAiToolUsage(params) {
             singleEntitlementId: entitlement._id,
         };
     }
-    const balance = normalizeNonNegativeInteger(params.user.aiToolPointsBalance);
+    const balance = await (0, ai_tool_points_wallet_1.refreshAiToolPointsBalance)(params.user._id, params.now);
     const aiToolPointPlanActive = await hasActiveAiToolPointPlan(params.user._id, params.now);
     if (!aiToolPointPlanActive) {
         return {
@@ -208,23 +221,21 @@ async function reserveAiToolUsage(params) {
             singlePurchaseAmount: Number((params.tool.pointCost / 10).toFixed(2)),
         };
     }
-    if (balance < params.tool.pointCost) {
+    const consumeResult = await (0, ai_tool_points_wallet_1.consumeAiToolPoints)({
+        user: params.user,
+        points: params.tool.pointCost,
+        now: params.now,
+    });
+    if (consumeResult.ok === false) {
         return {
             ok: false,
             code: 'QUOTA_EXCEEDED',
             message: 'AI工具积分不足',
             pointCost: params.tool.pointCost,
-            balance,
+            balance: consumeResult.balance,
             singlePurchaseAmount: Number((params.tool.pointCost / 10).toFixed(2)),
         };
     }
-    await (0, db_1.collection)('users').doc(params.user._id).update({
-        data: {
-            aiToolPointsBalance: db_1._.inc(-params.tool.pointCost),
-            updatedAt: params.now,
-        },
-    });
-    const refreshedUser = await (0, db_1.getUserById)(params.user._id);
     const ledger = {
         userId: params.user._id,
         openid: params.user.openid,
@@ -233,7 +244,8 @@ async function reserveAiToolUsage(params) {
         type: 'tool_consume',
         direction: 'out',
         points: params.tool.pointCost,
-        balanceAfter: refreshedUser === null || refreshedUser === void 0 ? void 0 : refreshedUser.aiToolPointsBalance,
+        bucketDeductions: consumeResult.bucketDeductions,
+        balanceAfter: consumeResult.balanceAfter,
         description: `使用${params.tool.name}消耗${params.tool.pointCost}积分`,
         createdAt: params.now,
     };
@@ -250,10 +262,12 @@ async function reserveAiToolUsage(params) {
         pointCost: params.tool.pointCost,
         trialLimit: params.tool.trialLimit,
         trialRemaining: 0,
-        balanceAfter: refreshedUser === null || refreshedUser === void 0 ? void 0 : refreshedUser.aiToolPointsBalance,
+        balanceAfter: consumeResult.balanceAfter,
+        bucketDeductions: consumeResult.bucketDeductions,
     };
 }
 async function releaseAiToolUsageReservation(params) {
+    var _a;
     await ensureAiToolEntitlementCollections();
     const usage = await getUsageRecord(params.user._id, params.tool.toolId);
     if (usage) {
@@ -279,13 +293,11 @@ async function releaseAiToolUsageReservation(params) {
     if (params.charge.mode !== 'points' || params.charge.pointCost <= 0) {
         return;
     }
-    await (0, db_1.collection)('users').doc(params.user._id).update({
-        data: {
-            aiToolPointsBalance: db_1._.inc(params.charge.pointCost),
-            updatedAt: params.now,
-        },
+    const balanceAfter = await (0, ai_tool_points_wallet_1.refundAiToolPoints)({
+        user: params.user,
+        bucketDeductions: (_a = params.charge.bucketDeductions) !== null && _a !== void 0 ? _a : [],
+        now: params.now,
     });
-    const refreshedUser = await (0, db_1.getUserById)(params.user._id);
     const ledger = {
         userId: params.user._id,
         openid: params.user.openid,
@@ -294,7 +306,8 @@ async function releaseAiToolUsageReservation(params) {
         type: 'adjustment',
         direction: 'in',
         points: params.charge.pointCost,
-        balanceAfter: refreshedUser === null || refreshedUser === void 0 ? void 0 : refreshedUser.aiToolPointsBalance,
+        bucketDeductions: params.charge.bucketDeductions,
+        balanceAfter,
         description: `${params.tool.name}生成失败退回${params.charge.pointCost}积分`,
         createdAt: params.now,
     };
@@ -313,13 +326,17 @@ async function grantAiToolPlanPointsOnce(order, paidAt) {
     if (existing.data[0]) {
         return;
     }
-    await (0, db_1.collection)('users').doc(order.userId).update({
-        data: {
-            aiToolPointsBalance: db_1._.inc(points),
-            updatedAt: paidAt,
-        },
-    });
     const user = await (0, db_1.getUserById)(order.userId);
+    const expiresAt = order.durationDays > 0 ? paidAt + order.durationDays * 24 * 60 * 60 * 1000 : undefined;
+    const grantResult = await (0, ai_tool_points_wallet_1.grantAiToolPointBucket)({
+        userId: order.userId,
+        openid: user === null || user === void 0 ? void 0 : user.openid,
+        sourceType: 'plan',
+        points,
+        orderNo: order.orderNo,
+        expiresAt,
+        now: paidAt,
+    });
     const ledger = {
         userId: order.userId,
         openid: user === null || user === void 0 ? void 0 : user.openid,
@@ -327,7 +344,7 @@ async function grantAiToolPlanPointsOnce(order, paidAt) {
         type: 'plan_grant',
         direction: 'in',
         points,
-        balanceAfter: user === null || user === void 0 ? void 0 : user.aiToolPointsBalance,
+        balanceAfter: grantResult.balanceAfter,
         description: `购买${order.planName}发放${points}AI工具积分`,
         createdAt: paidAt,
     };

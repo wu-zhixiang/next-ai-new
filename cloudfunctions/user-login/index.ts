@@ -151,7 +151,7 @@ export async function main(event: Event = {}) {
       avatarUrl: event.avatarUrl ?? existingUser.avatarUrl,
       inviteCode,
       inviterUserId,
-      pointsBalance: 0,
+      pointsBalance: refreshedUser?.pointsBalance ?? migratedUser.pointsBalance ?? 0,
       aiToolPointsBalance: refreshedUser?.aiToolPointsBalance ?? migratedUser.aiToolPointsBalance ?? 0,
       aiAccountRegistered,
     });

@@ -6,6 +6,8 @@ import type {
   AiToolRecord,
   AdminFileInput,
   AdminFileRecord,
+  AppConfigInput,
+  AppConfigRecord,
   DashboardData,
   MemberPlanInput,
   MemberPlanRecord,
@@ -23,7 +25,15 @@ import type {
   UserUpdateInput,
 } from '../types/admin';
 
-const ADMIN_UPLOAD_CHUNK_BYTES = 384 * 1024;
+const ADMIN_UPLOAD_CHUNK_BYTES = 64 * 1024;
+
+export interface UploadChunkProgressView {
+  readonly received: number;
+  readonly chunkCount: number;
+  readonly percent: number;
+}
+
+export type UploadChunkProgressHandler = (progress: UploadChunkProgressView) => void;
 
 function createUploadId(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -66,6 +76,17 @@ export class AdminApi {
 
   updatePointsConfig(input: PointsConfigInput): Promise<PointsConfigRecord> {
     return this.http.request<PointsConfigRecord>('/points-config', {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    });
+  }
+
+  getAppConfig(): Promise<AppConfigRecord> {
+    return this.http.request<AppConfigRecord>('/app-config');
+  }
+
+  updateAppConfig(input: AppConfigInput): Promise<AppConfigRecord> {
+    return this.http.request<AppConfigRecord>('/app-config', {
       method: 'PATCH',
       body: JSON.stringify(input),
     });
@@ -214,8 +235,8 @@ export class AdminApi {
     });
   }
 
-  async uploadToolImageFile(file: File): Promise<UploadToolImageResult> {
-    const result = await this.uploadChunks<UploadToolImageChunkResult>('/tool-assets/chunks', file, {});
+  async uploadToolImageFile(file: File, onProgress?: UploadChunkProgressHandler): Promise<UploadToolImageResult> {
+    const result = await this.uploadChunks<UploadToolImageChunkResult>('/tool-assets/chunks', file, {}, onProgress);
     if (!result.fileId) {
       throw new Error('图片上传失败');
     }
@@ -244,12 +265,13 @@ export class AdminApi {
     readonly displayName: string;
     readonly usage: AdminFileInput['usage'];
     readonly note: string;
+    readonly onProgress?: UploadChunkProgressHandler;
   }): Promise<UploadFileResult> {
     const result = await this.uploadChunks<UploadFileChunkResult>('/files/chunks', input.file, {
       displayName: input.displayName,
       usage: input.usage,
       note: input.note,
-    });
+    }, input.onProgress);
     if (!result.id || !result.fileId) {
       throw new Error('文件上传失败');
     }
@@ -270,10 +292,15 @@ export class AdminApi {
     });
   }
 
-  private async uploadChunks<T extends { readonly done: boolean }>(
+  private async uploadChunks<T extends {
+    readonly done: boolean;
+    readonly received?: number;
+    readonly chunkCount?: number;
+  }>(
     path: string,
     file: File,
     extra: Record<string, unknown>,
+    onProgress?: UploadChunkProgressHandler,
   ): Promise<T> {
     const uploadId = createUploadId();
     const chunkCount = Math.max(1, Math.ceil(file.size / ADMIN_UPLOAD_CHUNK_BYTES));
@@ -294,6 +321,13 @@ export class AdminApi {
           chunkCount,
           chunkData,
         }),
+      });
+      const received = typeof latest.received === 'number' ? latest.received : chunkIndex + 1;
+      const reportedChunkCount = typeof latest.chunkCount === 'number' ? latest.chunkCount : chunkCount;
+      onProgress?.({
+        received,
+        chunkCount: reportedChunkCount,
+        percent: Math.min(100, Math.max(0, Math.round((received / reportedChunkCount) * 100))),
       });
     }
     if (!latest?.done) {

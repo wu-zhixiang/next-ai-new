@@ -56,6 +56,29 @@ export default function ToolIntroPage(): JSX.Element {
     void Taro.navigateTo({ url: getToolDetailUrl(activeTool.id) });
   }
 
+  function getCaseImageUrls(): string[] {
+    if (!intro?.cases) {
+      return [];
+    }
+    return intro.cases.flatMap((item) => {
+      if (item.mode === 'preview') {
+        return item.previewImageFileId ? [item.previewImageFileId] : [];
+      }
+      return [item.beforeImageFileId, item.afterImageFileId].filter((url): url is string => Boolean(url));
+    });
+  }
+
+  function previewCaseImage(url: string): void {
+    const urls = getCaseImageUrls();
+    if (!url || urls.length === 0) {
+      return;
+    }
+    void Taro.previewImage({
+      current: url,
+      urls,
+    });
+  }
+
   if (!intro) {
     return (
       <View className='page'>
@@ -102,19 +125,38 @@ export default function ToolIntroPage(): JSX.Element {
                   <Text className='tool-intro-case__title'>{item.title}</Text>
                   {item.mode === 'preview' ? (
                     <View className='tool-intro-case__preview'>
-                      <Image className='tool-intro-case__preview-image' src={item.previewImageFileId} mode='aspectFill' />
+                      <Image
+                        className='tool-intro-case__preview-image'
+                        src={item.previewImageFileId}
+                        mode='widthFix'
+                        onClick={() => previewCaseImage(item.previewImageFileId)}
+                      />
                       {item.previewDescription ? <Text className='tool-intro-case__text'>{item.previewDescription}</Text> : null}
                     </View>
                   ) : (
                     <View className='tool-intro-case__compare'>
                       <View className='tool-intro-case__side'>
                         <Text className='tool-intro-case__label'>处理前</Text>
-                        {item.beforeImageFileId ? <Image className='tool-intro-case__image' src={item.beforeImageFileId} mode='aspectFill' /> : null}
+                        {item.beforeImageFileId ? (
+                          <Image
+                            className='tool-intro-case__image'
+                            src={item.beforeImageFileId}
+                            mode='widthFix'
+                            onClick={() => previewCaseImage(item.beforeImageFileId || '')}
+                          />
+                        ) : null}
                         <Text className='tool-intro-case__text'>{item.before}</Text>
                       </View>
                       <View className='tool-intro-case__side tool-intro-case__side--after'>
                         <Text className='tool-intro-case__label'>处理后</Text>
-                        {item.afterImageFileId ? <Image className='tool-intro-case__image' src={item.afterImageFileId} mode='aspectFill' /> : null}
+                        {item.afterImageFileId ? (
+                          <Image
+                            className='tool-intro-case__image'
+                            src={item.afterImageFileId}
+                            mode='widthFix'
+                            onClick={() => previewCaseImage(item.afterImageFileId || '')}
+                          />
+                        ) : null}
                         <Text className='tool-intro-case__text'>{item.after}</Text>
                       </View>
                     </View>

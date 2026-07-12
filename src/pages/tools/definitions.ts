@@ -49,6 +49,7 @@ export interface ToolDefinition {
   outputType: OutputType;
   pointCost?: number;
   trialLimit?: number;
+  trialRemaining?: number;
   intro?: ToolIntroDefinition;
 }
 
@@ -68,6 +69,7 @@ export interface RemoteToolDefinition {
   outputType?: OutputType;
   pointCost?: number;
   trialLimit?: number;
+  trialRemaining?: number;
   intro?: ToolIntroDefinition;
 }
 
@@ -231,6 +233,7 @@ export function mergeRemoteToolDefinitions(remoteTools: readonly RemoteToolDefin
       outputType: remote.outputType ?? tool.outputType,
       pointCost: typeof remote.pointCost === 'number' ? remote.pointCost : tool.pointCost,
       trialLimit: typeof remote.trialLimit === 'number' ? remote.trialLimit : tool.trialLimit,
+      trialRemaining: typeof remote.trialRemaining === 'number' ? remote.trialRemaining : tool.trialRemaining,
       intro: remote.intro,
     };
   });

@@ -64,7 +64,7 @@ async function main() {
     return (0, utils_1.ok)({
         inviteCode: currentUser.inviteCode,
         inviteCount: invitees.length,
-        pointsBalance: (_b = currentUser.aiToolPointsBalance) !== null && _b !== void 0 ? _b : 0,
+        pointsBalance: (_b = currentUser.pointsBalance) !== null && _b !== void 0 ? _b : 0,
         aiToolPointsBalance: (_c = currentUser.aiToolPointsBalance) !== null && _c !== void 0 ? _c : 0,
         totalRewardPoints,
         invitees,

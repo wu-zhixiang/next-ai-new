@@ -58,9 +58,10 @@ async function main(event = {}) {
     ]);
     const orderNo = (0, utils_1.createOrderNo)('TOOL');
     const originalAmount = normalizeAmount(tool.pointCost / 10);
+    const availablePoints = Math.max(0, Math.floor((_a = user.pointsBalance) !== null && _a !== void 0 ? _a : 0));
     const deduction = (0, points_config_1.calculatePointsDeduction)({
         price: originalAmount,
-        availablePoints: Math.max(0, Math.floor((_a = user.aiToolPointsBalance) !== null && _a !== void 0 ? _a : 0)),
+        availablePoints,
         usePointsDeduction: Boolean(event.usePointsDeduction),
         pointsPerYuan: pointsConfig.pointsPerYuan,
     });
@@ -84,6 +85,7 @@ async function main(event = {}) {
         durationDays: 0,
         payStatus: 'pending',
         fulfillmentStatus: 'pending',
+        fulfillmentMode: 'immediate',
         payChannel: (0, payment_config_1.paymentTypeToPayChannel)(appConfig.paymentType),
         createdAt: now,
         updatedAt: now,

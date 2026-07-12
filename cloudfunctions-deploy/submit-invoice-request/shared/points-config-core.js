@@ -6,7 +6,7 @@ exports.normalizePointsConfigRecord = normalizePointsConfigRecord;
 exports.getMilestoneKey = getMilestoneKey;
 exports.calculatePointsDeduction = calculatePointsDeduction;
 exports.POINTS_CONFIG_ID = 'default';
-exports.DEFAULT_POINTS_PER_YUAN = 10;
+exports.DEFAULT_POINTS_PER_YUAN = 1;
 exports.DEFAULT_INVITE_BASE_REWARD_POINTS = 5;
 function normalizePositiveInteger(value, fallback) {
     const numeric = Number(value);

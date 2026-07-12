@@ -16,6 +16,7 @@ function toProductTypeView(record: ProductTypeRecord): ProductTypeView {
     introHighlights: record.introHighlights ?? [],
     complianceEnabled,
     complianceDisplay: complianceEnabled ? record.complianceDisplay : undefined,
+    fulfillmentMode: record.fulfillmentMode === 'manual' ? 'manual' : 'immediate',
   };
 }
 

@@ -9,6 +9,7 @@ import { PanelState } from '../../components/PanelState';
 import { StatusBadge } from '../../components/StatusBadge';
 import { useAdminApi } from '../../hooks/useAdminApi';
 import { useRemoteItems } from '../../hooks/useRemoteItems';
+import type { UploadChunkProgressView } from '../../services/adminApi';
 import type { AdminFileInput, AdminFileRecord, AdminFileUsage, UploadFileResult } from '../../types/admin';
 import { formatDateTime } from '../../utils/format';
 
@@ -27,6 +28,13 @@ const fileUsageLabels: Record<AdminFileUsage, string> = {
   document: '文档素材',
   other: '其他文件',
 };
+
+interface UploadBatchProgress {
+  readonly currentIndex: number;
+  readonly total: number;
+  readonly currentFileName: string;
+  readonly percent: number;
+}
 
 function formatFileSize(value: number): string {
   if (value >= 1024 * 1024) {
@@ -77,12 +85,14 @@ export function FileUploadPage(): JSX.Element {
   const loader = useCallback(() => api.listFiles(), [api]);
   const remote = useRemoteItems<AdminFileRecord>('admin.files', loader);
 
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [displayName, setDisplayName] = useState('');
   const [usage, setUsage] = useState<AdminFileUsage>('icon');
   const [note, setNote] = useState('');
-  const [uploadResult, setUploadResult] = useState<UploadFileResult | null>(null);
+  const [uploadResults, setUploadResults] = useState<UploadFileResult[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<UploadChunkProgressView | null>(null);
+  const [uploadBatchProgress, setUploadBatchProgress] = useState<UploadBatchProgress | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [keyword, setKeyword] = useState('');
@@ -108,41 +118,74 @@ export function FileUploadPage(): JSX.Element {
   }, [keyword, remote.items, usageFilter]);
 
   function handleFileChange(event: ChangeEvent<HTMLInputElement>): void {
-    const file = event.target.files?.[0] ?? null;
+    const files = Array.from(event.target.files ?? []);
     event.target.value = '';
     setSuccessMessage('');
-    setUploadResult(null);
-    if (!file) {
+    setUploadResults([]);
+    if (files.length === 0) {
       return;
     }
-    if (file.size > MAX_UPLOAD_BYTES) {
-      setSelectedFile(null);
-      setErrorMessage('文件不能超过 10MB');
+    const oversized = files.find((file) => file.size > MAX_UPLOAD_BYTES);
+    if (oversized) {
+      setSelectedFiles([]);
+      setErrorMessage(`${oversized.name} 超过 10MB`);
       return;
     }
-    setSelectedFile(file);
-    setDisplayName(file.name);
+    setSelectedFiles(files);
+    setDisplayName(files.length === 1 ? files[0]!.name : '');
     setErrorMessage('');
   }
 
   async function handleUpload(): Promise<void> {
-    if (!selectedFile) {
+    if (selectedFiles.length === 0) {
+      setErrorMessage('请先选择文件');
+      return;
+    }
+    const firstFile = selectedFiles[0];
+    if (!firstFile) {
       setErrorMessage('请先选择文件');
       return;
     }
     setIsUploading(true);
+    setUploadProgress(null);
+    setUploadBatchProgress({
+      currentIndex: 1,
+      total: selectedFiles.length,
+      currentFileName: firstFile.name,
+      percent: 0,
+    });
     setErrorMessage('');
     setSuccessMessage('');
     try {
-      const result = await api.uploadFileChunked({
-        file: selectedFile,
-        displayName: displayName.trim() || selectedFile.name,
-        usage,
-        note: note.trim(),
-      });
-      setUploadResult(result);
-      setSuccessMessage('文件上传成功，已加入文件管理列表');
-      setSelectedFile(null);
+      const results: UploadFileResult[] = [];
+      for (const [index, file] of selectedFiles.entries()) {
+        setUploadProgress({ received: 0, chunkCount: Math.max(1, Math.ceil(file.size / (64 * 1024))), percent: 0 });
+        setUploadBatchProgress({
+          currentIndex: index + 1,
+          total: selectedFiles.length,
+          currentFileName: file.name,
+          percent: Math.round((index / selectedFiles.length) * 100),
+        });
+        const result = await api.uploadFileChunked({
+          file,
+          displayName: selectedFiles.length === 1 ? (displayName.trim() || file.name) : file.name,
+          usage,
+          note: note.trim(),
+          onProgress: (progress) => {
+            setUploadProgress(progress);
+            setUploadBatchProgress({
+              currentIndex: index + 1,
+              total: selectedFiles.length,
+              currentFileName: file.name,
+              percent: Math.min(100, Math.round(((index + progress.percent / 100) / selectedFiles.length) * 100)),
+            });
+          },
+        });
+        results.push(result);
+        setUploadResults([...results]);
+      }
+      setSuccessMessage(`${results.length} 个文件上传成功，已加入文件管理列表`);
+      setSelectedFiles([]);
       setDisplayName('');
       setNote('');
       await remote.reload({ force: true });
@@ -150,6 +193,8 @@ export function FileUploadPage(): JSX.Element {
       setErrorMessage(error instanceof Error ? error.message : '文件上传失败');
     } finally {
       setIsUploading(false);
+      setUploadProgress(null);
+      setUploadBatchProgress(null);
     }
   }
 
@@ -303,26 +348,41 @@ export function FileUploadPage(): JSX.Element {
 
       <section className="panel file-upload-panel">
         <div className="file-upload-area">
-          <input id={fileInputId} type="file" onChange={handleFileChange} />
+          <input id={fileInputId} type="file" multiple onChange={handleFileChange} />
           <label className="file-upload-dropzone" htmlFor={fileInputId}>
             <span className="file-upload-dropzone__icon">
               <FileUp size={28} strokeWidth={2} />
             </span>
-            <strong>{selectedFile ? selectedFile.name : '选择文件上传'}</strong>
-            <span>单个文件 10MB 以内，上传后进入文件管理列表</span>
+            <strong>
+              {selectedFiles.length === 0
+                ? '选择文件上传'
+                : selectedFiles.length === 1
+                  ? selectedFiles[0]!.name
+                  : `已选择 ${selectedFiles.length} 个文件`}
+            </strong>
+            <span>支持一次选择多个文件，单个文件 10MB 以内</span>
           </label>
 
-          {selectedFile ? (
+          {selectedFiles.length > 0 ? (
             <div className="file-upload-meta">
-              <span>{selectedFile.type || '未知类型'}</span>
-              <strong>{formatFileSize(selectedFile.size)}</strong>
+              <span>
+                {selectedFiles.length === 1
+                  ? (selectedFiles[0]!.type || '未知类型')
+                  : selectedFiles.map((file) => file.name).join('、')}
+              </span>
+              <strong>{formatFileSize(selectedFiles.reduce((total, file) => total + file.size, 0))}</strong>
             </div>
           ) : null}
 
           <div className="form-grid form-grid--two">
             <label className="field">
               <span>展示名称</span>
-              <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="默认使用文件名" />
+              <input
+                disabled={selectedFiles.length > 1}
+                value={selectedFiles.length > 1 ? '多文件上传时使用各自文件名' : displayName}
+                onChange={(event) => setDisplayName(event.target.value)}
+                placeholder="默认使用文件名"
+              />
             </label>
             <label className="field">
               <span>文件用途</span>
@@ -340,14 +400,29 @@ export function FileUploadPage(): JSX.Element {
 
           <div className="button-row">
             <Button
-              disabled={!selectedFile || isUploading}
+              disabled={selectedFiles.length === 0 || isUploading}
               icon={<Upload size={16} strokeWidth={2} />}
               onClick={() => void handleUpload()}
               variant="primary"
             >
-              {isUploading ? '上传中' : '上传文件'}
+              {isUploading ? '上传中' : selectedFiles.length > 1 ? `上传 ${selectedFiles.length} 个文件` : '上传文件'}
             </Button>
           </div>
+          {uploadBatchProgress ? (
+            <div className="upload-progress" role="status" aria-live="polite">
+              <div className="upload-progress__head">
+                <span>上传中：{uploadBatchProgress.currentFileName}</span>
+                <strong>{uploadBatchProgress.percent}%</strong>
+              </div>
+              <div className="upload-progress__bar">
+                <span style={{ width: `${uploadBatchProgress.percent}%` }} />
+              </div>
+              <div className="upload-progress__meta">
+                <span>文件 {uploadBatchProgress.currentIndex}/{uploadBatchProgress.total}</span>
+                {uploadProgress ? <span>当前分片 {uploadProgress.received}/{uploadProgress.chunkCount}</span> : null}
+              </div>
+            </div>
+          ) : null}
         </div>
 
         {errorMessage ? <div className="inline-error" role="alert">{errorMessage}</div> : null}
@@ -358,29 +433,52 @@ export function FileUploadPage(): JSX.Element {
           </div>
         ) : null}
 
-        {uploadResult ? (
+        {uploadResults.length > 0 ? (
           <div className="file-upload-result">
-            <label className="field">
-              <span>配置值（小程序 / 页面素材使用）</span>
-              <input readOnly value={uploadResult.fileId} />
-            </label>
+            {uploadResults.length === 1 ? (
+              <label className="field">
+                <span>配置值（小程序 / 页面素材使用）</span>
+                <input readOnly value={uploadResults[0]!.fileId} />
+              </label>
+            ) : (
+              <div className="file-upload-result-list">
+                {uploadResults.map((result) => (
+                  <div className="file-upload-result-list__item" key={result.id}>
+                    <strong>{result.displayName}</strong>
+                    <code>{result.fileId}</code>
+                  </div>
+                ))}
+              </div>
+            )}
             <p className="file-upload-hint">
               页面 icon 等小程序素材优先复制 fileId；临时预览链接带签名，不能作为长期素材地址。
             </p>
             <div className="button-row">
-              <Button
-                icon={<Copy size={15} strokeWidth={2} />}
-                onClick={() => void handleCopy(uploadResult.fileId, '配置值已复制')}
-                size="sm"
-              >
-                复制配置值
-              </Button>
-              {uploadResult.tempUrl ? (
-                <a className="button button--secondary button--sm" href={uploadResult.tempUrl} rel="noreferrer" target="_blank">
-                  <span className="button-icon"><ExternalLink size={15} strokeWidth={2} /></span>
-                  <span>打开预览</span>
-                </a>
-              ) : null}
+              {uploadResults.length === 1 ? (
+                <>
+                  <Button
+                    icon={<Copy size={15} strokeWidth={2} />}
+                    onClick={() => void handleCopy(uploadResults[0]!.fileId, '配置值已复制')}
+                    size="sm"
+                  >
+                    复制配置值
+                  </Button>
+                  {uploadResults[0]!.tempUrl ? (
+                    <a className="button button--secondary button--sm" href={uploadResults[0]!.tempUrl} rel="noreferrer" target="_blank">
+                      <span className="button-icon"><ExternalLink size={15} strokeWidth={2} /></span>
+                      <span>打开预览</span>
+                    </a>
+                  ) : null}
+                </>
+              ) : (
+                <Button
+                  icon={<Copy size={15} strokeWidth={2} />}
+                  onClick={() => void handleCopy(uploadResults.map((result) => result.fileId).join('\n'), '配置值已复制')}
+                  size="sm"
+                >
+                  复制全部配置值
+                </Button>
+              )}
             </div>
           </div>
         ) : null}

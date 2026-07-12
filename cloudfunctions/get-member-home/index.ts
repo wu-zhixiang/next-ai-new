@@ -10,6 +10,7 @@ import { getWxContext } from '../_lib/context';
 import type { MembershipRecord, OrderRecord } from '../shared/types';
 import { getPointsConfig } from '../shared/points-config';
 import { migrateLegacyPointsBalanceToAiToolPoints } from '../shared/points-rewards';
+import { refreshAiToolPointsBalance } from '../shared/ai-tool-points-wallet';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -61,6 +62,7 @@ export async function main() {
   const user = await migrateLegacyPointsBalanceToAiToolPoints(rawUser);
 
   const now = Date.now();
+  const aiToolPointsBalance = await refreshAiToolPointsBalance(user._id, now);
   const [memberships, orders] = await Promise.all([
     listMembershipsByUserId(user._id),
     listOrdersByUserId(user._id),
@@ -96,8 +98,8 @@ export async function main() {
       nickname: user.nickname,
       avatarUrl: user.avatarUrl,
       inviteCode: user.inviteCode,
-      pointsBalance: 0,
-      aiToolPointsBalance: user.aiToolPointsBalance ?? 0,
+      pointsBalance: user.pointsBalance ?? 0,
+      aiToolPointsBalance,
       aiAccount: {
         registered: aiAccountRegistered,
         email: user.aiAccountEmail,

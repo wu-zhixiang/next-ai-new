@@ -75,7 +75,7 @@ export async function main() {
   return ok({
     inviteCode: currentUser.inviteCode,
     inviteCount: invitees.length,
-    pointsBalance: currentUser.aiToolPointsBalance ?? 0,
+    pointsBalance: currentUser.pointsBalance ?? 0,
     aiToolPointsBalance: currentUser.aiToolPointsBalance ?? 0,
     totalRewardPoints,
     invitees,

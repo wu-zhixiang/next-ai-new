@@ -24,7 +24,7 @@ async function hasPurchasedProductBefore(userId, productCode) {
         || orders.some((order) => normalizePurchasedProductCode(order) === productCode && order.payStatus === 'paid');
 }
 async function main(event) {
-    var _a, _b, _c;
+    var _a, _b;
     const { OPENID } = (0, context_1.getWxContext)();
     const rawUser = await (0, db_1.getUserByOpenId)(OPENID);
     if (!rawUser) {
@@ -41,11 +41,12 @@ async function main(event) {
     if (!plan) {
         throw new Error('套餐不存在或已下架');
     }
-    const [existingMembership, purchasedBefore, appConfig, pointsConfig] = await Promise.all([
+    const [existingMembership, purchasedBefore, appConfig, pointsConfig, productType] = await Promise.all([
         (0, db_1.getMembershipByUserId)(user._id, plan.productCode),
         hasPurchasedProductBefore(user._id, plan.productCode),
         (0, client_config_1.getClientAppConfig)(),
         (0, points_config_1.getPointsConfig)(),
+        (0, db_1.getProductTypeByCode)(plan.productCode),
     ]);
     const now = Date.now();
     const pendingOrders = await (0, db_1.listPendingOrdersByUserId)(user._id);
@@ -58,12 +59,11 @@ async function main(event) {
         },
     })));
     const orderNo = (0, utils_1.createOrderNo)();
-    const aiToolPointPlan = Math.max(0, Math.floor((_a = plan.totalAiPoints) !== null && _a !== void 0 ? _a : 0)) > 0;
-    const availablePoints = Math.max(0, Math.floor((_b = user.aiToolPointsBalance) !== null && _b !== void 0 ? _b : 0));
+    const availablePoints = Math.max(0, Math.floor((_a = user.pointsBalance) !== null && _a !== void 0 ? _a : 0));
     const deduction = (0, points_config_1.calculatePointsDeduction)({
         price: plan.price,
         availablePoints,
-        usePointsDeduction: aiToolPointPlan && Boolean(event.usePointsDeduction),
+        usePointsDeduction: Boolean(event.usePointsDeduction),
         pointsPerYuan: pointsConfig.pointsPerYuan,
     });
     const order = {
@@ -77,13 +77,14 @@ async function main(event) {
         orderType: purchasedBefore || existingMembership ? 'renew' : 'purchase',
         amount: deduction.payableAmount,
         originalAmount: normalizeAmount(plan.price),
-        totalAiPoints: Math.max(0, Math.floor((_c = plan.totalAiPoints) !== null && _c !== void 0 ? _c : 0)),
-        pointsDeductionEnabled: aiToolPointPlan && Boolean(event.usePointsDeduction),
+        totalAiPoints: Math.max(0, Math.floor((_b = plan.totalAiPoints) !== null && _b !== void 0 ? _b : 0)),
+        pointsDeductionEnabled: Boolean(event.usePointsDeduction),
         pointsDeducted: deduction.pointsDeducted,
         pointsDeductAmount: deduction.pointsDeductAmount,
         durationDays: plan.durationDays,
         payStatus: 'pending',
         fulfillmentStatus: 'pending',
+        fulfillmentMode: (productType === null || productType === void 0 ? void 0 : productType.fulfillmentMode) === 'manual' ? 'manual' : 'immediate',
         payChannel: (0, payment_config_1.paymentTypeToPayChannel)(appConfig.paymentType),
         createdAt: now,
         updatedAt: now,

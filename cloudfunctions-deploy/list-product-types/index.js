@@ -18,6 +18,7 @@ function toProductTypeView(record) {
         introHighlights: (_b = record.introHighlights) !== null && _b !== void 0 ? _b : [],
         complianceEnabled,
         complianceDisplay: complianceEnabled ? record.complianceDisplay : undefined,
+        fulfillmentMode: record.fulfillmentMode === 'manual' ? 'manual' : 'immediate',
     };
 }
 async function main() {

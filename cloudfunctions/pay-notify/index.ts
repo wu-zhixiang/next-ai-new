@@ -162,7 +162,7 @@ export async function main(event: Event) {
     return notifyXmlResponse('FAIL', '订单金额不匹配');
   }
 
-  if (order.payStatus === 'paid') {
+  if (order.payStatus === 'paid' && order.fulfillmentStatus === 'fulfilled') {
     return notify.callbackMode ? notifyXmlResponse('SUCCESS', 'OK') : ok({ success: true, duplicated: true });
   }
 
@@ -217,7 +217,7 @@ async function handleVirtualPaymentNotify(notify: NormalizedNotify) {
     return notifyTextResponse('fail');
   }
 
-  if (order.payStatus === 'paid') {
+  if (order.payStatus === 'paid' && order.fulfillmentStatus === 'fulfilled') {
     return notifyTextResponse('success');
   }
 

@@ -5,7 +5,8 @@ import { Button } from '../../components/Button';
 import { PageHeader } from '../../components/PageHeader';
 import { PanelState } from '../../components/PanelState';
 import { useAdminApi } from '../../hooks/useAdminApi';
-import type { ProductComplianceDisplay, ProductIntroHighlight, ProductStatus, ProductTypeInput, ProductTypeRecord } from '../../types/admin';
+import type { UploadChunkProgressView, UploadChunkProgressHandler } from '../../services/adminApi';
+import type { FulfillmentMode, ProductComplianceDisplay, ProductIntroHighlight, ProductStatus, ProductTypeInput, ProductTypeRecord } from '../../types/admin';
 
 interface ProductTypeFormState {
   readonly productCode: string;
@@ -19,6 +20,7 @@ interface ProductTypeFormState {
   readonly introHighlights: readonly ProductIntroHighlight[];
   readonly complianceEnabled: boolean;
   readonly complianceDisplay: ProductComplianceDisplay;
+  readonly fulfillmentMode: FulfillmentMode;
   readonly sort: string;
   readonly status: ProductStatus;
 }
@@ -46,6 +48,7 @@ function createEmptyForm(): ProductTypeFormState {
     introHighlights: [],
     complianceEnabled: false,
     complianceDisplay: emptyComplianceDisplay,
+    fulfillmentMode: 'immediate',
     sort: '999',
     status: 'off',
   };
@@ -74,6 +77,7 @@ function createFormFromProduct(product: ProductTypeRecord): ProductTypeFormState
     description: safeString(product.description),
     introHighlights: normalizeHighlights(product.introHighlights),
     complianceEnabled: product.complianceEnabled ?? Boolean(product.complianceDisplay),
+    fulfillmentMode: product.fulfillmentMode ?? 'immediate',
     complianceDisplay: {
       productName: safeString(product.complianceDisplay?.productName),
       label: safeString(product.complianceDisplay?.label),
@@ -133,6 +137,7 @@ function buildProductInput(form: ProductTypeFormState): ProductTypeInput {
       .map((item) => ({ title: item.title.trim(), description: item.description.trim() }))
       .filter((item) => item.title || item.description),
     complianceEnabled: form.complianceEnabled,
+    fulfillmentMode: form.fulfillmentMode,
     sort: Number.isFinite(sort) ? sort : 999,
     status: form.status,
     ...(complianceDisplay ? { complianceDisplay } : {}),
@@ -143,12 +148,13 @@ interface ImageUploadFieldProps {
   readonly label: string;
   readonly value: string;
   readonly onChange: (value: string) => void;
-  readonly onUpload: (file: File) => Promise<string>;
+  readonly onUpload: (file: File, onProgress?: UploadChunkProgressHandler) => Promise<string>;
 }
 
 function ImageUploadField({ label, onChange, onUpload, value }: ImageUploadFieldProps): JSX.Element {
   const inputId = useId();
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<UploadChunkProgressView | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
 
   async function handleFileChange(event: ChangeEvent<HTMLInputElement>): Promise<void> {
@@ -158,13 +164,15 @@ function ImageUploadField({ label, onChange, onUpload, value }: ImageUploadField
       return;
     }
     setIsUploading(true);
+    setUploadProgress({ received: 0, chunkCount: Math.max(1, Math.ceil(file.size / (64 * 1024))), percent: 0 });
     setErrorMessage('');
     try {
-      onChange(await onUpload(file));
+      onChange(await onUpload(file, setUploadProgress));
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : '图片上传失败');
     } finally {
       setIsUploading(false);
+      setUploadProgress(null);
     }
   }
 
@@ -179,6 +187,17 @@ function ImageUploadField({ label, onChange, onUpload, value }: ImageUploadField
       </div>
       <input id={inputId} type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => void handleFileChange(event)} />
       <input value={value} onChange={(event) => onChange(event.target.value)} placeholder="cloud:// 或 https:// 图片地址" />
+      {uploadProgress ? (
+        <div className="upload-progress upload-progress--compact" role="status" aria-live="polite">
+          <div className="upload-progress__head">
+            <span>上传中</span>
+            <strong>{uploadProgress.percent}%</strong>
+          </div>
+          <div className="upload-progress__bar">
+            <span style={{ width: `${uploadProgress.percent}%` }} />
+          </div>
+        </div>
+      ) : null}
       {value ? <div className="image-upload-field__value">{value}</div> : null}
       {errorMessage ? <div className="field-error">{errorMessage}</div> : null}
     </div>
@@ -223,14 +242,14 @@ export function ProductTypeEditPage(): JSX.Element {
     void loadProduct();
   }, [loadProduct]);
 
-  async function uploadImage(file: File): Promise<string> {
+  async function uploadImage(file: File, onProgress?: UploadChunkProgressHandler): Promise<string> {
     if (!/^image\/(?:png|jpe?g|webp)$/.test(file.type)) {
       throw new Error('图片仅支持 PNG/JPG/WebP');
     }
     if (file.size > 3 * 1024 * 1024) {
       throw new Error('图片不能超过 3MB');
     }
-    const result = await api.uploadToolImageFile(file);
+    const result = await api.uploadToolImageFile(file, onProgress);
     return result.fileId;
   }
 
@@ -328,6 +347,14 @@ export function ProductTypeEditPage(): JSX.Element {
                 <label className="check-field">
                   <input checked={form.available} type="checkbox" onChange={(event) => setForm({ ...form, available: event.target.checked })} />
                   <span>允许用户选择</span>
+                </label>
+                <label className="check-field">
+                  <input
+                    checked={form.fulfillmentMode !== 'manual'}
+                    type="checkbox"
+                    onChange={(event) => setForm({ ...form, fulfillmentMode: event.target.checked ? 'immediate' : 'manual' })}
+                  />
+                  <span>支付后立即生效</span>
                 </label>
               </div>
             </section>

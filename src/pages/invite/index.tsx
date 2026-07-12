@@ -63,7 +63,7 @@ function getInitial(name: string): string {
 }
 
 const INVITE_REWARD_POINTS = 5;
-const DEFAULT_POINTS_PER_YUAN = 10;
+const DEFAULT_POINTS_PER_YUAN = 1;
 const INVITE_PAGE_THEME: PageTheme = {
   headerColor: '#E7C2B2',
   headerFadeColor: '#F7F6F2',
@@ -154,8 +154,8 @@ export default function InvitePage(): JSX.Element {
     .filter((milestone) => milestone.enabled && milestone.inviteCount > data.inviteCount)
     .sort((left, right) => left.inviteCount - right.inviteCount)[0];
   const progressHint = nextMilestone
-    ? `再邀请${nextMilestone.inviteCount - data.inviteCount}人，可额外获得${nextMilestone.rewardPoints}积分`
-    : `每邀请1位好友登录，即可获得${inviteBaseRewardPoints}积分`;
+    ? `再邀请${nextMilestone.inviteCount - data.inviteCount}人，可额外获得${nextMilestone.rewardPoints}T币`
+    : `每邀请1位好友登录，即可获得${inviteBaseRewardPoints}T币`;
 
   return (
     <SaasPageFrame title='邀请有礼' showBack={false} theme={INVITE_PAGE_THEME}>
@@ -175,7 +175,7 @@ export default function InvitePage(): JSX.Element {
                     </View>
                   </View>
                   <View className='invite-stat'>
-                    <Text className='invite-stat__label'>AI 工具积分</Text>
+                    <Text className='invite-stat__label'>T币余额</Text>
                     <View className='invite-stat__line'>
                       <Text className='invite-stat__value'>{formatNumber(data.pointsBalance)}</Text>
                     </View>
@@ -184,7 +184,7 @@ export default function InvitePage(): JSX.Element {
                 <View className='invite-progress'>
                   <View className='invite-progress__labels'>
                     <Text>邀请奖励</Text>
-                    <Text>+{inviteBaseRewardPoints}积分/人</Text>
+                    <Text>+{inviteBaseRewardPoints}T币/人</Text>
                   </View>
                   <View className='invite-progress__track'>
                     <View className='invite-progress__bar' style={{ width: '100%' }} />
@@ -196,12 +196,12 @@ export default function InvitePage(): JSX.Element {
 
               <View className='invite-info'>
                 <Text className='invite-info__icon'>i</Text>
-                <Text className='invite-info__text'>好友通过你的链接登录后会自动绑定邀请关系；每成功邀请1位好友，你可获得{inviteBaseRewardPoints}积分。达到后台配置的邀请阶梯后，系统会自动发放额外积分。{pointsPerYuan}积分可抵扣1元。</Text>
+                <Text className='invite-info__text'>好友通过你的链接登录后会自动绑定邀请关系；每成功邀请1位好友，你可获得{inviteBaseRewardPoints}T币。达到后台配置的邀请阶梯后，系统会自动发放额外 T币。{pointsPerYuan}T币可抵扣1元。</Text>
               </View>
 
               <View className='section-head'>
                 <Text className='section-head__title'>邀请记录</Text>
-                <Text className='section-head__more'>累计获得 {formatNumber(data.totalRewardPoints)} 积分</Text>
+                <Text className='section-head__more'>累计获得 {formatNumber(data.totalRewardPoints)} T币</Text>
               </View>
 
               <View className='invite-list'>
@@ -222,7 +222,7 @@ export default function InvitePage(): JSX.Element {
                         </View>
                         <View className='invite-record__bottom'>
                           <Text className='invite-record__time'>{formatDateTime(item.joinedAt)}</Text>
-                          <Text className='invite-record__points'>+{formatNumber(item.rewardPoints)} 积分</Text>
+                          <Text className='invite-record__points'>+{formatNumber(item.rewardPoints)} T币</Text>
                         </View>
                       </View>
                     </View>

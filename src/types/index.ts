@@ -70,6 +70,7 @@ export interface ProductTypeView {
       description: string;
     }>;
   };
+  fulfillmentMode?: 'immediate' | 'manual';
 }
 
 export interface AppStoreCountryView {

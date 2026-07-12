@@ -22,7 +22,7 @@ interface PointsConfigFormState {
   readonly inviteMilestones: readonly MilestoneFormState[];
 }
 
-const DEFAULT_POINTS_PER_YUAN = 10;
+const DEFAULT_POINTS_PER_YUAN = 1;
 const DEFAULT_INVITE_BASE_REWARD_POINTS = 5;
 
 function createEmptyForm(): PointsConfigFormState {
@@ -95,7 +95,7 @@ export function PointsConfigPage(): JSX.Element {
 
   const ratioPreview = useMemo(() => {
     const pointsPerYuan = Math.max(1, toSafeNumber(form.pointsPerYuan, DEFAULT_POINTS_PER_YUAN));
-    return `${pointsPerYuan} 积分 = 1 元`;
+    return `${pointsPerYuan} T币 = 1 元`;
   }, [form.pointsPerYuan]);
 
   const loadConfig = useCallback(async (): Promise<void> => {
@@ -106,7 +106,7 @@ export function PointsConfigPage(): JSX.Element {
       setForm(createFormFromConfig(config));
       setUpdatedAt(config.updatedAt);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : '积分配置读取失败');
+      setErrorMessage(error instanceof Error ? error.message : 'T币配置读取失败');
     } finally {
       setIsLoading(false);
     }
@@ -125,9 +125,9 @@ export function PointsConfigPage(): JSX.Element {
       const config = await api.updatePointsConfig(buildInput(form));
       setForm(createFormFromConfig(config));
       setUpdatedAt(config.updatedAt);
-      setSuccessMessage('积分配置已保存');
+      setSuccessMessage('T币配置已保存');
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : '积分配置保存失败');
+      setErrorMessage(error instanceof Error ? error.message : 'T币配置保存失败');
     } finally {
       setIsSaving(false);
     }
@@ -173,8 +173,8 @@ export function PointsConfigPage(): JSX.Element {
   return (
     <div className="page-stack">
       <PageHeader
-        title="积分配置"
-        description="配置积分抵扣比例、邀请基础奖励和累计邀请阶梯奖励"
+        title="T币配置"
+        description="配置 T币 抵扣比例、邀请基础奖励和累计邀请阶梯奖励"
         actions={(
           <Button icon={<Plus size={16} strokeWidth={2} />} onClick={addMilestone}>
             新增阶梯
@@ -199,7 +199,7 @@ export function PointsConfigPage(): JSX.Element {
               </div>
               <div className="form-grid form-grid--four">
                 <label className="field">
-                  <span>每 1 元需要积分</span>
+                  <span>每 1 元需要 T币</span>
                   <input
                     min="1"
                     type="number"
@@ -208,7 +208,7 @@ export function PointsConfigPage(): JSX.Element {
                   />
                 </label>
                 <label className="field">
-                  <span>邀请 1 人奖励积分</span>
+                  <span>邀请 1 人奖励 T币</span>
                   <input
                     min="0"
                     type="number"
@@ -242,7 +242,7 @@ export function PointsConfigPage(): JSX.Element {
                         />
                       </label>
                       <label className="field">
-                        <span>赠送积分</span>
+                        <span>赠送 T币</span>
                         <input
                           min="1"
                           type="number"
@@ -255,7 +255,7 @@ export function PointsConfigPage(): JSX.Element {
                         <input
                           value={milestone.description}
                           onChange={(event) => updateMilestone(milestone.id, { description: event.target.value })}
-                          placeholder={`累计邀请${milestone.inviteCount || 10}人奖励${milestone.rewardPoints || 0}积分`}
+                          placeholder={`累计邀请${milestone.inviteCount || 10}人奖励${milestone.rewardPoints || 0}T币`}
                         />
                       </label>
                       <label className="check-field">
@@ -283,7 +283,7 @@ export function PointsConfigPage(): JSX.Element {
               ) : (
                 <div className="empty-state">
                   <strong>暂无邀请阶梯</strong>
-                  <span>只发放每邀请 1 人的基础积分奖励。</span>
+                  <span>只发放每邀请 1 人的基础 T币 奖励。</span>
                 </div>
               )}
             </section>

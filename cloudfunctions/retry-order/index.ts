@@ -1,4 +1,4 @@
-import { collection, getMembershipByUserId, getOrderByNo, getPlanByCode, getUserByOpenId } from '../shared/db';
+import { collection, getMembershipByUserId, getOrderByNo, getPlanByCode, getProductTypeByCode, getUserByOpenId } from '../shared/db';
 import type { OrderRecord } from '../shared/types';
 import { createOrderNo, ok } from '../shared/utils';
 import { getWxContext } from '../_lib/context';
@@ -72,9 +72,10 @@ export async function main(event: Event) {
 
     const originalAmount = normalizeAmount(tool.pointCost / 10);
     const usePointsDeduction = Boolean(oldOrder.pointsDeductionEnabled);
+    const availablePoints = Math.max(0, Math.floor(user.pointsBalance ?? 0));
     const deduction = calculatePointsDeduction({
       price: originalAmount,
-      availablePoints: Math.max(0, Math.floor(user.aiToolPointsBalance ?? 0)),
+      availablePoints,
       usePointsDeduction,
       pointsPerYuan: pointsConfig.pointsPerYuan,
     });
@@ -98,6 +99,7 @@ export async function main(event: Event) {
       durationDays: 0,
       payStatus: 'pending',
       fulfillmentStatus: 'pending',
+      fulfillmentMode: 'immediate',
       payChannel: paymentTypeToPayChannel(appConfig.paymentType),
       createdAt: now,
       updatedAt: now,
@@ -116,10 +118,11 @@ export async function main(event: Event) {
     throw new Error('套餐不存在或已下架，请重新选择套餐');
   }
 
-  const [existingMembership, appConfig, pointsConfig] = await Promise.all([
+  const [existingMembership, appConfig, pointsConfig, productType] = await Promise.all([
     getMembershipByUserId(user._id, plan.productCode),
     getClientAppConfig(),
     getPointsConfig(),
+    getProductTypeByCode(plan.productCode),
   ]);
 
   const now = Date.now();
@@ -132,9 +135,8 @@ export async function main(event: Event) {
     },
   });
 
-  const aiToolPointPlan = Math.max(0, Math.floor(plan.totalAiPoints ?? 0)) > 0;
-  const availablePoints = Math.max(0, Math.floor(user.aiToolPointsBalance ?? 0));
-  const usePointsDeduction = aiToolPointPlan && Boolean(oldOrder.pointsDeductionEnabled);
+  const availablePoints = Math.max(0, Math.floor(user.pointsBalance ?? 0));
+  const usePointsDeduction = Boolean(oldOrder.pointsDeductionEnabled);
   const deduction = calculatePointsDeduction({
     price: plan.price,
     availablePoints,
@@ -160,6 +162,7 @@ export async function main(event: Event) {
     durationDays: plan.durationDays,
     payStatus: 'pending',
     fulfillmentStatus: 'pending',
+    fulfillmentMode: oldOrder.fulfillmentMode ?? (productType?.fulfillmentMode === 'manual' ? 'manual' : 'immediate'),
     payChannel: paymentTypeToPayChannel(appConfig.paymentType),
     createdAt: now,
     updatedAt: now,

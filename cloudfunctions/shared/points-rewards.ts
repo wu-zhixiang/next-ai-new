@@ -20,35 +20,8 @@ export async function migrateLegacyPointsBalanceToAiToolPoints<T extends UserRec
   user: T,
   now = Date.now(),
 ): Promise<T> {
-  const legacyPoints = normalizeNonNegativeInteger(user.pointsBalance);
-  if (legacyPoints <= 0) {
-    return user;
-  }
-  await ensureCollection('aiToolPointsLedger');
-  await collection('users').doc(user._id).update({
-    data: {
-      pointsBalance: _.inc(-legacyPoints),
-      aiToolPointsBalance: _.inc(legacyPoints),
-      updatedAt: now,
-    },
-  });
-  const refreshedUser = await getUserById(user._id);
-  const ledger: AiToolPointsLedgerRecord = {
-    userId: user._id,
-    openid: user.openid,
-    type: 'legacy_points_migration',
-    direction: 'in',
-    points: legacyPoints,
-    balanceAfter: refreshedUser?.aiToolPointsBalance,
-    description: `历史邀请积分转入AI工具积分${legacyPoints}积分`,
-    createdAt: now,
-  };
-  await collection('aiToolPointsLedger').add({ data: ledger });
-  return {
-    ...user,
-    pointsBalance: 0,
-    aiToolPointsBalance: refreshedUser?.aiToolPointsBalance ?? normalizeNonNegativeInteger(user.aiToolPointsBalance) + legacyPoints,
-  };
+  void now;
+  return user;
 }
 
 export async function grantPendingInviteRewards(inviterUserId: string, now = Date.now()): Promise<void> {
@@ -99,7 +72,7 @@ export async function grantPendingInviteRewards(inviterUserId: string, now = Dat
 
   await collection('users').doc(inviterUserId).update({
     data: {
-      aiToolPointsBalance: _.inc(totalRewardPoints),
+      pointsBalance: _.inc(totalRewardPoints),
       updatedAt: now,
     },
   });
@@ -109,33 +82,31 @@ export async function grantPendingInviteRewards(inviterUserId: string, now = Dat
     if (config.inviteBaseRewardPoints <= 0) {
       continue;
     }
-    const ledger: AiToolPointsLedgerRecord = {
+    const ledger: PointsLedgerRecord = {
       userId: inviterUserId,
-      openid: inviter?.openid,
       relatedUserId: relation.inviteeUserId,
       type: 'invite_reward',
       direction: 'in',
       points: config.inviteBaseRewardPoints,
-      balanceAfter: inviter?.aiToolPointsBalance,
-      description: `邀请好友登录奖励${config.inviteBaseRewardPoints}积分`,
+      balanceAfter: inviter?.pointsBalance,
+      description: `邀请好友登录奖励${config.inviteBaseRewardPoints}T币`,
       createdAt: now,
     };
-    await collection('aiToolPointsLedger').add({ data: ledger });
+    await collection('pointsLedger').add({ data: ledger });
   }
 
   for (const milestone of pendingMilestones) {
-    const ledger: AiToolPointsLedgerRecord = {
+    const ledger: PointsLedgerRecord = {
       userId: inviterUserId,
-      openid: inviter?.openid,
       milestoneKey: getMilestoneKey(milestone),
       type: 'invite_milestone',
       direction: 'in',
       points: milestone.rewardPoints,
-      balanceAfter: inviter?.aiToolPointsBalance,
-      description: milestone.description || `累计邀请${milestone.inviteCount}人奖励${milestone.rewardPoints}积分`,
+      balanceAfter: inviter?.pointsBalance,
+      description: milestone.description || `累计邀请${milestone.inviteCount}人奖励${milestone.rewardPoints}T币`,
       createdAt: now,
     };
-    await collection('aiToolPointsLedger').add({ data: ledger });
+    await collection('pointsLedger').add({ data: ledger });
   }
 
   console.info('invite.reward.created', {

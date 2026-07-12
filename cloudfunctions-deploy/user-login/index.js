@@ -99,7 +99,7 @@ async function bindInviteRelation(currentUser, event, now) {
     return inviter._id;
 }
 async function main(event = {}) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l;
     const now = Date.now();
     const { OPENID } = (0, context_1.getWxContext)();
     const existingUser = await (0, db_1.getUserByOpenId)(OPENID);
@@ -130,8 +130,8 @@ async function main(event = {}) {
             avatarUrl: (_g = event.avatarUrl) !== null && _g !== void 0 ? _g : existingUser.avatarUrl,
             inviteCode,
             inviterUserId,
-            pointsBalance: 0,
-            aiToolPointsBalance: (_j = (_h = refreshedUser === null || refreshedUser === void 0 ? void 0 : refreshedUser.aiToolPointsBalance) !== null && _h !== void 0 ? _h : migratedUser.aiToolPointsBalance) !== null && _j !== void 0 ? _j : 0,
+            pointsBalance: (_j = (_h = refreshedUser === null || refreshedUser === void 0 ? void 0 : refreshedUser.pointsBalance) !== null && _h !== void 0 ? _h : migratedUser.pointsBalance) !== null && _j !== void 0 ? _j : 0,
+            aiToolPointsBalance: (_l = (_k = refreshedUser === null || refreshedUser === void 0 ? void 0 : refreshedUser.aiToolPointsBalance) !== null && _k !== void 0 ? _k : migratedUser.aiToolPointsBalance) !== null && _l !== void 0 ? _l : 0,
             aiAccountRegistered,
         });
     }

@@ -689,6 +689,50 @@ textarea:disabled {
   font-size: 13px;
 }
 
+.app-config-radio-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.app-config-radio {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #ffffff;
+  padding: 16px;
+  cursor: pointer;
+}
+
+.app-config-radio--active {
+  border-color: var(--primary);
+  background: #eff6ff;
+}
+
+.app-config-radio input {
+  width: 16px;
+  height: 16px;
+  min-height: 0;
+  padding: 0;
+}
+
+.app-config-radio__content {
+  display: grid;
+  gap: 4px;
+}
+
+.app-config-radio__content strong {
+  color: var(--text);
+  font-size: 15px;
+}
+
+.app-config-radio__content small {
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .repeat-item,
 .case-editor {
   border: 1px solid var(--border);
@@ -765,6 +809,50 @@ textarea:disabled {
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.upload-progress {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #fbfcfd;
+  padding: 12px;
+}
+
+.upload-progress--compact {
+  padding: 10px;
+}
+
+.upload-progress__head,
+.upload-progress__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.upload-progress__head strong {
+  color: var(--accent);
+}
+
+.upload-progress__bar {
+  overflow: hidden;
+  height: 8px;
+  border-radius: 999px;
+  background: #e8eef0;
+}
+
+.upload-progress__bar span {
+  display: block;
+  height: 100%;
+  min-width: 6px;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 160ms ease;
 }
 
 .file-upload-panel {
@@ -858,6 +946,38 @@ textarea:disabled {
 
 .file-upload-result .button-row {
   flex-wrap: wrap;
+}
+
+.file-upload-result-list {
+  display: grid;
+  gap: 8px;
+}
+
+.file-upload-result-list__item {
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-muted);
+  padding: 10px 12px;
+}
+
+.file-upload-result-list__item strong,
+.file-upload-result-list__item code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-upload-result-list__item strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.file-upload-result-list__item code {
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
 }
 
 .file-upload-hint {

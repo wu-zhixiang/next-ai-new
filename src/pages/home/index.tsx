@@ -9,7 +9,8 @@ import type { AiNewsView, ProductTypeView } from '@/types';
 import { useResetPageScroll } from '@/hooks/useResetPageScroll';
 import { showTabBarSafely } from '@/utils/tabbar';
 import { setPromotedProductCode } from '@/utils/productNavigation';
-import { VISIBLE_TOOLS, getToolEntryUrl, type ToolDefinition } from '@/pages/tools/definitions';
+import { VISIBLE_TOOLS, getToolEntryUrl, sortToolDefinitions, type ToolDefinition } from '@/pages/tools/definitions';
+import { loadConfiguredTools } from '@/pages/tools/runtime';
 import { loadClientAppConfig } from '@/utils/appConfig';
 import { toCompliantProductType } from '@/utils/productCompliance';
 import { getCachedUserInfo, saveCachedUserInfo } from '@/utils/auth';
@@ -56,6 +57,7 @@ export default function HomePage(): JSX.Element {
   const [bannerIndex, setBannerIndex] = useState(0);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [activeInviteCode, setActiveInviteCode] = useState('');
+  const [homeTools, setHomeTools] = useState<ToolDefinition[]>(HOME_TOOLS);
 
   useDidShow(() => {
     showTabBarSafely();
@@ -91,7 +93,7 @@ export default function HomePage(): JSX.Element {
     try {
       const inviteCode = resolveInviteCode(router.params);
       setActiveInviteCode(inviteCode);
-      const [config, productResult, newsResult] = await Promise.all([
+      const [config, productResult, newsResult, configuredTools] = await Promise.all([
         loadClientAppConfig(),
         callCloudFunction<ProductTypeListResult>('list-product-types').catch(() => ({ productTypes: [] })),
         callCloudFunction<NewsListResult>('list-ai-news', {
@@ -99,6 +101,7 @@ export default function HomePage(): JSX.Element {
           offset: 0,
           sort: 'latest',
         }).catch(() => ({ items: [] })),
+        loadConfiguredTools('home-page').catch(() => HOME_TOOLS),
       ]);
       setShowAuthModal(
         config.enableHomeAuthModal
@@ -111,6 +114,11 @@ export default function HomePage(): JSX.Element {
           : productResult.productTypes,
       );
       setNews(newsResult.items.slice(0, 5));
+      setHomeTools(
+        sortToolDefinitions(configuredTools)
+          .filter((tool) => tool.visible !== false && tool.enabled)
+          .slice(0, 3),
+      );
     } finally {
       setHasLoaded(true);
       setLoading(false);
@@ -246,10 +254,14 @@ export default function HomePage(): JSX.Element {
               </View>
             </View>
             <View className='home-tools'>
-              {HOME_TOOLS.map((tool) => (
+              {homeTools.map((tool) => (
                 <View className='home-tool' key={tool.id} onClick={() => openTool(tool)}>
                   <View className='home-tool__icon'>
-                    <Text>{tool.icon}</Text>
+                    {tool.iconImageFileId ? (
+                      <Image className='home-tool__icon-image' src={tool.iconImageFileId} mode='aspectFit' />
+                    ) : (
+                      <Text>{tool.icon}</Text>
+                    )}
                   </View>
                   <View className='home-tool__copy'>
                     <Text className='home-tool__title'>{tool.name}</Text>

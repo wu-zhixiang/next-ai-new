@@ -3,6 +3,8 @@ export type OrderStatus = 'pending' | 'paid' | 'fulfilled' | 'refunded' | 'close
 export type NewsStatus = 'draft' | 'published' | 'archived';
 export type ToolStatus = 'enabled' | 'disabled' | 'testing';
 export type ProductStatus = 'on' | 'off';
+export type FulfillmentMode = 'immediate' | 'manual';
+export type PaymentType = 'standard' | 'virtual';
 export type AiToolCategory = 'text' | 'image' | 'video' | 'workflow';
 export type AiToolOutputType = 'summary' | 'bullets' | 'xiaohongshu' | 'moments';
 export type AiToolCaseMode = 'compare' | 'preview';
@@ -41,6 +43,13 @@ export interface PointsConfigRecord {
   readonly pointsPerYuan: number;
   readonly inviteBaseRewardPoints: number;
   readonly inviteMilestones: readonly InviteMilestoneConfig[];
+  readonly updatedAt: string;
+}
+
+export interface AppConfigRecord {
+  readonly enableHomeAuthModal: boolean;
+  readonly enableProductComplianceMode: boolean;
+  readonly paymentType: PaymentType;
   readonly updatedAt: string;
 }
 
@@ -169,6 +178,7 @@ export interface ProductTypeRecord {
   readonly introHighlights: readonly ProductIntroHighlight[];
   readonly complianceEnabled: boolean;
   readonly complianceDisplay?: ProductComplianceDisplay;
+  readonly fulfillmentMode: FulfillmentMode;
   readonly sort: number;
   readonly status: ProductStatus;
   readonly createdAt: string;
@@ -225,6 +235,7 @@ export type ProductTypeInput = Pick<
   | 'introHighlights'
   | 'complianceEnabled'
   | 'complianceDisplay'
+  | 'fulfillmentMode'
   | 'sort'
   | 'status'
 >;
@@ -268,6 +279,11 @@ export type AiToolInput = Pick<
 export type PointsConfigInput = Pick<
   PointsConfigRecord,
   'pointsPerYuan' | 'inviteBaseRewardPoints' | 'inviteMilestones'
+>;
+
+export type AppConfigInput = Pick<
+  AppConfigRecord,
+  'enableHomeAuthModal' | 'enableProductComplianceMode' | 'paymentType'
 >;
 
 export type AdminFileInput = Pick<AdminFileRecord, 'displayName' | 'usage' | 'note'>;

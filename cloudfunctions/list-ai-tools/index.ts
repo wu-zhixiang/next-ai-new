@@ -1,4 +1,5 @@
-import { collection, ensureCollection } from '../shared/db';
+import { getWxContext } from '../_lib/context';
+import { collection, ensureCollection, getUserByOpenId } from '../shared/db';
 import {
   buildDefaultAiToolRecord,
   getDefaultAdminToolDefinitions,
@@ -7,6 +8,7 @@ import {
   type AiToolConfigRecord,
   type AiToolPublicView,
 } from '../shared/ai-tool-config';
+import type { AiToolUserUsageRecord } from '../shared/types';
 import { ok } from '../shared/utils';
 
 function isMissingToolsCollectionError(error: unknown): boolean {
@@ -61,10 +63,42 @@ function mergeDefaultToolRecords(
     .filter((record): record is AiToolConfigRecord & { _id: string } => Boolean(record));
 }
 
+async function readUserToolUsageByToolId(): Promise<Map<string, AiToolUserUsageRecord>> {
+  const { OPENID } = getWxContext();
+  const user = await getUserByOpenId(OPENID);
+  if (!user) {
+    return new Map();
+  }
+  try {
+    await ensureCollection('aiToolUserUsage');
+    const result = await collection('aiToolUserUsage').where({ userId: user._id }).get();
+    return new Map(
+      (result.data as AiToolUserUsageRecord[])
+        .filter((record) => Boolean(record.toolId))
+        .map((record) => [record.toolId, record]),
+    );
+  } catch (error) {
+    if (isMissingToolsCollectionError(error)) {
+      return new Map();
+    }
+    throw error;
+  }
+}
+
 export async function main() {
-  const records = await readToolRecords();
+  const [records, usageByToolId] = await Promise.all([
+    readToolRecords(),
+    readUserToolUsageByToolId(),
+  ]);
   const data: AiToolPublicView[] = mergeDefaultToolRecords(records)
-    .map(toPublicAiToolView)
+    .map((record) => {
+      const tool = toPublicAiToolView(record);
+      const usage = usageByToolId.get(tool.toolId);
+      return {
+        ...tool,
+        trialRemaining: Math.max(0, tool.trialLimit - Math.max(0, Math.floor(Number(usage?.trialUsed ?? 0)))),
+      };
+    })
     .filter((tool) => tool.visible)
     .sort((left, right) => normalizeAiToolSortOrder(left.sortOrder, 999) - normalizeAiToolSortOrder(right.sortOrder, 999));
   return ok(data);

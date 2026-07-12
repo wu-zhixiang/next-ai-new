@@ -433,6 +433,7 @@ function toProductTypeView(record: ProductTypeRecord): ProductTypeView {
     available: record.available,
     description: record.description,
     introHighlights: record.introHighlights ?? [],
+    fulfillmentMode: record.fulfillmentMode === 'manual' ? 'manual' : 'immediate',
     complianceDisplay: record.complianceDisplay,
   };
 }

@@ -97,6 +97,7 @@ export interface AiToolPublicView {
   workerModel?: string;
   pointCost: number;
   trialLimit: number;
+  trialRemaining?: number;
   intro?: AiToolIntroConfig;
 }
 

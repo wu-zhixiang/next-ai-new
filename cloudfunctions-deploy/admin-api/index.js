@@ -4,6 +4,7 @@ exports.main = main;
 const db_1 = require("./shared/db");
 const ai_tool_config_1 = require("./shared/ai-tool-config");
 const points_config_1 = require("./shared/points-config");
+const payment_config_1 = require("./shared/payment-config");
 const DEFAULT_ALLOWED_ORIGINS = [
     'http://localhost:5174',
     'http://127.0.0.1:5174',
@@ -11,6 +12,7 @@ const DEFAULT_ALLOWED_ORIGINS = [
 const ADMIN_VISIBLE_DEFAULT_TOOL_ID_SET = new Set(ai_tool_config_1.ADMIN_VISIBLE_DEFAULT_TOOL_IDS);
 const MAX_TOOL_IMAGE_BYTES = 3 * 1024 * 1024;
 const MAX_ADMIN_UPLOAD_FILE_BYTES = 10 * 1024 * 1024;
+const MAX_ADMIN_UPLOAD_CHUNK_COUNT = 240;
 const ADMIN_UPLOAD_TEMP_URL_MAX_AGE = 365 * 24 * 60 * 60;
 function getAllowedOrigins() {
     const configured = process.env.ADMIN_ALLOWED_ORIGINS;
@@ -106,6 +108,10 @@ function sanitizeNumber(value) {
     const numeric = Number(value);
     return Number.isFinite(numeric) ? Math.max(0, Math.floor(numeric)) : 0;
 }
+function sanitizePrice(value) {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? Math.max(0, Number(numeric.toFixed(2))) : 0;
+}
 function sanitizeBoolean(value, fallback = false) {
     if (typeof value === 'boolean') {
         return value;
@@ -117,6 +123,9 @@ function sanitizeBoolean(value, fallback = false) {
         return false;
     }
     return fallback;
+}
+function normalizeFulfillmentMode(value, fallback = 'immediate') {
+    return value === 'manual' || value === 'immediate' ? value : fallback;
 }
 function isRecord(value) {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -483,7 +492,7 @@ function parseUploadChunkBody(body, scope) {
     if (!Number.isFinite(chunkIndex) || chunkIndex < 0) {
         throw withStatus(new Error('上传分片序号无效'), 422);
     }
-    if (!Number.isFinite(chunkCount) || chunkCount < 1 || chunkCount > 80 || chunkIndex >= chunkCount) {
+    if (!Number.isFinite(chunkCount) || chunkCount < 1 || chunkCount > MAX_ADMIN_UPLOAD_CHUNK_COUNT || chunkIndex >= chunkCount) {
         throw withStatus(new Error('上传分片数量无效'), 422);
     }
     if (!Number.isFinite(totalSize) || totalSize <= 0 || totalSize > MAX_ADMIN_UPLOAD_FILE_BYTES) {
@@ -882,6 +891,7 @@ function toProductTypeView(record) {
         introHighlights: (_d = record.introHighlights) !== null && _d !== void 0 ? _d : [],
         complianceEnabled,
         ...(complianceEnabled && record.complianceDisplay ? { complianceDisplay: record.complianceDisplay } : {}),
+        fulfillmentMode: normalizeFulfillmentMode(record.fulfillmentMode),
         sort: normalizeSort(record.sort, 999),
         status: normalizeConfigStatus(record.status),
         createdAt: toIsoTime(record.createdAt),
@@ -926,7 +936,7 @@ function findMemberPlanRecord(records, id) {
     return records.find((record) => record._id === id || record.pid === id);
 }
 function normalizeProductTypeInput(body, existing, fallbackProductCode) {
-    var _a, _b, _c, _d, _e, _f;
+    var _a, _b, _c, _d, _e, _f, _g;
     const now = Date.now();
     const productName = sanitizeText(body.productName, 60) || (existing === null || existing === void 0 ? void 0 : existing.productName) || '';
     if (!productName) {
@@ -947,9 +957,10 @@ function normalizeProductTypeInput(body, existing, fallbackProductCode) {
         introHighlights: normalizeIntroHighlights(body.introHighlights),
         complianceEnabled,
         complianceDisplay: complianceEnabled ? normalizeProductComplianceDisplay(body.complianceDisplay) : undefined,
-        sort: normalizeSort(body.sort, (_e = existing === null || existing === void 0 ? void 0 : existing.sort) !== null && _e !== void 0 ? _e : 999),
+        fulfillmentMode: normalizeFulfillmentMode(body.fulfillmentMode, (_e = existing === null || existing === void 0 ? void 0 : existing.fulfillmentMode) !== null && _e !== void 0 ? _e : 'immediate'),
+        sort: normalizeSort(body.sort, (_f = existing === null || existing === void 0 ? void 0 : existing.sort) !== null && _f !== void 0 ? _f : 999),
         status: normalizeConfigStatus(body.status),
-        createdAt: (_f = existing === null || existing === void 0 ? void 0 : existing.createdAt) !== null && _f !== void 0 ? _f : now,
+        createdAt: (_g = existing === null || existing === void 0 ? void 0 : existing.createdAt) !== null && _g !== void 0 ? _g : now,
         updatedAt: now,
     };
 }
@@ -981,7 +992,7 @@ function normalizeMemberPlanInput(body, existing, fallbackPid) {
         planCode,
         planName,
         virtualPaymentProductId: sanitizeText(body.virtualPaymentProductId, 100),
-        price: sanitizeNumber(body.price),
+        price: sanitizePrice(body.price),
         totalAiPoints: sanitizeNumber(body.totalAiPoints),
         durationDays: sanitizeNumber(body.durationDays),
         autoRenewEnabled: sanitizeBoolean(body.autoRenewEnabled, (_f = existing === null || existing === void 0 ? void 0 : existing.autoRenewEnabled) !== null && _f !== void 0 ? _f : false),
@@ -1007,6 +1018,69 @@ function normalizePointsConfigInput(body, existing) {
         configId: points_config_1.POINTS_CONFIG_ID,
         createdAt: (_a = existing === null || existing === void 0 ? void 0 : existing.createdAt) !== null && _a !== void 0 ? _a : now,
         updatedAt: now,
+    });
+}
+function normalizeAppConfigRecord(body) {
+    const updatedAtMs = Date.now();
+    return {
+        enableHomeAuthModal: sanitizeBoolean(body.enableHomeAuthModal, true),
+        enableProductComplianceMode: sanitizeBoolean(body.enableProductComplianceMode, false),
+        paymentType: (0, payment_config_1.normalizePaymentType)(body.paymentType),
+        updatedAt: toIsoTime(updatedAtMs),
+        updatedAtMs,
+    };
+}
+async function getStoredAppConfig() {
+    await (0, db_1.ensureCollection)('appConfig');
+    try {
+        const result = await adminCollection('appConfig').doc('client').get();
+        const record = result.data && typeof result.data === 'object' ? result.data : {};
+        const updatedAt = typeof record.updatedAt === 'number' ? toIsoTime(record.updatedAt) : '';
+        return {
+            enableHomeAuthModal: sanitizeBoolean(record.enableHomeAuthModal, true),
+            enableProductComplianceMode: sanitizeBoolean(record.enableProductComplianceMode, false),
+            paymentType: (0, payment_config_1.normalizePaymentType)(record.paymentType),
+            updatedAt,
+        };
+    }
+    catch (_a) {
+        return {
+            enableHomeAuthModal: true,
+            enableProductComplianceMode: false,
+            paymentType: 'virtual',
+            updatedAt: '',
+        };
+    }
+}
+async function getAdminAppConfig(event) {
+    return ok(event, await getStoredAppConfig());
+}
+async function updateAdminAppConfig(event) {
+    await (0, db_1.ensureCollection)('appConfig');
+    const normalized = normalizeAppConfigRecord(parseBody(event));
+    let enableNewsAuthModal = true;
+    try {
+        const result = await adminCollection('appConfig').doc('client').get();
+        const record = result.data && typeof result.data === 'object' ? result.data : {};
+        enableNewsAuthModal = sanitizeBoolean(record.enableNewsAuthModal, true);
+    }
+    catch (_a) {
+        enableNewsAuthModal = true;
+    }
+    await adminCollection('appConfig').doc('client').set({
+        data: {
+            enableHomeAuthModal: normalized.enableHomeAuthModal,
+            enableNewsAuthModal,
+            enableProductComplianceMode: normalized.enableProductComplianceMode,
+            paymentType: normalized.paymentType,
+            updatedAt: normalized.updatedAtMs,
+        },
+    });
+    return ok(event, {
+        enableHomeAuthModal: normalized.enableHomeAuthModal,
+        enableProductComplianceMode: normalized.enableProductComplianceMode,
+        paymentType: normalized.paymentType,
+        updatedAt: normalized.updatedAt,
     });
 }
 async function listUsers(event) {
@@ -1394,6 +1468,12 @@ async function route(event) {
     }
     if (path.replace(/^\/admin-api/, '') === '/points-config' && method === 'PATCH') {
         return updateAdminPointsConfig(event);
+    }
+    if (path.replace(/^\/admin-api/, '') === '/app-config' && method === 'GET') {
+        return getAdminAppConfig(event);
+    }
+    if (path.replace(/^\/admin-api/, '') === '/app-config' && method === 'PATCH') {
+        return updateAdminAppConfig(event);
     }
     const matched = matchRoute(path);
     const { resource, id } = matched;

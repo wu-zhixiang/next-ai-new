@@ -9,6 +9,7 @@ import type {
   MemberPlanRecord,
   MembershipRecord,
   OrderRecord,
+  ProductTypeRecord,
   UserRecord,
 } from './types';
 
@@ -101,6 +102,12 @@ export async function getPlanByCode(planCode: string): Promise<(MemberPlanRecord
 export async function getPlanByPid(pid: string): Promise<(MemberPlanRecord & { _id: string }) | null> {
   const result = await collection('memberPlans').where({ pid, status: 'on' }).limit(1).get();
   return (result.data[0] as (MemberPlanRecord & { _id: string }) | undefined) ?? null;
+}
+
+export async function getProductTypeByCode(productCode: string): Promise<(ProductTypeRecord & { _id: string }) | null> {
+  await ensureCollection('productTypes');
+  const result = await collection('productTypes').where({ productCode }).limit(1).get();
+  return (result.data[0] as (ProductTypeRecord & { _id: string }) | undefined) ?? null;
 }
 
 export async function getOrderByNo(orderNo: string): Promise<(OrderRecord & { _id: string }) | null> {

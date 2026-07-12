@@ -1,7 +1,7 @@
 import type { InviteMilestoneConfig, PointsConfigRecord } from './types';
 
 export const POINTS_CONFIG_ID = 'default';
-export const DEFAULT_POINTS_PER_YUAN = 10;
+export const DEFAULT_POINTS_PER_YUAN = 1;
 export const DEFAULT_INVITE_BASE_REWARD_POINTS = 5;
 
 export interface PointsDeductionResult {

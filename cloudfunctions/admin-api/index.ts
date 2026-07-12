@@ -22,6 +22,7 @@ import {
   getPointsConfig,
   normalizePointsConfigRecord,
 } from '../shared/points-config';
+import { normalizePaymentType, type PaymentType } from '../shared/payment-config';
 import type {
   AiNewsRecord,
   AiToolRunRecord,
@@ -69,6 +70,7 @@ interface AdminCollection {
   };
   doc(id: string): {
     get(): Promise<{ data: unknown }>;
+    set(payload: { data: unknown }): Promise<unknown>;
     update(payload: { data: unknown }): Promise<unknown>;
     remove(): Promise<unknown>;
   };
@@ -146,6 +148,7 @@ interface AdminProductTypeView {
   readonly introHighlights: NonNullable<ProductTypeRecord['introHighlights']>;
   readonly complianceEnabled: boolean;
   readonly complianceDisplay?: ProductTypeRecord['complianceDisplay'];
+  readonly fulfillmentMode: NonNullable<ProductTypeRecord['fulfillmentMode']>;
   readonly sort: number;
   readonly status: AdminConfigStatus;
   readonly createdAt: string;
@@ -177,6 +180,13 @@ interface AdminPointsConfigView {
   readonly pointsPerYuan: number;
   readonly inviteBaseRewardPoints: number;
   readonly inviteMilestones: PointsConfigRecord['inviteMilestones'];
+  readonly updatedAt: string;
+}
+
+interface AdminAppConfigView {
+  readonly enableHomeAuthModal: boolean;
+  readonly enableProductComplianceMode: boolean;
+  readonly paymentType: PaymentType;
   readonly updatedAt: string;
 }
 
@@ -239,6 +249,7 @@ const DEFAULT_ALLOWED_ORIGINS = [
 const ADMIN_VISIBLE_DEFAULT_TOOL_ID_SET = new Set<string>(ADMIN_VISIBLE_DEFAULT_TOOL_IDS);
 const MAX_TOOL_IMAGE_BYTES = 3 * 1024 * 1024;
 const MAX_ADMIN_UPLOAD_FILE_BYTES = 10 * 1024 * 1024;
+const MAX_ADMIN_UPLOAD_CHUNK_COUNT = 240;
 const ADMIN_UPLOAD_TEMP_URL_MAX_AGE = 365 * 24 * 60 * 60;
 
 function getAllowedOrigins(): readonly string[] {
@@ -347,6 +358,11 @@ function sanitizeNumber(value: unknown): number {
   return Number.isFinite(numeric) ? Math.max(0, Math.floor(numeric)) : 0;
 }
 
+function sanitizePrice(value: unknown): number {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? Math.max(0, Number(numeric.toFixed(2))) : 0;
+}
+
 function sanitizeBoolean(value: unknown, fallback = false): boolean {
   if (typeof value === 'boolean') {
     return value;
@@ -358,6 +374,10 @@ function sanitizeBoolean(value: unknown, fallback = false): boolean {
     return false;
   }
   return fallback;
+}
+
+function normalizeFulfillmentMode(value: unknown, fallback: NonNullable<ProductTypeRecord['fulfillmentMode']> = 'immediate'): NonNullable<ProductTypeRecord['fulfillmentMode']> {
+  return value === 'manual' || value === 'immediate' ? value : fallback;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -761,7 +781,7 @@ function parseUploadChunkBody(body: Record<string, unknown>, scope: 'file' | 'to
   if (!Number.isFinite(chunkIndex) || chunkIndex < 0) {
     throw withStatus(new Error('上传分片序号无效'), 422);
   }
-  if (!Number.isFinite(chunkCount) || chunkCount < 1 || chunkCount > 80 || chunkIndex >= chunkCount) {
+  if (!Number.isFinite(chunkCount) || chunkCount < 1 || chunkCount > MAX_ADMIN_UPLOAD_CHUNK_COUNT || chunkIndex >= chunkCount) {
     throw withStatus(new Error('上传分片数量无效'), 422);
   }
   if (!Number.isFinite(totalSize) || totalSize <= 0 || totalSize > MAX_ADMIN_UPLOAD_FILE_BYTES) {
@@ -1175,6 +1195,7 @@ function toProductTypeView(record: ProductTypeRecord & { _id: string }): AdminPr
     introHighlights: record.introHighlights ?? [],
     complianceEnabled,
     ...(complianceEnabled && record.complianceDisplay ? { complianceDisplay: record.complianceDisplay } : {}),
+    fulfillmentMode: normalizeFulfillmentMode(record.fulfillmentMode),
     sort: normalizeSort(record.sort, 999),
     status: normalizeConfigStatus(record.status),
     createdAt: toIsoTime(record.createdAt),
@@ -1253,6 +1274,7 @@ function normalizeProductTypeInput(
     introHighlights: normalizeIntroHighlights(body.introHighlights),
     complianceEnabled,
     complianceDisplay: complianceEnabled ? normalizeProductComplianceDisplay(body.complianceDisplay) : undefined,
+    fulfillmentMode: normalizeFulfillmentMode(body.fulfillmentMode, existing?.fulfillmentMode ?? 'immediate'),
     sort: normalizeSort(body.sort, existing?.sort ?? 999),
     status: normalizeConfigStatus(body.status),
     createdAt: existing?.createdAt ?? now,
@@ -1291,7 +1313,7 @@ function normalizeMemberPlanInput(
     planCode,
     planName,
     virtualPaymentProductId: sanitizeText(body.virtualPaymentProductId, 100),
-    price: sanitizeNumber(body.price),
+    price: sanitizePrice(body.price),
     totalAiPoints: sanitizeNumber(body.totalAiPoints),
     durationDays: sanitizeNumber(body.durationDays),
     autoRenewEnabled: sanitizeBoolean(body.autoRenewEnabled, existing?.autoRenewEnabled ?? false),
@@ -1321,6 +1343,71 @@ function normalizePointsConfigInput(
     configId: POINTS_CONFIG_ID,
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
+  });
+}
+
+function normalizeAppConfigRecord(body: Record<string, unknown>): AdminAppConfigView & { updatedAtMs: number } {
+  const updatedAtMs = Date.now();
+  return {
+    enableHomeAuthModal: sanitizeBoolean(body.enableHomeAuthModal, true),
+    enableProductComplianceMode: sanitizeBoolean(body.enableProductComplianceMode, false),
+    paymentType: normalizePaymentType(body.paymentType),
+    updatedAt: toIsoTime(updatedAtMs),
+    updatedAtMs,
+  };
+}
+
+async function getStoredAppConfig(): Promise<AdminAppConfigView> {
+  await ensureCollection('appConfig');
+  try {
+    const result = await adminCollection('appConfig').doc('client').get();
+    const record = result.data && typeof result.data === 'object' ? result.data as Record<string, unknown> : {};
+    const updatedAt = typeof record.updatedAt === 'number' ? toIsoTime(record.updatedAt) : '';
+    return {
+      enableHomeAuthModal: sanitizeBoolean(record.enableHomeAuthModal, true),
+      enableProductComplianceMode: sanitizeBoolean(record.enableProductComplianceMode, false),
+      paymentType: normalizePaymentType(record.paymentType),
+      updatedAt,
+    };
+  } catch {
+    return {
+      enableHomeAuthModal: true,
+      enableProductComplianceMode: false,
+      paymentType: 'virtual',
+      updatedAt: '',
+    };
+  }
+}
+
+async function getAdminAppConfig(event: Event): Promise<HttpResponse> {
+  return ok(event, await getStoredAppConfig());
+}
+
+async function updateAdminAppConfig(event: Event): Promise<HttpResponse> {
+  await ensureCollection('appConfig');
+  const normalized = normalizeAppConfigRecord(parseBody(event));
+  let enableNewsAuthModal = true;
+  try {
+    const result = await adminCollection('appConfig').doc('client').get();
+    const record = result.data && typeof result.data === 'object' ? result.data as Record<string, unknown> : {};
+    enableNewsAuthModal = sanitizeBoolean(record.enableNewsAuthModal, true);
+  } catch {
+    enableNewsAuthModal = true;
+  }
+  await adminCollection('appConfig').doc('client').set({
+    data: {
+      enableHomeAuthModal: normalized.enableHomeAuthModal,
+      enableNewsAuthModal,
+      enableProductComplianceMode: normalized.enableProductComplianceMode,
+      paymentType: normalized.paymentType,
+      updatedAt: normalized.updatedAtMs,
+    },
+  });
+  return ok(event, {
+    enableHomeAuthModal: normalized.enableHomeAuthModal,
+    enableProductComplianceMode: normalized.enableProductComplianceMode,
+    paymentType: normalized.paymentType,
+    updatedAt: normalized.updatedAt,
   });
 }
 
@@ -1731,6 +1818,12 @@ async function route(event: Event): Promise<HttpResponse> {
   }
   if (path.replace(/^\/admin-api/, '') === '/points-config' && method === 'PATCH') {
     return updateAdminPointsConfig(event);
+  }
+  if (path.replace(/^\/admin-api/, '') === '/app-config' && method === 'GET') {
+    return getAdminAppConfig(event);
+  }
+  if (path.replace(/^\/admin-api/, '') === '/app-config' && method === 'PATCH') {
+    return updateAdminAppConfig(event);
   }
 
   const matched = matchRoute(path);

@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.main = main;
+const context_1 = require("./_lib/context");
 const db_1 = require("./shared/db");
 const ai_tool_config_1 = require("./shared/ai-tool-config");
 const utils_1 = require("./shared/utils");
@@ -46,10 +47,41 @@ function mergeDefaultToolRecords(records) {
     })
         .filter((record) => Boolean(record));
 }
+async function readUserToolUsageByToolId() {
+    const { OPENID } = (0, context_1.getWxContext)();
+    const user = await (0, db_1.getUserByOpenId)(OPENID);
+    if (!user) {
+        return new Map();
+    }
+    try {
+        await (0, db_1.ensureCollection)('aiToolUserUsage');
+        const result = await (0, db_1.collection)('aiToolUserUsage').where({ userId: user._id }).get();
+        return new Map(result.data
+            .filter((record) => Boolean(record.toolId))
+            .map((record) => [record.toolId, record]));
+    }
+    catch (error) {
+        if (isMissingToolsCollectionError(error)) {
+            return new Map();
+        }
+        throw error;
+    }
+}
 async function main() {
-    const records = await readToolRecords();
+    const [records, usageByToolId] = await Promise.all([
+        readToolRecords(),
+        readUserToolUsageByToolId(),
+    ]);
     const data = mergeDefaultToolRecords(records)
-        .map(ai_tool_config_1.toPublicAiToolView)
+        .map((record) => {
+        var _a;
+        const tool = (0, ai_tool_config_1.toPublicAiToolView)(record);
+        const usage = usageByToolId.get(tool.toolId);
+        return {
+            ...tool,
+            trialRemaining: Math.max(0, tool.trialLimit - Math.max(0, Math.floor(Number((_a = usage === null || usage === void 0 ? void 0 : usage.trialUsed) !== null && _a !== void 0 ? _a : 0)))),
+        };
+    })
         .filter((tool) => tool.visible)
         .sort((left, right) => (0, ai_tool_config_1.normalizeAiToolSortOrder)(left.sortOrder, 999) - (0, ai_tool_config_1.normalizeAiToolSortOrder)(right.sortOrder, 999));
     return (0, utils_1.ok)(data);

@@ -11,7 +11,6 @@ import { loadConfiguredTools } from '@/pages/tools/runtime';
 import { useResetPageScroll } from '@/hooks/useResetPageScroll';
 import { ensurePrivacyAuthorization } from '@/utils/privacyAuthorization';
 import { createPayOrderPayload, MiniProgramPaymentError, requestMiniProgramPayment, type PayOrderResult } from '@/utils/payment';
-import { setPromotedProductCode } from '@/utils/productNavigation';
 
 const TOOL_ADD_FILE_ICON = require('../../assets/icons/tool-add-file.svg') as string;
 const TOOL_PASTE_ICON = require('../../assets/icons/tool-paste.svg') as string;
@@ -97,6 +96,10 @@ interface CreateToolSingleOrderResult {
     pointCost: number;
 }
 
+interface CreateOrderResult {
+    orderNo: string;
+}
+
 interface PayResultSnapshot {
     payStatus: 'pending' | 'paid' | 'failed' | 'closed';
     fulfillmentStatus?: 'pending' | 'opening' | 'fulfilled' | 'failed';
@@ -146,7 +149,7 @@ const PROMPT_PRESETS: Array<{ label: string; outputType: OutputType }> = [
 ];
 
 const DAILY_USAGE_KEY = 'ai_tool_daily_usage';
-const DEFAULT_POINTS_PER_YUAN = 10;
+const DEFAULT_POINTS_PER_YUAN = 1;
 const MAX_REFERENCE_FILE_SIZE = 5 * 1024 * 1024;
 const MAX_REFERENCE_IMAGE_SIZE = 10 * 1024 * 1024;
 const MAX_REFERENCE_FILE_TEXT_LENGTH = 6000;
@@ -344,6 +347,7 @@ export default function ToolDetailPage(): JSX.Element {
     const [toolId, setToolId] = useState('');
     const [tools, setTools] = useState<ToolDefinition[]>(TOOLS);
     const [membershipStatus, setMembershipStatus] = useState<MembershipView['status']>('none');
+    const [pointsBalance, setPointsBalance] = useState(0);
     const [aiToolPointsBalance, setAiToolPointsBalance] = useState(0);
     const [content, setContent] = useState('');
     const [outputType, setOutputType] = useState<OutputType>('summary');
@@ -358,6 +362,8 @@ export default function ToolDetailPage(): JSX.Element {
     const [quotaSheetVisible, setQuotaSheetVisible] = useState(false);
     const [quotaData, setQuotaData] = useState<QuotaExceededData | null>(null);
     const [usePointsDeduction, setUsePointsDeduction] = useState(false);
+    const [quotaPurchaseMode, setQuotaPurchaseMode] = useState<'single' | 'plan'>('single');
+    const [selectedQuotaPlanCode, setSelectedQuotaPlanCode] = useState('');
     const [pointsPerYuan, setPointsPerYuan] = useState(DEFAULT_POINTS_PER_YUAN);
     const [paymentLocked, setPaymentLocked] = useState(false);
     const [sharePanelVisible, setSharePanelVisible] = useState(false);
@@ -377,10 +383,9 @@ export default function ToolDetailPage(): JSX.Element {
     const toolPointCost = quotaData?.pointCost ?? activeTool.pointCost ?? 0;
     const singlePurchaseAmount = quotaData?.singlePurchaseAmount ?? Number((toolPointCost / 10).toFixed(2));
     const displayedAiToolPointsBalance = quotaData?.aiToolPointsBalance ?? aiToolPointsBalance;
-    const singleDeductiblePoints = Math.min(displayedAiToolPointsBalance, Math.floor(singlePurchaseAmount * pointsPerYuan));
+    const singleDeductiblePoints = Math.min(pointsBalance, Math.floor(singlePurchaseAmount * pointsPerYuan));
     const singleDeductAmount = Number((singleDeductiblePoints / pointsPerYuan).toFixed(2));
-    const singlePayAmount = Math.max(0, Number((singlePurchaseAmount - (usePointsDeduction ? singleDeductAmount : 0)).toFixed(2)));
-    const pointsDeductionAvailable = singleDeductiblePoints > 0;
+    const singlePayAmount = Math.max(0, Number((singlePurchaseAmount - (quotaPurchaseMode === 'single' && usePointsDeduction ? singleDeductAmount : 0)).toFixed(2)));
     const resultIsMedia = Boolean(result && isImageTool(result.toolId));
     const resultProcessing = result?.status === 'processing';
     const resultFailed = result?.status === 'failed';
@@ -399,6 +404,15 @@ export default function ToolDetailPage(): JSX.Element {
         () => pointPlans.filter((plan) => getPlanAiPoints(plan) > 0),
         [pointPlans],
     );
+    const selectedQuotaPlan = availablePointPlans.find((plan) => plan.planCode === selectedQuotaPlanCode) ?? null;
+    const quotaBaseAmount = quotaPurchaseMode === 'plan' && selectedQuotaPlan ? selectedQuotaPlan.price : singlePurchaseAmount;
+    const quotaDeductiblePoints = Math.min(pointsBalance, Math.floor(quotaBaseAmount * pointsPerYuan));
+    const quotaDeductAmount = Number((quotaDeductiblePoints / pointsPerYuan).toFixed(2));
+    const quotaPayAmount = Math.max(0, Number((quotaBaseAmount - (usePointsDeduction ? quotaDeductAmount : 0)).toFixed(2)));
+    const pointsDeductionAvailable = quotaDeductiblePoints > 0;
+    const quotaPayButtonText = quotaPurchaseMode === 'plan' && selectedQuotaPlan
+        ? `¥${quotaPayAmount.toFixed(2)} 购买套餐`
+        : `¥${quotaPayAmount.toFixed(2)} 单次使用`;
 
     useLoad((options) => {
         enableShareMenu();
@@ -469,10 +483,12 @@ export default function ToolDetailPage(): JSX.Element {
         try {
             const memberResult = await callCloudFunction<MemberHomeResult>('get-member-home');
             setMembershipStatus(memberResult.membership.status);
+            setPointsBalance(Math.max(0, Math.floor(memberResult.userInfo?.pointsBalance ?? 0)));
             setAiToolPointsBalance(Math.max(0, Math.floor(memberResult.userInfo?.aiToolPointsBalance ?? 0)));
             setPointsPerYuan(Math.max(1, Math.floor(memberResult.pointsConfig?.pointsPerYuan ?? DEFAULT_POINTS_PER_YUAN)));
         } catch {
             setMembershipStatus('none');
+            setPointsBalance(0);
             setAiToolPointsBalance(0);
             setPointsPerYuan(DEFAULT_POINTS_PER_YUAN);
         }
@@ -780,6 +796,11 @@ export default function ToolDetailPage(): JSX.Element {
         if (typeof runResult.usage.aiToolPointsBalance === 'number') {
             setAiToolPointsBalance(Math.max(0, Math.floor(runResult.usage.aiToolPointsBalance)));
         }
+        setTools((currentTools) => currentTools.map((tool) => (
+            tool.id === runResult.toolId
+                ? { ...tool, trialRemaining: Math.max(0, Math.floor(runResult.usage.dailyFreeRemaining ?? 0)) }
+                : tool
+        )));
         if (runResult.usage.freeUsed) {
             markDailyUsed();
         } else if (runResult.usage.rewardAdUsed) {
@@ -802,6 +823,8 @@ export default function ToolDetailPage(): JSX.Element {
         setQuotaData(data);
         setAiToolPointsBalance(Math.max(0, Math.floor(data.aiToolPointsBalance)));
         setUsePointsDeduction(false);
+        setQuotaPurchaseMode('single');
+        setSelectedQuotaPlanCode('');
         setQuotaSheetVisible(true);
         if (pointPlans.length === 0 && !plansLoading) {
             void loadPointPlans();
@@ -858,18 +881,28 @@ export default function ToolDetailPage(): JSX.Element {
         }
     }
 
-    async function waitForSingleOrderPaid(orderNo: string): Promise<void> {
-        for (let index = 0; index < 6; index += 1) {
+    async function waitForQuotaOrderFulfilled(orderNo: string): Promise<void> {
+        for (let index = 0; index < 45; index += 1) {
             await delay(index === 0 ? 700 : 1000);
             const snapshot = await callCloudFunction<PayResultSnapshot>('get-pay-result', { orderNo });
-            if (snapshot.payStatus === 'paid') {
+            const fulfilled = snapshot.payStatus === 'paid'
+                && (snapshot.fulfillmentStatus === 'fulfilled' || !snapshot.fulfillmentStatus);
+            if (fulfilled) {
                 return;
             }
-            if (snapshot.payStatus === 'closed' || snapshot.payStatus === 'failed') {
-                throw new Error('订单未完成支付，请重新购买');
+            if (snapshot.payStatus === 'closed' || snapshot.payStatus === 'failed' || snapshot.fulfillmentStatus === 'failed') {
+                throw new Error('订单未完成开通，请重新购买');
             }
         }
-        throw new Error('支付结果同步中，请稍后再次点击生成');
+        throw new Error('支付回调同步中，请稍后再次点击生成');
+    }
+
+    async function continueGenerationAfterQuotaPayment(): Promise<void> {
+        setQuotaSheetVisible(false);
+        setQuotaData(null);
+        setPaymentLocked(false);
+        await delay(120);
+        await runCurrentGeneration();
     }
 
     async function handleSinglePurchase(): Promise<void> {
@@ -886,10 +919,8 @@ export default function ToolDetailPage(): JSX.Element {
             if (!payment.paid && (payment.payment || payment.virtualPayment)) {
                 await requestMiniProgramPayment(payment);
             }
-            await waitForSingleOrderPaid(order.orderNo);
-            setQuotaSheetVisible(false);
-            setQuotaData(null);
-            await runCurrentGeneration();
+            await waitForQuotaOrderFulfilled(order.orderNo);
+            await continueGenerationAfterQuotaPayment();
         } catch (error) {
             if (error instanceof MiniProgramPaymentError) {
                 void Taro.showToast({ title: error.message, icon: 'none' });
@@ -904,10 +935,49 @@ export default function ToolDetailPage(): JSX.Element {
         }
     }
 
-    function openPointPlan(plan: PlanView): void {
-        setPromotedProductCode(plan.productCode);
-        setQuotaSheetVisible(false);
-        Taro.switchTab({ url: '/pages/member/index' });
+    async function handlePlanPurchase(plan: PlanView): Promise<void> {
+        if (!plan.pid) {
+            void Taro.showToast({ title: '套餐缺少 pid，请联系管理员', icon: 'none' });
+            return;
+        }
+        setSubmitting(true);
+        setPaymentLocked(true);
+        try {
+            const order = await callCloudFunction<CreateOrderResult>('create-order', {
+                pid: plan.pid,
+                usePointsDeduction,
+            });
+            const payment = await callCloudFunction<PayOrderResult>('pay-order', await createPayOrderPayload(order.orderNo));
+            if (!payment.paid && (payment.payment || payment.virtualPayment)) {
+                await requestMiniProgramPayment(payment);
+            }
+            await waitForQuotaOrderFulfilled(order.orderNo);
+            await loadMemberStatus();
+            await continueGenerationAfterQuotaPayment();
+        } catch (error) {
+            if (error instanceof MiniProgramPaymentError) {
+                void Taro.showToast({ title: error.message, icon: 'none' });
+                return;
+            }
+            if (!handleGenerationError(error)) {
+                showErrorToast(error, '支付失败，请稍后再试');
+            }
+        } finally {
+            setPaymentLocked(false);
+            setSubmitting(false);
+        }
+    }
+
+    async function handleQuotaPayment(): Promise<void> {
+        if (quotaPurchaseMode === 'plan') {
+            if (!selectedQuotaPlan) {
+                void Taro.showToast({ title: '请选择套餐', icon: 'none' });
+                return;
+            }
+            await handlePlanPurchase(selectedQuotaPlan);
+            return;
+        }
+        await handleSinglePurchase();
     }
 
     function previewResultImage(url: string): void {
@@ -992,7 +1062,7 @@ export default function ToolDetailPage(): JSX.Element {
                             </Text>
                             <Text className='tool-workbench__quota tool-workbench__quota--trial'>
                                 {(activeTool.trialLimit ?? 0) > 0
-                                    ? `免费体验 ${activeTool.trialLimit} 次`
+                                    ? `免费体验 ${activeTool.trialRemaining ?? activeTool.trialLimit ?? 0} 次`
                                     : '暂无体验次数'}
                             </Text>
                         </View>
@@ -1243,8 +1313,17 @@ export default function ToolDetailPage(): JSX.Element {
                                 <Text className='plan-option__price'>--</Text>
                             </View>
                         </View>
-                    ) : availablePointPlans.map((plan) => (
-                        <View key={`${plan.productCode}-${plan.planCode}`} className='plan-option' onClick={() => openPointPlan(plan)}>
+                    ) : availablePointPlans.map((plan) => {
+                        const selected = quotaPurchaseMode === 'plan' && selectedQuotaPlanCode === plan.planCode;
+                        return (
+                        <View
+                            key={`${plan.productCode}-${plan.planCode}`}
+                            className={`plan-option ${selected ? 'plan-option--selected' : ''}`}
+                            onClick={() => {
+                                setQuotaPurchaseMode('plan');
+                                setSelectedQuotaPlanCode(plan.planCode);
+                            }}
+                        >
                             <View className='plan-option__copy'>
                                 <Text className='plan-option__name'>{plan.planName}</Text>
                                 <Text className='plan-option__duration'>
@@ -1255,32 +1334,39 @@ export default function ToolDetailPage(): JSX.Element {
                                 <Text className='plan-option__price'>¥{plan.price.toFixed(2)}</Text>
                             </View>
                         </View>
-                    ))}
+                        );
+                    })}
                 </View>
-                <View className='plan-sheet__points tool-quota-sheet__single'>
+                <View
+                    className={`plan-sheet__points tool-quota-sheet__single ${quotaPurchaseMode === 'single' ? 'plan-sheet__points--active' : ''}`}
+                    onClick={() => {
+                        setQuotaPurchaseMode('single');
+                        setSelectedQuotaPlanCode('');
+                    }}
+                >
                     <View>
                         <Text className='plan-sheet__points-title'>单次购买当前工具</Text>
                         <Text className='plan-sheet__points-desc'>
-                            本次生成消耗 {toolPointCost} AI 工具积分，{pointsPerYuan} 积分可抵 ¥1。
+                            本次生成消耗 {toolPointCost} AI 工具积分，{pointsPerYuan} T币可抵 ¥1。
                         </Text>
                         <Text className='plan-sheet__points-pay'>应付 ¥{singlePayAmount.toFixed(2)}</Text>
                     </View>
                 </View>
                 <View className={`plan-sheet__points ${usePointsDeduction ? 'plan-sheet__points--active' : ''} ${pointsDeductionAvailable ? '' : 'plan-sheet__points--disabled'}`}>
                     <View>
-                        <Text className='plan-sheet__points-title'>使用 AI 工具积分抵扣</Text>
+                        <Text className='plan-sheet__points-title'>使用 T币 抵扣</Text>
                         <Text className='plan-sheet__points-desc'>
                             {pointsDeductionAvailable
-                                ? `可用 ${displayedAiToolPointsBalance} 积分，本次抵扣 ¥${singleDeductAmount.toFixed(2)}`
-                                : `可用 ${displayedAiToolPointsBalance} 积分，${pointsPerYuan} 积分可抵 ¥1`}
+                                ? `可用 ${pointsBalance} T币，本次抵扣 ¥${quotaDeductAmount.toFixed(2)}`
+                                : `可用 ${pointsBalance} T币，${pointsPerYuan} T币可抵 ¥1`}
                         </Text>
-                        <Text className='plan-sheet__points-pay'>预计支付 ¥{singlePayAmount.toFixed(2)}</Text>
+                        <Text className='plan-sheet__points-pay'>预计支付 ¥{quotaPayAmount.toFixed(2)}</Text>
                     </View>
                     <View
                         className={`ios-switch ${usePointsDeduction ? 'ios-switch--on' : ''}`}
                         onClick={() => {
                             if (!pointsDeductionAvailable) {
-                                Taro.showToast({ title: '暂无可抵扣积分', icon: 'none' });
+                                Taro.showToast({ title: '暂无可抵扣 T币', icon: 'none' });
                                 return;
                             }
                             setUsePointsDeduction((enabled) => !enabled);
@@ -1289,8 +1375,8 @@ export default function ToolDetailPage(): JSX.Element {
                         <Text className='ios-switch__thumb' />
                     </View>
                 </View>
-                <Button className='saas-button plan-sheet__button' loading={submitting} onClick={() => void handleSinglePurchase()}>
-                    ¥{singlePayAmount.toFixed(2)} 单次使用
+                <Button className='saas-button plan-sheet__button' loading={submitting} onClick={() => void handleQuotaPayment()}>
+                    {quotaPayButtonText}
                 </Button>
             </PopLayout>
             {sharePanelVisible ? (

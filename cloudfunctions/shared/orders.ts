@@ -1,21 +1,22 @@
 import { _, collection, ensureCollection, getMembershipByUserId, getUserById } from './db';
 import { sendMembershipOpenedReminder } from './member-reminders';
 import { notifyOperatorPaidOrderOnce } from './operator-notify';
-import type { AiToolPointsLedgerRecord, MembershipRecord, OrderRecord } from './types';
+import type { MembershipRecord, OrderRecord, PointsLedgerRecord } from './types';
 import { calcMembershipRemainDays } from './utils';
 import { grantAiToolPlanPointsOnce, grantSingleToolEntitlementOnce } from './ai-tool-entitlements';
+
+function isImmediateFulfillmentOrder(order: OrderRecord): boolean {
+  return order.fulfillmentMode !== 'manual';
+}
 
 async function deductPaymentPointsOnce(order: OrderRecord & { _id: string }, paidAt: number): Promise<void> {
   const points = Math.max(0, Math.floor(order.pointsDeducted ?? 0));
   if (points <= 0) {
     return;
   }
-  if (order.orderType !== 'tool_single' && Math.max(0, Math.floor(order.totalAiPoints ?? 0)) <= 0) {
-    return;
-  }
-  await ensureCollection('aiToolPointsLedger');
+  await ensureCollection('pointsLedger');
 
-  const existing = await collection('aiToolPointsLedger')
+  const existing = await collection('pointsLedger')
     .where({
       type: 'payment_deduct',
       orderNo: order.orderNo,
@@ -32,26 +33,39 @@ async function deductPaymentPointsOnce(order: OrderRecord & { _id: string }, pai
     return;
   }
 
+  const user = await getUserById(order.userId);
+  if (!user) {
+    return;
+  }
+  const availablePoints = Math.max(0, Math.floor(user.pointsBalance ?? 0));
+  if (availablePoints < points) {
+    console.warn('points.deduct.failed', {
+      reason: 'insufficient_t_coin_balance',
+      orderNo: order.orderNo,
+      userId: order.userId,
+      points,
+      balance: availablePoints,
+    });
+    return;
+  }
   await collection('users').doc(order.userId).update({
     data: {
-      aiToolPointsBalance: _.inc(-points),
+      pointsBalance: _.inc(-points),
       updatedAt: paidAt,
     },
   });
-
-  const user = await getUserById(order.userId);
-  const ledger: AiToolPointsLedgerRecord = {
+  const refreshedUser = await getUserById(order.userId);
+  const ledger: PointsLedgerRecord = {
     userId: order.userId,
-    openid: user?.openid,
     orderNo: order.orderNo,
     type: 'payment_deduct',
     direction: 'out',
     points,
-    balanceAfter: user?.aiToolPointsBalance,
-    description: `${order.planName}抵扣${points}AI工具积分`,
+    balanceAfter: refreshedUser?.pointsBalance,
+    description: `${order.planName}抵扣${points}T币`,
     createdAt: paidAt,
   };
-  await collection('aiToolPointsLedger').add({ data: ledger });
+  await collection('pointsLedger').add({ data: ledger });
   console.info('points.deduct.created', {
     orderNo: order.orderNo,
     userId: order.userId,
@@ -72,16 +86,22 @@ export async function markOrderPaidAndStartOpening(
       await collection('orders').doc(order._id).update({
         data: {
           payStatus: 'paid',
-          fulfillmentStatus: 'fulfilled',
+          fulfillmentStatus: 'opening',
           transactionId: options.transactionId ?? order.transactionId ?? '',
           paidAt,
-          fulfilledAt: paidAt,
           updatedAt: paidAt,
         },
       });
     }
     await deductPaymentPointsOnce(order, paidAt);
     await grantSingleToolEntitlementOnce(order, paidAt);
+    await collection('orders').doc(order._id).update({
+      data: {
+        fulfillmentStatus: 'fulfilled',
+        fulfilledAt: paidAt,
+        updatedAt: Date.now(),
+      },
+    });
     return;
   }
 
@@ -138,10 +158,13 @@ export async function markOrderPaidAndStartOpening(
   await deductPaymentPointsOnce(order, finalizedAt);
   await grantAiToolPlanPointsOnce(order, finalizedAt);
   await grantSingleToolEntitlementOnce(order, finalizedAt);
+  if (isImmediateFulfillmentOrder(order)) {
+    await fulfillPaidOrderMembership(order, { fulfilledAt: finalizedAt });
+  }
   await notifyOperatorPaidOrderOnce({
     ...order,
     payStatus: 'paid',
-    fulfillmentStatus: 'opening',
+    fulfillmentStatus: isImmediateFulfillmentOrder(order) ? 'fulfilled' : 'opening',
     transactionId: options.transactionId ?? order.transactionId,
     paidAt: finalizedAt,
   });

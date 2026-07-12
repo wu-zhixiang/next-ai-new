@@ -7,6 +7,7 @@ const utils_1 = require("./shared/utils");
 const context_1 = require("./_lib/context");
 const points_config_1 = require("./shared/points-config");
 const points_rewards_1 = require("./shared/points-rewards");
+const ai_tool_points_wallet_1 = require("./shared/ai-tool-points-wallet");
 const DAY_MS = 24 * 60 * 60 * 1000;
 function buildMembershipFromOrder(order) {
     var _a;
@@ -55,6 +56,7 @@ async function main() {
     }
     const user = await (0, points_rewards_1.migrateLegacyPointsBalanceToAiToolPoints)(rawUser);
     const now = Date.now();
+    const aiToolPointsBalance = await (0, ai_tool_points_wallet_1.refreshAiToolPointsBalance)(user._id, now);
     const [memberships, orders] = await Promise.all([
         (0, db_1.listMembershipsByUserId)(user._id),
         (0, db_1.listOrdersByUserId)(user._id),
@@ -83,8 +85,8 @@ async function main() {
             nickname: user.nickname,
             avatarUrl: user.avatarUrl,
             inviteCode: user.inviteCode,
-            pointsBalance: 0,
-            aiToolPointsBalance: (_b = user.aiToolPointsBalance) !== null && _b !== void 0 ? _b : 0,
+            pointsBalance: (_b = user.pointsBalance) !== null && _b !== void 0 ? _b : 0,
+            aiToolPointsBalance,
             aiAccount: {
                 registered: aiAccountRegistered,
                 email: user.aiAccountEmail,

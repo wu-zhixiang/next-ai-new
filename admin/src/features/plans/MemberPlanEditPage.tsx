@@ -90,7 +90,7 @@ function buildOptionalComplianceDisplay(value: PlanComplianceDisplay): PlanCompl
 }
 
 function buildPlanInput(form: MemberPlanFormState): MemberPlanInput {
-  const price = Number.parseInt(form.price, 10);
+  const price = Number.parseFloat(form.price);
   const totalAiPoints = Number.parseInt(form.totalAiPoints, 10);
   const durationDays = Number.parseInt(form.durationDays, 10);
   const sort = Number.parseInt(form.sort, 10);
@@ -101,7 +101,7 @@ function buildPlanInput(form: MemberPlanFormState): MemberPlanInput {
     planCode: form.planCode.trim(),
     planName: form.planName.trim(),
     virtualPaymentProductId: form.virtualPaymentProductId.trim(),
-    price: Number.isFinite(price) ? price : 0,
+    price: Number.isFinite(price) ? Math.max(0, Number(price.toFixed(2))) : 0,
     totalAiPoints: Number.isFinite(totalAiPoints) ? Math.max(0, totalAiPoints) : 0,
     durationDays: Number.isFinite(durationDays) ? durationDays : 30,
     autoRenewEnabled: form.autoRenewEnabled,
@@ -274,7 +274,7 @@ export function MemberPlanEditPage(): JSX.Element {
               <div className="form-grid form-grid--four">
                 <label className="field">
                   <span>价格</span>
-                  <input min="0" type="number" value={form.price} onChange={(event) => setForm({ ...form, price: event.target.value })} />
+                  <input min="0" step="0.01" type="number" value={form.price} onChange={(event) => setForm({ ...form, price: event.target.value })} />
                 </label>
                 <label className="field">
                   <span>AI 工具总积分</span>
